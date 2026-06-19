@@ -1,0 +1,13 @@
+{
+  "name": "custherds",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n \"PUBLIC,BACKOFFICE\" -c \"bgGreen.bold,bgBlue.bold\" \"npm run dev --prefix frontpublic\" \"npm run dev --prefix \\\"nextfront backoffice\\\"\"",
+    "build": "concurrently \"npm run build --prefix frontpublic\" \"npm run build --prefix \\\"nextfront backoffice\\\"\"",
+    "install:all": "npm install && npm install --prefix frontpublic && npm install --prefix \\\"nextfront backoffice\\\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
