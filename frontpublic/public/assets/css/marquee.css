@@ -1,0 +1,67 @@
+/*
+ * Pure CSS Marquee — replaces jQuery marquee plugin.
+ * Applied to any element with .marquee_mode class.
+ */
+
+/* The outer container clips overflow */
+.marquee_mode {
+    display: flex;
+    overflow: hidden;
+    white-space: nowrap;
+    width: 100%;
+}
+
+/* Each <li> inside is laid out inline */
+.marquee_mode li {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    animation: marquee-scroll 30s linear infinite;
+}
+
+/* Duplicate items for seamless loop — add data attribute to second set */
+.marquee_mode li:nth-child(n+4) {
+    animation-delay: -15s;
+    /* offset for seamless second copy */
+}
+
+@keyframes marquee-scroll {
+    0% {
+        transform: translateX(0);
+    }
+
+    100% {
+        transform: translateX(-100%);
+    }
+}
+
+/* Right-to-left variant */
+.marquee_mode-two {
+    display: flex;
+    overflow: hidden;
+    white-space: nowrap;
+    width: 100%;
+}
+
+.marquee_mode-two li {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    animation: marquee-scroll-rtl 30s linear infinite;
+}
+
+@keyframes marquee-scroll-rtl {
+    0% {
+        transform: translateX(-100%);
+    }
+
+    100% {
+        transform: translateX(0);
+    }
+}
+
+/* Pause on hover */
+.marquee_mode:hover li,
+.marquee_mode-two:hover li {
+    animation-play-state: paused;
+}

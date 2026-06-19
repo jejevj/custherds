@@ -1,0 +1,1 @@
+// jQuery is removed. This file is empty.
