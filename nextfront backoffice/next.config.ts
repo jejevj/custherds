@@ -1,8 +1,9 @@
 const nextConfig = {
-  output: "export",
-  basePath: "/dashtrans-ui-next",
-  assetPrefix: "/dashtrans-ui-next/",
-  trailingSlash: true,
+  allowedDevOrigins: [
+    'partners.custherds.ourtestcloud.my.id',
+    '172.17.0.1',
+    'localhost'
+  ],
 }
 
 module.exports = nextConfig
