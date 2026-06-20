@@ -19,8 +19,8 @@
           <div class="row justify-content-center">
             <div class="col-12 col-lg-9">
 
-              <!-- MODE TABS (only shown on register modes) -->
-              <div v-if="mode !== 'login'" class="auth-page__tabs wow fadeInDown" data-wow-delay="100ms">
+              <!-- MODE TABS (hidden when in login mode) -->
+              <div v-show="mode !== 'login'" class="auth-page__tabs">
                 <button
                   :class="['auth-page__tab', { active: mode === 'partner' }]"
                   @click="mode = 'partner'">
@@ -34,7 +34,7 @@
               </div>
 
               <!-- ===== PARTNER REGISTER ===== -->
-              <div v-if="mode === 'partner'" class="auth-page__box wow fadeInUp" data-wow-delay="150ms">
+              <div v-show="mode === 'partner'" class="auth-page__box">
                 <div class="auth-page__hero" :style="{ backgroundImage: 'url(https://www.custherds.com/assets/images/slide/page5.webp)' }">
                   <div class="auth-page__hero-overlay"></div>
                   <div class="auth-page__hero-content">
@@ -128,7 +128,7 @@
               </div>
 
               <!-- ===== VENDOR REGISTER ===== -->
-              <div v-if="mode === 'vendor'" class="auth-page__box wow fadeInUp" data-wow-delay="150ms">
+              <div v-show="mode === 'vendor'" class="auth-page__box">
                 <div class="auth-page__hero" :style="{ backgroundImage: 'url(https://www.custherds.com/assets/images/slide/page4.webp)' }">
                   <div class="auth-page__hero-overlay"></div>
                   <div class="auth-page__hero-content">
@@ -204,7 +204,6 @@
                       <label>Business/Venue Name <span class="req">*</span></label>
                       <input type="text" v-model="vf.vendor_business_name" placeholder="Enter business name" required />
                     </div>
-
                     <div class="auth-page__field">
                       <label>Business Category <span class="req">*</span></label>
                       <select v-model="vf.vendor_category" required>
@@ -257,7 +256,6 @@
                         </optgroup>
                       </select>
                     </div>
-
                     <div class="auth-page__field">
                       <label>Business Location Area <span class="req">*</span></label>
                       <select v-model="vf.vendor_area" required>
@@ -295,7 +293,6 @@
                         </optgroup>
                       </select>
                     </div>
-
                     <div class="auth-page__field">
                       <label>Physical Address</label>
                       <textarea v-model="vf.vendor_location" rows="3" placeholder="Street address in Bali"></textarea>
@@ -342,7 +339,7 @@
               </div>
 
               <!-- ===== LOGIN ===== -->
-              <div v-if="mode === 'login'" class="auth-page__box wow fadeInUp" data-wow-delay="150ms">
+              <div v-show="mode === 'login'" class="auth-page__box">
                 <div class="auth-page__hero" :style="{ backgroundImage: 'url(https://www.custherds.com/assets/images/slide/page5.webp)' }">
                   <div class="auth-page__hero-overlay"></div>
                   <div class="auth-page__hero-content">
@@ -401,8 +398,8 @@ import HeaderTwo from '@/components/layout/header/HeaderTwo.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import Footer1 from '@/components/layout/footer/Footer1.vue';
 
-const mode = ref('partner'); // 'partner' | 'vendor' | 'login'
-const loginType = ref('partner'); // 'partner' | 'vendor'
+const mode = ref('partner');
+const loginType = ref('partner');
 const partnerError = ref('');
 const vendorError = ref('');
 
@@ -471,7 +468,6 @@ function submitLogin() {
 </script>
 
 <style scoped>
-/* Tabs */
 .auth-page__tabs {
   display: flex;
   gap: 12px;
@@ -499,8 +495,6 @@ function submitLogin() {
   color: var(--thm-primary, #c9a84c);
   background: #fffaf0;
 }
-
-/* Login type toggle */
 .auth-page__login-type {
   display: flex;
   gap: 10px;
@@ -524,15 +518,11 @@ function submitLogin() {
   color: var(--thm-primary, #c9a84c);
   background: #fffaf0;
 }
-
-/* Card box */
 .auth-page__box {
   border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 12px 48px rgba(0,0,0,0.10);
 }
-
-/* Hero banner */
 .auth-page__hero {
   position: relative;
   background-size: cover;
@@ -559,8 +549,6 @@ function submitLogin() {
   font-size: 16px;
   opacity: 0.85;
 }
-
-/* Form wrap */
 .auth-page__form-wrap {
   background: #fff;
   padding: 40px;
@@ -571,8 +559,6 @@ function submitLogin() {
   color: var(--thm-black, #1a1a1a);
   margin-bottom: 12px;
 }
-
-/* Fields */
 .auth-page__field {
   margin-bottom: 20px;
   display: flex;
@@ -603,12 +589,8 @@ function submitLogin() {
 }
 .auth-page__hint { font-size: 12px; color: #999; }
 .req { color: #e53e3e; }
-
-/* Actions */
 .auth-page__actions { margin-top: 32px; margin-bottom: 20px; }
-.auth-page__actions .thm-btn {
-  width: 100%; text-align: center; display: block; padding: 14px;
-}
+.auth-page__actions .thm-btn { width: 100%; text-align: center; display: block; padding: 14px; }
 .auth-page__forgot { text-align: right; margin-bottom: 8px; }
 .auth-page__forgot a { font-size: 13px; color: var(--thm-primary, #c9a84c); text-decoration: none; }
 .auth-page__terms { font-size: 12px; color: #888; margin-bottom: 12px; }
@@ -620,7 +602,6 @@ function submitLogin() {
   color: #e53e3e; font-size: 13px; background: #fff5f5;
   border: 1px solid #fed7d7; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;
 }
-
 @media (max-width: 768px) {
   .auth-page__form-wrap { padding: 24px 16px; }
   .auth-page__hero { padding: 40px 20px; }
