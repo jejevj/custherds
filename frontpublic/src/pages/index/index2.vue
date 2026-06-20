@@ -2,26 +2,22 @@
     <div>
         <Preloader />
         <ChatPopup />
-        
+
         <div class="theme-border-left"></div>
         <div class="theme-border-right"></div>
 
         <SidebarWidget />
-        
+
         <div class="page-wrapper">
             <HeaderTwo />
-            
+
             <MainSliderTwo />
             <FeatureTwo />
             <AboutTwo />
-            <CounterOne />
-            <ProjectTwo />
             <ServicesTwo />
-            <TeamOne />
-            <TestimonialTwo />
+            <CounterOne />
             <ContactOne />
-            <BlogTwo />
-            
+
             <Footer1 />
         </div>
 
@@ -39,13 +35,9 @@ import HeaderTwo from "@/components/layout/header/HeaderTwo.vue";
 import MainSliderTwo from "@/components/home-two/MainSliderTwo.vue";
 import FeatureTwo from "@/components/home-two/FeatureTwo.vue";
 import AboutTwo from "@/components/home-two/AboutTwo.vue";
-import CounterOne from "@/components/home-two/CounterOne.vue";
-import ProjectTwo from "@/components/home-two/ProjectTwo.vue";
 import ServicesTwo from "@/components/home-two/ServicesTwo.vue";
-import TeamOne from "@/components/home-two/TeamOne.vue";
-import TestimonialTwo from "@/components/home-two/TestimonialTwo.vue";
+import CounterOne from "@/components/home-two/CounterOne.vue";
 import ContactOne from "@/components/home-two/ContactOne.vue";
-import BlogTwo from "@/components/home-two/BlogTwo.vue";
 import Footer1 from "@/components/layout/footer/Footer1.vue";
 import MobileNav from "@/components/common/MobileNav.vue";
 import SearchPopup from "@/components/common/SearchPopup.vue";
@@ -61,13 +53,9 @@ export default {
         MainSliderTwo,
         FeatureTwo,
         AboutTwo,
-        CounterOne,
-        ProjectTwo,
         ServicesTwo,
-        TeamOne,
-        TestimonialTwo,
+        CounterOne,
         ContactOne,
-        BlogTwo,
         Footer1,
         MobileNav,
         SearchPopup,
@@ -83,7 +71,6 @@ export default {
         }
     },
     beforeUnmount() {
-        // Stop WOW.js scroll listener to prevent memory leak
         if (this._wow && typeof this._wow.stop === 'function') {
             this._wow.stop();
         }
