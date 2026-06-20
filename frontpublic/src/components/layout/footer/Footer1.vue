@@ -45,8 +45,8 @@
                                     <li><router-link to="/">Home</router-link></li>
                                     <li><router-link to="/about">About Us</router-link></li>
                                     <li><router-link to="/contact">Contact Us</router-link></li>
-                                    <li><a href="https://www.custherds.com/faq" target="_blank">FAQ</a></li>
-                                    <li><a href="https://www.custherds.com/termCondition" target="_blank">Terms &amp; Conditions</a></li>
+                                    <li><router-link to="/faq">FAQ</router-link></li>
+                                    <li><router-link to="/terms">Terms &amp; Conditions</router-link></li>
                                 </ul>
                             </div>
                         </div>
@@ -58,8 +58,8 @@
                                 <h3 class="footer-widget__title">Register</h3>
                             </div>
                             <ul class="footer-widget__link list-unstyled">
-                                <li><a href="https://www.custherds.com/register/partners?reg=true" target="_blank">Herd Partners</a></li>
-                                <li><a href="https://www.custherds.com/register/vendors?reg=true" target="_blank">Business Vendor</a></li>
+                                <li><router-link to="/register">Herd Partners</router-link></li>
+                                <li><router-link to="/register">Business Vendor</router-link></li>
                             </ul>
                         </div>
                     </div>
@@ -83,10 +83,10 @@
         <div class="site-footer__bottom">
             <div class="container">
                 <div class="site-footer__bottom-inner">
-                    <p class="site-footer__bottom-text">&copy; 2025–2026 <a href="/">Custherds.</a> | All rights reserved</p>
+                    <p class="site-footer__bottom-text">&copy; 2025&#8211;2026 <router-link to="/">Custherds.</router-link> | All rights reserved</p>
                     <ul class="list-unstyled site-footer__bottom-menu">
-                        <li><a href="https://www.custherds.com/termCondition" target="_blank">Terms &amp; Conditions</a></li>
-                        <li><a href="https://www.custherds.com/faq" target="_blank">FAQ</a></li>
+                        <li><router-link to="/terms">Terms &amp; Conditions</router-link></li>
+                        <li><router-link to="/faq">FAQ</router-link></li>
                     </ul>
                 </div>
             </div>

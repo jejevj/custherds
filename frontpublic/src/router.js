@@ -7,6 +7,7 @@ const routes = [
     // General pages
     { path: '/about',   name: 'about',   component: () => import('./pages/About.vue'),   meta: { title: 'About Us' } },
     { path: '/contact', name: 'contact', component: () => import('./pages/Contact.vue'), meta: { title: 'Contact Us' } },
+    { path: '/faq',     name: 'faq',     component: () => import('./pages/Faq.vue'),     meta: { title: 'FAQ' } },
 
     // Tour Guides — public
     { path: '/tour-guides', name: 'tour-guides', component: () => import('./pages/TourGuides.vue'), meta: { title: 'Find a Guide' } },
