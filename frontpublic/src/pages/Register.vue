@@ -9,27 +9,23 @@
     <div class="page-wrapper">
       <HeaderTwo />
 
-      <PageHeader
-        :title="pageTitle"
-        subtitle="Join the Herd. Grow. Earn. Together."
-      />
+      <PageHeader :title="pageTitle" subtitle="Join the Herd. Grow. Earn. Together." />
 
       <section class="auth-page py-5">
         <div class="container">
           <div class="row justify-content-center">
-            <div class="col-12 col-lg-9">
+            <div :class="mode === 'tourist' ? 'col-12 col-lg-7' : 'col-12 col-lg-9'">
 
-              <!-- MODE TABS (hidden when in login mode) -->
+              <!-- MODE TABS -->
               <div v-show="mode !== 'login'" class="auth-page__tabs">
-                <button
-                  :class="['auth-page__tab', { active: mode === 'partner' }]"
-                  @click="mode = 'partner'">
+                <button :class="['auth-page__tab', { active: mode === 'partner' }]" @click="switchMode('partner')">
                   <span class="icon-user"></span> Herd Partner
                 </button>
-                <button
-                  :class="['auth-page__tab', { active: mode === 'vendor' }]"
-                  @click="mode = 'vendor'">
+                <button :class="['auth-page__tab', { active: mode === 'vendor' }]" @click="switchMode('vendor')">
                   <span class="icon-trading"></span> Business Vendor
+                </button>
+                <button :class="['auth-page__tab', { active: mode === 'tourist' }]" @click="switchMode('tourist')">
+                  🌍 Tourist
                 </button>
               </div>
 
@@ -44,10 +40,8 @@
                 </div>
                 <div class="auth-page__form-wrap">
                   <form @submit.prevent="submitPartner" enctype="multipart/form-data">
-
                     <h4 class="auth-page__section-title">1. User Account Details</h4>
                     <hr />
-
                     <div class="auth-page__field">
                       <label>Full Name of Contact Person <span class="req">*</span></label>
                       <input type="text" v-model="pf.user_name" placeholder="Enter your full name" required />
@@ -102,10 +96,8 @@
                         </div>
                       </div>
                     </div>
-
                     <h4 class="auth-page__section-title mt-4">2. Guide Profile Details</h4>
                     <hr />
-
                     <div class="auth-page__field">
                       <label>Nationality</label>
                       <input type="text" v-model="pf.guide_nationality" placeholder="Your country of origin" />
@@ -115,14 +107,12 @@
                       <small class="auth-page__hint">File ext: jpg/png, max 2MB</small>
                       <input type="file" accept=".jpg,.jpeg,.png" @change="e => pf.guide_certificate = e.target.files[0]" />
                     </div>
-
                     <p class="auth-page__error" v-if="partnerError">{{ partnerError }}</p>
-
                     <div class="auth-page__actions">
                       <button type="submit" class="thm-btn">Register as Partner <span class="icon-up-right-arrow"></span></button>
                     </div>
                     <p class="auth-page__terms">By submitting you confirm that you have read and agree to the <a href="https://www.custherds.com/termCondition" target="_blank">Terms &amp; Platform Rules</a>.</p>
-                    <p class="auth-page__switch">Already have an account? <a href="#" @click.prevent="mode = 'login'">Login here</a></p>
+                    <p class="auth-page__switch">Already have an account? <a href="#" @click.prevent="switchMode('login')">Login here</a></p>
                   </form>
                 </div>
               </div>
@@ -138,10 +128,8 @@
                 </div>
                 <div class="auth-page__form-wrap">
                   <form @submit.prevent="submitVendor">
-
                     <h4 class="auth-page__section-title">1. User Account Details</h4>
                     <hr />
-
                     <div class="auth-page__field">
                       <label>Full Name of Contact Person <span class="req">*</span></label>
                       <input type="text" v-model="vf.user_name" placeholder="Enter your full name" required />
@@ -196,10 +184,8 @@
                         </div>
                       </div>
                     </div>
-
                     <h4 class="auth-page__section-title mt-4">2. Business Details</h4>
                     <hr />
-
                     <div class="auth-page__field">
                       <label>Business/Venue Name <span class="req">*</span></label>
                       <input type="text" v-model="vf.vendor_business_name" placeholder="Enter business name" required />
@@ -261,34 +247,25 @@
                       <select v-model="vf.vendor_area" required>
                         <option value="">Select Area</option>
                         <optgroup label="Central Bali">
-                          <option value="12">Sidemen</option>
-                          <option value="13">Tabanan</option>
-                          <option value="11">Tegallalang</option>
-                          <option value="10">Ubud</option>
+                          <option value="12">Sidemen</option><option value="13">Tabanan</option>
+                          <option value="11">Tegallalang</option><option value="10">Ubud</option>
                         </optgroup>
                         <optgroup label="East Bali">
-                          <option value="17">Amed</option>
-                          <option value="18">Candidasa</option>
+                          <option value="17">Amed</option><option value="18">Candidasa</option>
                         </optgroup>
                         <optgroup label="Islands">
-                          <option value="21">Nusa Ceningan</option>
-                          <option value="20">Nusa Lembongan</option>
+                          <option value="21">Nusa Ceningan</option><option value="20">Nusa Lembongan</option>
                           <option value="19">Nusa Penida</option>
                         </optgroup>
                         <optgroup label="North Bali">
-                          <option value="14">Lovina</option>
-                          <option value="15">Munduk</option>
+                          <option value="14">Lovina</option><option value="15">Munduk</option>
                           <option value="16">Singaraja</option>
                         </optgroup>
                         <optgroup label="South Bali">
-                          <option value="1">Canggu</option>
-                          <option value="6">Jimbaran</option>
-                          <option value="5">Kuta</option>
-                          <option value="4">Legian</option>
-                          <option value="8">Nusa Dua</option>
-                          <option value="2">Pererenan</option>
-                          <option value="3">Seminyak</option>
-                          <option value="9">Tanah Lot</option>
+                          <option value="1">Canggu</option><option value="6">Jimbaran</option>
+                          <option value="5">Kuta</option><option value="4">Legian</option>
+                          <option value="8">Nusa Dua</option><option value="2">Pererenan</option>
+                          <option value="3">Seminyak</option><option value="9">Tanah Lot</option>
                           <option value="7">Uluwatu</option>
                         </optgroup>
                       </select>
@@ -325,15 +302,102 @@
                       <label>Where did you hear about Custherds?</label>
                       <textarea v-model="vf.vendor_know_from" rows="3" placeholder="How did you find us?"></textarea>
                     </div>
-
                     <p class="auth-page__error" v-if="vendorError">{{ vendorError }}</p>
-
                     <div class="auth-page__actions">
                       <button type="submit" class="thm-btn">Register Business Vendor <span class="icon-up-right-arrow"></span></button>
                     </div>
-                    <input type="hidden" name="user_type" value="2" />
                     <p class="auth-page__terms">By submitting you confirm that you have read and agree to the <a href="https://www.custherds.com/termCondition" target="_blank">Terms &amp; Platform Rules</a>.</p>
-                    <p class="auth-page__switch">Already have an account? <a href="#" @click.prevent="mode = 'login'">Login here</a></p>
+                    <p class="auth-page__switch">Already have an account? <a href="#" @click.prevent="switchMode('login')">Login here</a></p>
+                  </form>
+                </div>
+              </div>
+
+              <!-- ===== TOURIST REGISTER ===== -->
+              <div v-show="mode === 'tourist'" class="auth-page__box">
+                <div class="auth-page__hero" :style="{ backgroundImage: 'url(https://www.custherds.com/assets/images/slide/page3.webp)' }">
+                  <div class="auth-page__hero-overlay"></div>
+                  <div class="auth-page__hero-content">
+                    <h2>Join as a Traveller</h2>
+                    <p>Create a free account to connect directly with verified local guides across Bali.</p>
+                    <div class="auth-page__hero-perks">
+                      <span>✓ Free to join</span>
+                      <span>✓ Chat guides via WhatsApp</span>
+                      <span>✓ No booking fees</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="auth-page__form-wrap">
+                  <form @submit.prevent="submitTourist">
+                    <h4 class="auth-page__section-title">Your Details</h4>
+                    <hr />
+                    <div class="auth-page__field">
+                      <label>Full Name <span class="req">*</span></label>
+                      <input type="text" v-model="tf.name" placeholder="e.g. John Smith" required />
+                    </div>
+                    <div class="auth-page__field">
+                      <label>Email Address <span class="req">*</span></label>
+                      <input type="email" v-model="tf.email" placeholder="your@email.com" required />
+                    </div>
+                    <div class="auth-page__field">
+                      <label>Phone / WhatsApp</label>
+                      <input type="tel" v-model="tf.phone" placeholder="e.g. +44 7911 123456" />
+                    </div>
+                    <div class="auth-page__field">
+                      <label>Nationality <span class="req">*</span></label>
+                      <input type="text" v-model="tf.nationality" placeholder="e.g. British" required />
+                    </div>
+                    <div class="auth-page__field">
+                      <label>Planned Visit Date</label>
+                      <input type="date" v-model="tf.visit_date" :min="today" />
+                    </div>
+                    <div class="auth-page__field">
+                      <label>Area of Interest</label>
+                      <select v-model="tf.area_interest">
+                        <option value="">Select area (optional)</option>
+                        <optgroup label="South Bali">
+                          <option>Canggu</option><option>Seminyak</option>
+                          <option>Kuta</option><option>Uluwatu</option>
+                          <option>Jimbaran</option><option>Nusa Dua</option>
+                        </optgroup>
+                        <optgroup label="Central Bali">
+                          <option>Ubud</option><option>Tegallalang</option>
+                          <option>Sidemen</option><option>Tabanan</option>
+                        </optgroup>
+                        <optgroup label="North Bali">
+                          <option>Lovina</option><option>Munduk</option>
+                        </optgroup>
+                        <optgroup label="East Bali">
+                          <option>Amed</option><option>Candidasa</option>
+                        </optgroup>
+                        <optgroup label="Islands">
+                          <option>Nusa Penida</option><option>Nusa Lembongan</option>
+                        </optgroup>
+                      </select>
+                    </div>
+                    <div class="row g-3">
+                      <div class="col-md-6">
+                        <div class="auth-page__field">
+                          <label>Password <span class="req">*</span></label>
+                          <input type="password" v-model="tf.password" placeholder="Min. 8 characters" minlength="8" required />
+                        </div>
+                      </div>
+                      <div class="col-md-6">
+                        <div class="auth-page__field">
+                          <label>Confirm Password <span class="req">*</span></label>
+                          <input type="password" v-model="tf.password_confirm" placeholder="Repeat password" minlength="8" required />
+                        </div>
+                      </div>
+                    </div>
+                    <p class="auth-page__error" v-if="touristError">{{ touristError }}</p>
+                    <p class="auth-page__success" v-if="touristSuccess">{{ touristSuccess }}</p>
+                    <div class="auth-page__actions">
+                      <button type="submit" class="thm-btn" :disabled="touristLoading">
+                        {{ touristLoading ? 'Creating account…' : 'Create Free Account' }}
+                        <span class="icon-up-right-arrow"></span>
+                      </button>
+                    </div>
+                    <p class="auth-page__terms">By registering you agree to our <a href="https://www.custherds.com/termCondition" target="_blank">Terms &amp; Platform Rules</a>.</p>
+                    <p class="auth-page__switch">Already have an account? <router-link to="/tourist/login">Sign in here</router-link></p>
                   </form>
                 </div>
               </div>
@@ -367,7 +431,7 @@
                     <div class="auth-page__actions">
                       <button type="submit" class="thm-btn">Login <span class="icon-up-right-arrow"></span></button>
                     </div>
-                    <p class="auth-page__switch">Don&rsquo;t have an account? <a href="#" @click.prevent="mode = 'partner'">Register here</a></p>
+                    <p class="auth-page__switch">Don&rsquo;t have an account? <a href="#" @click.prevent="switchMode('partner')">Register here</a></p>
                   </form>
                 </div>
               </div>
@@ -388,6 +452,7 @@
 
 <script setup>
 import { ref, computed } from 'vue';
+import { useRoute } from 'vue-router';
 import Preloader from '@/components/common/Preloader.vue';
 import ChatPopup from '@/components/common/ChatPopup.vue';
 import SidebarWidget from '@/components/common/SidebarWidget.vue';
@@ -398,40 +463,35 @@ import HeaderTwo from '@/components/layout/header/HeaderTwo.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import Footer1 from '@/components/layout/footer/Footer1.vue';
 
-const mode = ref('partner');
+const route = useRoute();
+
+// Default mode: tourist jika URL /tourist/register, else partner
+const mode = ref(route.path.startsWith('/tourist') ? 'tourist' : 'partner');
 const loginType = ref('partner');
-const partnerError = ref('');
-const vendorError = ref('');
+
+function switchMode(m) {
+  mode.value = m;
+}
 
 const pageTitle = computed(() => {
-  if (mode.value === 'login') return 'Welcome Back';
-  if (mode.value === 'vendor') return 'Business Vendor Registration';
+  if (mode.value === 'login')   return 'Welcome Back';
+  if (mode.value === 'vendor')  return 'Business Vendor Registration';
+  if (mode.value === 'tourist') return 'Join as a Traveller';
   return 'Partner Registration';
 });
 
+const today = computed(() => new Date().toISOString().split('T')[0]);
+
+// ─ Partner form
+const partnerError = ref('');
 const pf = ref({
   user_name: '', user_email: '', user_phone: '',
   user_password: '', pass_confirm: '',
   ig_link: '', fb_link: '', yt_link: '', tiktok_link: '',
   guide_nationality: '', guide_certificate: null
 });
-
-const vf = ref({
-  user_name: '', user_email: '', user_phone: '',
-  user_password: '', pass_confirm: '',
-  ig_link: '', fb_link: '', yt_link: '', tiktok_link: '',
-  vendor_business_name: '', vendor_category: '', vendor_area: '',
-  vendor_location: '', vendor_contact_person: '', vendor_website: '',
-  vendor_short_description: '', vendor_opening_hours: '',
-  vendor_min_spend: '', vendor_cashback_percent: '', vendor_know_from: ''
-});
-
-const lf = ref({ email: '', password: '' });
-
 function submitPartner() {
-  if (pf.value.user_password !== pf.value.pass_confirm) {
-    partnerError.value = 'Passwords do not match.'; return;
-  }
+  if (pf.value.user_password !== pf.value.pass_confirm) { partnerError.value = 'Passwords do not match.'; return; }
   partnerError.value = '';
   const fd = new FormData();
   Object.entries(pf.value).forEach(([k, v]) => { if (v) fd.append(k, v); });
@@ -441,10 +501,19 @@ function submitPartner() {
     .catch(() => alert('Network error. Please try again.'));
 }
 
+// ─ Vendor form
+const vendorError = ref('');
+const vf = ref({
+  user_name: '', user_email: '', user_phone: '',
+  user_password: '', pass_confirm: '',
+  ig_link: '', fb_link: '', yt_link: '', tiktok_link: '',
+  vendor_business_name: '', vendor_category: '', vendor_area: '',
+  vendor_location: '', vendor_contact_person: '', vendor_website: '',
+  vendor_short_description: '', vendor_opening_hours: '',
+  vendor_min_spend: '', vendor_cashback_percent: '', vendor_know_from: ''
+});
 function submitVendor() {
-  if (vf.value.user_password !== vf.value.pass_confirm) {
-    vendorError.value = 'Passwords do not match.'; return;
-  }
+  if (vf.value.user_password !== vf.value.pass_confirm) { vendorError.value = 'Passwords do not match.'; return; }
   vendorError.value = '';
   const fd = new FormData();
   Object.entries(vf.value).forEach(([k, v]) => { if (v) fd.append(k, v); });
@@ -454,6 +523,41 @@ function submitVendor() {
     .catch(() => alert('Network error. Please try again.'));
 }
 
+// ─ Tourist form
+const touristError   = ref('');
+const touristSuccess = ref('');
+const touristLoading = ref(false);
+const tf = ref({
+  name: '', email: '', phone: '', nationality: '',
+  visit_date: '', area_interest: '', password: '', password_confirm: ''
+});
+async function submitTourist() {
+  touristError.value   = '';
+  touristSuccess.value = '';
+  if (tf.value.password !== tf.value.password_confirm) {
+    touristError.value = 'Passwords do not match.'; return;
+  }
+  touristLoading.value = true;
+  try {
+    const fd = new FormData();
+    Object.entries(tf.value).forEach(([k, v]) => { if (v) fd.append(k, v); });
+    fd.append('user_type', '3');
+    const res = await fetch('https://www.custherds.com/register/saveTourist', { method: 'POST', body: fd });
+    if (res.ok) {
+      touristSuccess.value = '🎉 Account created! Tourist login will be available soon.';
+      tf.value = { name: '', email: '', phone: '', nationality: '', visit_date: '', area_interest: '', password: '', password_confirm: '' };
+    } else {
+      touristError.value = 'Registration failed. This email may already be in use.';
+    }
+  } catch {
+    touristError.value = 'Network error. Please try again.';
+  } finally {
+    touristLoading.value = false;
+  }
+}
+
+// ─ Login
+const lf = ref({ email: '', password: '' });
 function submitLogin() {
   const endpoint = loginType.value === 'vendor'
     ? 'https://www.custherds.com/loginVendor/auth'
@@ -548,6 +652,22 @@ function submitLogin() {
 .auth-page__hero-content p {
   font-size: 16px;
   opacity: 0.85;
+  margin-bottom: 16px;
+}
+.auth-page__hero-perks {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.auth-page__hero-perks span {
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
 }
 .auth-page__form-wrap {
   background: #fff;
@@ -591,16 +711,21 @@ function submitLogin() {
 .req { color: #e53e3e; }
 .auth-page__actions { margin-top: 32px; margin-bottom: 20px; }
 .auth-page__actions .thm-btn { width: 100%; text-align: center; display: block; padding: 14px; }
+.auth-page__actions .thm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .auth-page__forgot { text-align: right; margin-bottom: 8px; }
 .auth-page__forgot a { font-size: 13px; color: var(--thm-primary, #c9a84c); text-decoration: none; }
 .auth-page__terms { font-size: 12px; color: #888; margin-bottom: 12px; }
-.auth-page__terms a { color: var(--thm-primary, #c9a84c); }
+.auth-page__terms a, .auth-page__terms a:visited { color: var(--thm-primary, #c9a84c); }
 .auth-page__switch { font-size: 14px; color: #666; text-align: center; margin-top: 8px; }
 .auth-page__switch a { color: var(--thm-primary, #c9a84c); font-weight: 600; text-decoration: none; }
 .auth-page__switch a:hover { text-decoration: underline; }
 .auth-page__error {
   color: #e53e3e; font-size: 13px; background: #fff5f5;
   border: 1px solid #fed7d7; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;
+}
+.auth-page__success {
+  color: #276749; font-size: 13px; background: #f0fff4;
+  border: 1px solid #9ae6b4; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;
 }
 @media (max-width: 768px) {
   .auth-page__form-wrap { padding: 24px 16px; }
