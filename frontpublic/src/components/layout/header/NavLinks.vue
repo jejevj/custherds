@@ -1,68 +1,21 @@
 <template>
     <ul :class="ulClass">
+        <!-- Regular nav items -->
         <li v-for="(item, index) in navItems" :key="index"
-            :class="{
-                dropdown: item.dropdown && item.subItems && item.subItems.length > 0,
-                current: isItemActive(item),
-                expanded: isExpanded(item.name)
-            }">
-
-            <router-link v-if="item.path !== '#'" :to="item.path" @click="$emit('close')">
+            :class="{ current: isItemActive(item) }">
+            <router-link :to="item.path" @click="$emit('close')">
                 {{ item.name }}
             </router-link>
+        </li>
 
-            <a v-else href="#" @click.prevent="toggleExpand(item.name)">
-                {{ item.name }}
-                <button
-                    v-if="item.dropdown && item.subItems && item.subItems.length > 0"
-                    class="dropdown-btn"
-                    :class="{ expanded: isExpanded(item.name) }"
-                    @click.prevent.stop="toggleExpand(item.name)"
-                    aria-label="dropdown toggler">
-                    <i class="fa fa-angle-down"></i>
-                </button>
+        <!-- Register/Login button with dropdown -->
+        <li class="nav-register-btn" :class="{ expanded: registerOpen }">
+            <a href="#" class="thm-btn nav-register__toggle" @click.prevent="toggleRegister">
+                Register / Login <i class="fa fa-angle-down" style="margin-left: 6px;"></i>
             </a>
-
-            <ul v-if="item.dropdown && item.subItems && item.subItems.length > 0"
-                v-slide="isExpanded(item.name)">
-                <li v-for="(sub, subIndex) in item.subItems" :key="subIndex"
-                    :class="{
-                        dropdown: sub.dropdown && sub.subItems && sub.subItems.length > 0,
-                        current: isItemActive(sub),
-                        expanded: isExpanded(sub.name)
-                    }">
-
-                    <router-link v-if="sub.path !== '#'" :to="sub.path" @click="$emit('close')">
-                        {{ sub.name }}
-                        <button
-                            v-if="sub.dropdown && sub.subItems && sub.subItems.length > 0"
-                            class="dropdown-btn"
-                            :class="{ expanded: isExpanded(sub.name) }"
-                            @click.prevent.stop="toggleExpand(sub.name)"
-                            aria-label="dropdown toggler">
-                            <i class="fa fa-angle-down"></i>
-                        </button>
-                    </router-link>
-
-                    <a v-else href="#" @click.prevent="toggleExpand(sub.name)">
-                        {{ sub.name }}
-                        <button
-                            v-if="sub.dropdown && sub.subItems && sub.subItems.length > 0"
-                            class="dropdown-btn"
-                            :class="{ expanded: isExpanded(sub.name) }"
-                            @click.prevent.stop="toggleExpand(sub.name)"
-                            aria-label="dropdown toggler">
-                            <i class="fa fa-angle-down"></i>
-                        </button>
-                    </a>
-
-                    <ul v-if="sub.dropdown && sub.subItems && sub.subItems.length > 0"
-                        v-slide="isExpanded(sub.name)">
-                        <li v-for="(ssub, ssubIndex) in sub.subItems" :key="ssubIndex"
-                            :class="{ current: isItemActive(ssub) }">
-                            <router-link :to="ssub.path" @click="$emit('close')">{{ ssub.name }}</router-link>
-                        </li>
-                    </ul>
+            <ul class="nav-register__dropdown" v-show="registerOpen">
+                <li v-for="(reg, i) in registerItems" :key="i">
+                    <a :href="reg.url" target="_blank" @click="registerOpen = false">{{ reg.name }}</a>
                 </li>
             </ul>
         </li>
@@ -70,7 +23,7 @@
 </template>
 
 <script>
-import { navItems } from '@/data/nav-items.js';
+import { navItems, registerItems } from '@/data/nav-items.js';
 
 export default {
     name: "NavLinks",
@@ -84,98 +37,93 @@ export default {
     data() {
         return {
             navItems,
-            expandedItems: []
+            registerItems,
+            registerOpen: false
         };
-    },
-    directives: {
-        slide: {
-            mounted(el, binding) {
-                if (window.innerWidth <= 1199) {
-                    el.style.display = binding.value ? 'block' : 'none';
-                } else {
-                    el.style.display = '';
-                }
-            },
-            updated(el, binding) {
-                if (binding.value === binding.oldValue) return;
-
-                if (window.innerWidth > 1199) {
-                    el.style.display = '';
-                    el.style.height = '';
-                    el.style.overflow = '';
-                    return;
-                }
-
-                if (binding.value) {
-                    el.style.display = 'block';
-                    el.style.height = '0px';
-                    el.style.overflow = 'hidden';
-                    el.offsetHeight;
-                    el.style.transition = 'height 0.3s ease';
-                    el.style.height = el.scrollHeight + 'px';
-                    const cleanup = (e) => {
-                        if (e && e.target !== el) return;
-                        el.style.height = 'auto';
-                        el.style.overflow = '';
-                        el.style.transition = '';
-                        el.removeEventListener('transitionend', cleanup);
-                    };
-                    el.addEventListener('transitionend', cleanup);
-                    setTimeout(cleanup, 350);
-                } else {
-                    el.style.height = el.scrollHeight + 'px';
-                    el.style.overflow = 'hidden';
-                    el.offsetHeight;
-                    el.style.transition = 'height 0.3s ease';
-                    el.style.height = '0px';
-                    const cleanup = (e) => {
-                        if (e && e.target !== el) return;
-                        el.style.display = 'none';
-                        el.style.height = '';
-                        el.style.overflow = '';
-                        el.style.transition = '';
-                        el.removeEventListener('transitionend', cleanup);
-                    };
-                    el.addEventListener('transitionend', cleanup);
-                    setTimeout(cleanup, 350);
-                }
-            }
-        }
     },
     methods: {
         isItemActive(item) {
-            if (item.path !== '#' && this.$route.path === item.path) return true;
-            if (item.subItems && item.subItems.length) {
-                return item.subItems.some(sub => {
-                    if (sub.path !== '#' && this.$route.path === sub.path) return true;
-                    if (sub.subItems) return sub.subItems.some(ssub => this.$route.path === ssub.path);
-                    return false;
-                });
-            }
-            return false;
+            return this.$route.path === item.path;
         },
-        isExpanded(name) {
-            return this.expandedItems.includes(name);
-        },
-        toggleExpand(name) {
-            if (this.isExpanded(name)) {
-                this.expandedItems = this.expandedItems.filter(i => i !== name);
-            } else {
-                this.expandedItems.push(name);
-            }
+        toggleRegister() {
+            this.registerOpen = !this.registerOpen;
         }
+    },
+    mounted() {
+        document.addEventListener('click', (e) => {
+            if (!this.$el.contains(e.target)) {
+                this.registerOpen = false;
+            }
+        });
     }
 };
 </script>
 
 <style scoped>
-.dropdown-btn {
-    display: none;
+.nav-register-btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.nav-register__toggle {
+    padding: 8px 22px !important;
+    font-size: 14px !important;
+    line-height: 1.4 !important;
+    display: inline-flex;
+    align-items: center;
+}
+
+.nav-register__dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+    min-width: 200px;
+    list-style: none;
+    padding: 8px 0;
+    margin: 0;
+    z-index: 999;
+}
+
+.nav-register__dropdown li a {
+    display: block;
+    padding: 10px 20px;
+    color: #333;
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background 0.2s;
+}
+
+.nav-register__dropdown li a:hover {
+    background: #f5f5f5;
+    color: var(--thm-primary, #c9a84c);
 }
 
 @media (max-width: 1199px) {
-    .dropdown-btn {
-        display: flex;
+    .nav-register-btn {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .nav-register__dropdown {
+        position: static;
+        box-shadow: none;
+        background: rgba(255,255,255,0.05);
+        border-radius: 4px;
+        width: 100%;
+    }
+
+    .nav-register__dropdown li a {
+        color: #fff;
+    }
+
+    .nav-register__dropdown li a:hover {
+        background: rgba(255,255,255,0.1);
+        color: var(--thm-primary, #c9a84c);
     }
 }
 </style>
