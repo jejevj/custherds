@@ -2,64 +2,119 @@
   <div>
     <Preloader />
     <ChatPopup />
-
     <div class="theme-border-left"></div>
     <div class="theme-border-right"></div>
-
     <SidebarWidget />
 
     <div class="page-wrapper">
       <HeaderTwo />
 
-      <PageHeader 
-        title="Contact"
-        subtitle=""
-        :breadcrumbs="breadcrumbs"
+      <PageHeader
+        title="Contact Us"
+        subtitle="We'd love to hear from you!"
       />
 
-      <!-- Contact Page -->
-      <section class="contact-page">
-        <div class="section-shape-1" :style="{ backgroundImage: 'url(' + sectionShape + ')' }"></div>
+      <section class="contact-page py-5">
         <div class="container">
-          <div class="contact-page__inner">
-            <div class="row">
-              <div class="col-xl-5 col-lg-5">
-                <ContactInformation :contactInfo="contactInfo" />
-              </div>
 
-              <div class="col-xl-7 col-lg-7">
-                <ContactForm @submit="handleFormSubmit" />
+          <!-- Top: reach us info -->
+          <div class="row justify-content-center mb-5">
+            <div class="col-12 col-md-4 mb-4">
+              <div class="cus-contact-card">
+                <span class="cus-contact-card__icon icon-pin"></span>
+                <h4>Find Us</h4>
+                <p>Bali, Indonesia</p>
+              </div>
+            </div>
+            <div class="col-12 col-md-4 mb-4">
+              <div class="cus-contact-card">
+                <span class="cus-contact-card__icon icon-telephone"></span>
+                <h4>Phone / WhatsApp</h4>
+                <p><a href="https://wa.me/6287761081555" target="_blank">+62877 6108 1555</a></p>
+              </div>
+            </div>
+            <div class="col-12 col-md-4 mb-4">
+              <div class="cus-contact-card">
+                <span class="cus-contact-card__icon icon-envelope-1"></span>
+                <h4>Email</h4>
+                <p><a href="mailto:team@custherds.com">team@custherds.com</a></p>
               </div>
             </div>
           </div>
-        </div>
-      </section>
 
-      <!-- Contact Info Cards -->
-      <section class="contact-info-section">
-        <div class="container">
-          <div class="row">
-            <div 
-              v-for="(card, index) in infoCards" 
-              :key="index" 
-              class="col-xl-3"
-            >
-              <ContactInfoCard
-                :icon="card.icon"
-                :title="card.title"
-                :subtitle="card.subtitle"
-                :contact="card.contact"
-                :link="card.link"
-                :type="card.type"
-                :buttonText="card.buttonText"
-              />
+          <!-- Middle: Map + Form -->
+          <div class="row g-5">
+            <!-- Google Maps embed — Bali center -->
+            <div class="col-12 col-lg-5">
+              <h3 class="contact-page__section-title">Our Location</h3>
+              <div class="cus-map-wrap">
+                <iframe
+                  src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d252588.93043882894!2d114.95900595!3d-8.4095178!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x2dd141d3e8100fa1%3A0x24910fb14b24e690!2sBali%2C%20Indonesia!5e0!3m2!1sen!2sid!4v1718900000000"
+                  width="100%" height="400" style="border:0; border-radius: 12px;"
+                  allowfullscreen="" loading="lazy"
+                  referrerpolicy="no-referrer-when-downgrade">
+                </iframe>
+              </div>
+            </div>
+
+            <!-- Contact Form -->
+            <div class="col-12 col-lg-7">
+              <h3 class="contact-page__section-title">Leave a Message</h3>
+              <form @submit.prevent="submitContact" class="cus-contact-form">
+                <div class="row g-3">
+                  <div class="col-12 col-md-6">
+                    <div class="cus-contact-form__field">
+                      <label>Name <span class="req">*</span></label>
+                      <input type="text" v-model="cf.name" placeholder="Enter your name" required />
+                    </div>
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <div class="cus-contact-form__field">
+                      <label>Email <span class="req">*</span></label>
+                      <input type="email" v-model="cf.envelope" placeholder="Enter your email" required />
+                    </div>
+                  </div>
+                  <div class="col-12">
+                    <div class="cus-contact-form__field">
+                      <label>Message <span class="req">*</span></label>
+                      <textarea v-model="cf.message" rows="5" placeholder="Your message here..." required></textarea>
+                    </div>
+                  </div>
+
+                  <!-- Math Captcha -->
+                  <div class="col-12">
+                    <div class="cus-contact-form__captcha">
+                      <div class="cus-contact-form__captcha-q">
+                        <span class="cus-contact-form__captcha-text">{{ captchaQuestion }}</span>
+                        <button type="button" class="cus-contact-form__captcha-reload" @click="newCaptcha" title="Refresh">
+                          &#x21bb;
+                        </button>
+                      </div>
+                      <div class="cus-contact-form__field">
+                        <label>Captcha Answer <span class="req">*</span></label>
+                        <input type="text" v-model="cf.captchaAns" placeholder="Your answer" required />
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Status messages -->
+                  <div class="col-12" v-if="contactMsg">
+                    <p :class="contactSuccess ? 'cus-contact-form__success' : 'cus-contact-form__error'">{{ contactMsg }}</p>
+                  </div>
+
+                  <div class="col-12">
+                    <button type="submit" class="thm-btn" :disabled="sending">
+                      {{ sending ? 'Sending…' : 'Send Message' }}
+                      <span class="icon-up-right-arrow"></span>
+                    </button>
+                  </div>
+                </div>
+              </form>
             </div>
           </div>
+
         </div>
       </section>
-
-      <!-- Google Map -->
-      <GoogleMap :mapUrl="mapUrl" />
 
       <Footer1 />
     </div>
@@ -71,6 +126,7 @@
 </template>
 
 <script setup>
+import { ref, onMounted } from 'vue';
 import Preloader from '@/components/common/Preloader.vue';
 import ChatPopup from '@/components/common/ChatPopup.vue';
 import SidebarWidget from '@/components/common/SidebarWidget.vue';
@@ -80,83 +136,161 @@ import ScrollToTop from '@/components/common/ScrollToTop.vue';
 import HeaderTwo from '@/components/layout/header/HeaderTwo.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import Footer1 from '@/components/layout/footer/Footer1.vue';
-import ContactInformation from '@/components/contact/ContactInformation.vue';
-import ContactForm from '@/components/contact/ContactForm.vue';
-import ContactInfoCard from '@/components/contact/ContactInfoCard.vue';
-import GoogleMap from '@/components/contact/GoogleMap.vue';
 
-import sectionShape from '@/assets/images/shapes/section-shape-1.png';
+// ─ Captcha
+const captchaA    = ref(0);
+const captchaB    = ref(0);
+const captchaQuestion = ref('');
+function newCaptcha() {
+  captchaA.value = Math.floor(Math.random() * 10) + 1;
+  captchaB.value = Math.floor(Math.random() * 10) + 1;
+  captchaQuestion.value = `What is ${captchaA.value} + ${captchaB.value}?`;
+  cf.value.captchaAns = '';
+}
+onMounted(() => newCaptcha());
 
-const breadcrumbs = [
-    { label: 'Home', link: '/' },
-    { label: 'Contact', link: '' }
-];
+// ─ Form
+const cf = ref({ name: '', envelope: '', message: '', captchaAns: '' });
+const sending      = ref(false);
+const contactMsg   = ref('');
+const contactSuccess = ref(false);
 
-const contactInfo = [
-    {
-        icon: 'icon-pin',
-        title: 'Address',
-        text: '7515 Carriage Court, CA, 92236 USA',
-        type: 'text'
-    },
-    {
-        icon: 'icon-trading',
-        title: 'Contact Namber',
-        text: '(+6656) 1598596969',
-        value: '66561598596969',
-        type: 'phone'
-    },
-    {
-        icon: 'icon-envelope-1',
-        title: 'Email Us',
-        text: 'shifamoni6790@gmail.com',
-        value: 'shifamoni6790@gmail.com',
-        type: 'email'
+async function submitContact() {
+  contactMsg.value = '';
+  // Validate captcha client-side first
+  const expected = captchaA.value + captchaB.value;
+  if (parseInt(cf.value.captchaAns) !== expected) {
+    contactMsg.value = 'Incorrect captcha answer. Please try again.';
+    contactSuccess.value = false;
+    newCaptcha();
+    return;
+  }
+  sending.value = true;
+  try {
+    const params = new URLSearchParams();
+    params.append('name',       cf.value.name);
+    params.append('envelope',   cf.value.envelope);
+    params.append('message',    cf.value.message);
+    params.append('captchaAns', cf.value.captchaAns);
+    const res = await fetch('https://www.custherds.com/contact-us/sendContact', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString()
+    });
+    const data = await res.json();
+    contactMsg.value   = data.msg || (data.status ? 'Message sent!' : 'Something went wrong.');
+    contactSuccess.value = !!data.status;
+    if (data.status) {
+      cf.value = { name: '', envelope: '', message: '', captchaAns: '' };
+      newCaptcha();
     }
-];
-
-const infoCards = [
-    {
-        icon: 'icon-pin',
-        title: 'Location',
-        subtitle: 'Discover innovation doorstep.',
-        contact: '14 Tottenham Road, United Kingdom',
-        buttonText: 'View On Map',
-        type: 'text'
-    },
-    {
-        icon: 'icon-telephone',
-        title: 'Telephone',
-        subtitle: 'Your bridge to hassle-free service.',
-        contact: '+1 212-226-3126',
-        link: '12122263126',
-        buttonText: 'Get Call Back',
-        type: 'phone'
-    },
-    {
-        icon: 'icon-envelope-2',
-        title: 'Your Email',
-        subtitle: 'Your bridge to hassle-free service.',
-        contact: 'head@transcargo.com',
-        link: 'head@transcargo.com',
-        buttonText: 'Inter Email',
-        type: 'email'
-    },
-    {
-        icon: 'far fa-clock',
-        title: 'Off.Hrs',
-        subtitle: 'Monday-Satday: 9.00 am to 7.30 pm',
-        contact: 'Hotline is available 24/7.',
-        buttonText: 'Get Call Back',
-        type: 'text'
-    }
-];
-
-const mapUrl = 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d4562.753041141002!2d-118.80123790098536!3d34.152323469614075!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x80e82469c2162619%3A0xba03efb7998eef6d!2sCostco+Wholesale!5e0!3m2!1sbn!2sbd!4v1562518641290!5m2!1sbn!2sbd';
-
-const handleFormSubmit = (formData) => {
-    console.log('Contact form submitted:', formData);
-    // Here you would typically send the data to your backend API
-    alert('Thank you for contacting us! We will get back to you soon.');
-};
+  } catch {
+    contactMsg.value = 'Network error. Please try again.';
+    contactSuccess.value = false;
+  } finally {
+    sending.value = false;
+  }
+}
 </script>
+
+<style scoped>
+/* ─── Info Cards ─── */
+.cus-contact-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 32px 28px;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+  height: 100%;
+  transition: box-shadow 0.25s;
+}
+.cus-contact-card:hover { box-shadow: 0 12px 40px rgba(0,0,0,0.14); }
+.cus-contact-card__icon {
+  display: inline-flex;
+  font-size: 36px;
+  color: var(--thm-primary, #c9a84c);
+  margin-bottom: 16px;
+}
+.cus-contact-card h4 {
+  font-size: 18px; font-weight: 700;
+  color: var(--thm-black, #1a1a1a);
+  margin-bottom: 8px;
+}
+.cus-contact-card p {
+  font-size: 15px; color: #555; margin: 0;
+}
+.cus-contact-card a {
+  color: var(--thm-primary, #c9a84c);
+  text-decoration: none; font-weight: 600;
+}
+.cus-contact-card a:hover { text-decoration: underline; }
+
+/* ─── Section title ─── */
+.contact-page__section-title {
+  font-size: 26px; font-weight: 700;
+  color: var(--thm-black, #1a1a1a);
+  margin-bottom: 20px;
+}
+
+/* ─── Map ─── */
+.cus-map-wrap {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+}
+
+/* ─── Form ─── */
+.cus-contact-form__field {
+  display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px;
+}
+.cus-contact-form__field label {
+  font-size: 14px; font-weight: 600; color: #555;
+}
+.cus-contact-form__field input,
+.cus-contact-form__field textarea {
+  border: 1px solid #ddd; border-radius: 8px;
+  padding: 12px 16px; font-size: 15px;
+  transition: border 0.2s; outline: none;
+  width: 100%; background: #fff;
+}
+.cus-contact-form__field input:focus,
+.cus-contact-form__field textarea:focus {
+  border-color: var(--thm-primary, #c9a84c);
+}
+.cus-contact-form__captcha {
+  display: flex; align-items: flex-end; gap: 20px;
+  flex-wrap: wrap;
+}
+.cus-contact-form__captcha-q {
+  display: flex; align-items: center; gap: 10px;
+  white-space: nowrap;
+}
+.cus-contact-form__captcha-text {
+  font-size: 20px; font-weight: 700;
+  color: var(--thm-black, #1a1a1a);
+}
+.cus-contact-form__captcha-reload {
+  background: #f0f0f0; border: none; border-radius: 50%;
+  width: 32px; height: 32px; font-size: 18px;
+  cursor: pointer; transition: background 0.2s;
+  display: flex; align-items: center; justify-content: center;
+}
+.cus-contact-form__captcha-reload:hover { background: var(--thm-primary, #c9a84c); color: #fff; }
+.cus-contact-form__captcha .cus-contact-form__field { flex: 1; min-width: 160px; margin: 0; }
+.req { color: #e53e3e; }
+.cus-contact-form__success {
+  color: #276749; font-size: 14px; background: #f0fff4;
+  border: 1px solid #9ae6b4; border-radius: 6px;
+  padding: 10px 14px; margin: 0;
+}
+.cus-contact-form__error {
+  color: #e53e3e; font-size: 14px; background: #fff5f5;
+  border: 1px solid #fed7d7; border-radius: 6px;
+  padding: 10px 14px; margin: 0;
+}
+.thm-btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+
+@media (max-width: 768px) {
+  .cus-contact-form__captcha { flex-direction: column; align-items: stretch; }
+}
+</style>
