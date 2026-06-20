@@ -7,7 +7,7 @@
                 <div class="col-xl-4 col-lg-4 wow fadeInLeft" data-wow-delay="100ms">
                     <div class="feature-two__single">
                         <div class="feature-two__icon">
-                            <span class="icon-staircase"></span>
+                            <span class="icon-share"></span>
                         </div>
                         <h3 class="feature-two__title">Connect</h3>
                         <p class="feature-two__text">Herd your networks to trusted businesses vendors.</p>
@@ -23,7 +23,7 @@
                 <div class="col-xl-4 col-lg-4 wow fadeInLeft" data-wow-delay="200ms">
                     <div class="feature-two__single">
                         <div class="feature-two__icon">
-                            <span class="icon-plant"></span>
+                            <span class="icon-trading"></span>
                         </div>
                         <h3 class="feature-two__title">Earn</h3>
                         <p class="feature-two__text">Get paid commission after service completion.</p>
@@ -39,7 +39,7 @@
                 <div class="col-xl-4 col-lg-4 wow fadeInLeft" data-wow-delay="300ms">
                     <div class="feature-two__single last-child">
                         <div class="feature-two__icon">
-                            <span class="icon-vacuum-cleaner"></span>
+                            <span class="icon-calendar"></span>
                         </div>
                         <h3 class="feature-two__title">Track</h3>
                         <p class="feature-two__text">Monitor bookings, performance &amp; income in one dashboard.</p>
