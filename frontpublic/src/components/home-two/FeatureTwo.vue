@@ -9,9 +9,8 @@
                         <div class="feature-two__icon">
                             <span class="icon-staircase"></span>
                         </div>
-                        <h3 class="feature-two__title"><router-link to="/interior-design">INTERRIOR DESIGN</router-link></h3>
-                        <p class="feature-two__text">Mrittik Architects is a full-service design firm
-                            providing , master planning, urban design,</p>
+                        <h3 class="feature-two__title">Connect</h3>
+                        <p class="feature-two__text">Herd your networks to trusted businesses vendors.</p>
                         <div class="feature-two__shape-box">
                             <div class="feature-two__shape-1"></div>
                             <div class="feature-two__shape-2"></div>
@@ -26,9 +25,8 @@
                         <div class="feature-two__icon">
                             <span class="icon-plant"></span>
                         </div>
-                        <h3 class="feature-two__title"><router-link to="/urban-design">URBAN DESIGN</router-link></h3>
-                        <p class="feature-two__text">Mrittik Architects is a full-service design firm
-                            providing , master planning, urban design,</p>
+                        <h3 class="feature-two__title">Earn</h3>
+                        <p class="feature-two__text">Get paid commission after service completion.</p>
                         <div class="feature-two__shape-box">
                             <div class="feature-two__shape-1"></div>
                             <div class="feature-two__shape-2"></div>
@@ -43,9 +41,8 @@
                         <div class="feature-two__icon">
                             <span class="icon-vacuum-cleaner"></span>
                         </div>
-                        <h3 class="feature-two__title"><router-link to="/landscape-design">LANDSCAPE DESIGN</router-link></h3>
-                        <p class="feature-two__text">Mrittik Architects is a full-service design firm
-                            providing , master planning, urban design,</p>
+                        <h3 class="feature-two__title">Track</h3>
+                        <p class="feature-two__text">Monitor bookings, performance &amp; income in one dashboard.</p>
                         <div class="feature-two__shape-box">
                             <div class="feature-two__shape-1"></div>
                             <div class="feature-two__shape-2"></div>
