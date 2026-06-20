@@ -138,8 +138,8 @@ import PageHeader from '@/components/common/PageHeader.vue';
 import Footer1 from '@/components/layout/footer/Footer1.vue';
 
 // ─ Captcha
-const captchaA    = ref(0);
-const captchaB    = ref(0);
+const captchaA        = ref(0);
+const captchaB        = ref(0);
 const captchaQuestion = ref('');
 function newCaptcha() {
   captchaA.value = Math.floor(Math.random() * 10) + 1;
@@ -150,17 +150,16 @@ function newCaptcha() {
 onMounted(() => newCaptcha());
 
 // ─ Form
-const cf = ref({ name: '', envelope: '', message: '', captchaAns: '' });
-const sending      = ref(false);
-const contactMsg   = ref('');
+const cf             = ref({ name: '', envelope: '', message: '', captchaAns: '' });
+const sending        = ref(false);
+const contactMsg     = ref('');
 const contactSuccess = ref(false);
 
 async function submitContact() {
   contactMsg.value = '';
-  // Validate captcha client-side first
   const expected = captchaA.value + captchaB.value;
   if (parseInt(cf.value.captchaAns) !== expected) {
-    contactMsg.value = 'Incorrect captcha answer. Please try again.';
+    contactMsg.value   = 'Incorrect captcha answer. Please try again.';
     contactSuccess.value = false;
     newCaptcha();
     return;
@@ -172,20 +171,20 @@ async function submitContact() {
     params.append('envelope',   cf.value.envelope);
     params.append('message',    cf.value.message);
     params.append('captchaAns', cf.value.captchaAns);
-    const res = await fetch('https://www.custherds.com/contact-us/sendContact', {
+    const res  = await fetch('https://www.custherds.com/contact-us/sendContact', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: params.toString()
     });
     const data = await res.json();
-    contactMsg.value   = data.msg || (data.status ? 'Message sent!' : 'Something went wrong.');
+    contactMsg.value     = data.msg || (data.status ? 'Message sent!' : 'Something went wrong.');
     contactSuccess.value = !!data.status;
     if (data.status) {
       cf.value = { name: '', envelope: '', message: '', captchaAns: '' };
       newCaptcha();
     }
   } catch {
-    contactMsg.value = 'Network error. Please try again.';
+    contactMsg.value   = 'Network error. Please try again.';
     contactSuccess.value = false;
   } finally {
     sending.value = false;
@@ -194,17 +193,26 @@ async function submitContact() {
 </script>
 
 <style scoped>
+/* ─── Section wrapper: dark background ─── */
+.contact-page {
+  background-color: #0a0a0a;
+  color: #ffffff;
+}
+
 /* ─── Info Cards ─── */
 .cus-contact-card {
-  background: #fff;
+  background: #1a1a1a;
+  border: 1px solid #2e2e2e;
   border-radius: 14px;
   padding: 32px 28px;
   text-align: center;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.08);
   height: 100%;
-  transition: box-shadow 0.25s;
+  transition: box-shadow 0.25s, border-color 0.25s;
 }
-.cus-contact-card:hover { box-shadow: 0 12px 40px rgba(0,0,0,0.14); }
+.cus-contact-card:hover {
+  border-color: var(--thm-primary, #c9a84c);
+  box-shadow: 0 8px 32px rgba(201,168,76,0.15);
+}
 .cus-contact-card__icon {
   display: inline-flex;
   font-size: 36px;
@@ -213,11 +221,11 @@ async function submitContact() {
 }
 .cus-contact-card h4 {
   font-size: 18px; font-weight: 700;
-  color: var(--thm-black, #1a1a1a);
+  color: #ffffff;
   margin-bottom: 8px;
 }
 .cus-contact-card p {
-  font-size: 15px; color: #555; margin: 0;
+  font-size: 15px; color: #aaaaaa; margin: 0;
 }
 .cus-contact-card a {
   color: var(--thm-primary, #c9a84c);
@@ -225,10 +233,10 @@ async function submitContact() {
 }
 .cus-contact-card a:hover { text-decoration: underline; }
 
-/* ─── Section title ─── */
+/* ─── Section titles ─── */
 .contact-page__section-title {
   font-size: 26px; font-weight: 700;
-  color: var(--thm-black, #1a1a1a);
+  color: #ffffff;
   margin-bottom: 20px;
 }
 
@@ -236,57 +244,70 @@ async function submitContact() {
 .cus-map-wrap {
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
 }
 
-/* ─── Form ─── */
+/* ─── Form fields ─── */
 .cus-contact-form__field {
   display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px;
 }
 .cus-contact-form__field label {
-  font-size: 14px; font-weight: 600; color: #555;
+  font-size: 14px; font-weight: 600; color: #cccccc;
 }
 .cus-contact-form__field input,
 .cus-contact-form__field textarea {
-  border: 1px solid #ddd; border-radius: 8px;
-  padding: 12px 16px; font-size: 15px;
-  transition: border 0.2s; outline: none;
-  width: 100%; background: #fff;
+  background: #1e1e1e;
+  border: 1px solid #333;
+  color: #ffffff;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 15px;
+  transition: border 0.2s;
+  outline: none;
+  width: 100%;
 }
+.cus-contact-form__field input::placeholder,
+.cus-contact-form__field textarea::placeholder { color: #666; }
 .cus-contact-form__field input:focus,
 .cus-contact-form__field textarea:focus {
   border-color: var(--thm-primary, #c9a84c);
 }
+
+/* ─── Captcha ─── */
 .cus-contact-form__captcha {
-  display: flex; align-items: flex-end; gap: 20px;
-  flex-wrap: wrap;
+  display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap;
 }
 .cus-contact-form__captcha-q {
-  display: flex; align-items: center; gap: 10px;
-  white-space: nowrap;
+  display: flex; align-items: center; gap: 10px; white-space: nowrap;
 }
 .cus-contact-form__captcha-text {
-  font-size: 20px; font-weight: 700;
-  color: var(--thm-black, #1a1a1a);
+  font-size: 20px; font-weight: 700; color: #ffffff;
 }
 .cus-contact-form__captcha-reload {
-  background: #f0f0f0; border: none; border-radius: 50%;
+  background: #2a2a2a; border: 1px solid #444;
+  color: #ccc; border-radius: 50%;
   width: 32px; height: 32px; font-size: 18px;
-  cursor: pointer; transition: background 0.2s;
+  cursor: pointer; transition: background 0.2s, color 0.2s;
   display: flex; align-items: center; justify-content: center;
 }
-.cus-contact-form__captcha-reload:hover { background: var(--thm-primary, #c9a84c); color: #fff; }
+.cus-contact-form__captcha-reload:hover {
+  background: var(--thm-primary, #c9a84c); color: #fff; border-color: transparent;
+}
 .cus-contact-form__captcha .cus-contact-form__field { flex: 1; min-width: 160px; margin: 0; }
+
 .req { color: #e53e3e; }
+
 .cus-contact-form__success {
-  color: #276749; font-size: 14px; background: #f0fff4;
-  border: 1px solid #9ae6b4; border-radius: 6px;
-  padding: 10px 14px; margin: 0;
+  color: #68d391; font-size: 14px;
+  background: rgba(104,211,145,0.1);
+  border: 1px solid rgba(104,211,145,0.3);
+  border-radius: 6px; padding: 10px 14px; margin: 0;
 }
 .cus-contact-form__error {
-  color: #e53e3e; font-size: 14px; background: #fff5f5;
-  border: 1px solid #fed7d7; border-radius: 6px;
-  padding: 10px 14px; margin: 0;
+  color: #fc8181; font-size: 14px;
+  background: rgba(252,129,129,0.1);
+  border: 1px solid rgba(252,129,129,0.3);
+  border-radius: 6px; padding: 10px 14px; margin: 0;
 }
 .thm-btn[disabled] { opacity: 0.45; cursor: not-allowed; }
 
