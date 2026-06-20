@@ -10,6 +10,9 @@ const routes = [
     { path: '/about', name: 'about', component: () => import('./pages/About.vue'), meta: { title: 'About Us' } },
     { path: '/contact', name: 'contact', component: () => import('./pages/Contact.vue'), meta: { title: 'Contact Us' } },
 
+    // Tour Guides
+    { path: '/tour-guides', name: 'tour-guides', component: () => import('./pages/TourGuides.vue'), meta: { title: 'Find a Guide' } },
+
     // Auth
     { path: '/register', name: 'register', component: () => import('./pages/Register.vue'), meta: { title: 'Register' } },
     { path: '/login', name: 'login', component: () => import('./pages/Login.vue'), meta: { title: 'Login' } },
