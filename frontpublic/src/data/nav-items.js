@@ -2,24 +2,7 @@ export const navItems = [
     {
         name: 'Home',
         path: '/',
-        dropdown: true,
-        subItems: [
-            { name: 'Home One', path: '/' },
-            { name: 'Home Two', path: '/index2' },
-            { name: 'Home Three', path: '/index3' },
-            { name: 'Home Four', path: '/index4' },
-            {
-                name: 'One Page Styles',
-                path: '#',
-                dropdown: true,
-                subItems: [
-                    { name: 'One Page Styles One', path: '/index-one-page' },
-                    { name: 'One Page Styles Two', path: '/index2-one-page' },
-                    { name: 'One Page Styles Three', path: '/index3-one-page' },
-                    { name: 'One Page Styles Four', path: '/index4-one-page' },
-                ]
-            }
-        ]
+        dropdown: false
     },
     {
         name: 'About Us',
