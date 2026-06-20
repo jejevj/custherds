@@ -3,9 +3,10 @@ import { createRouter, createWebHistory } from 'vue-router'
 // Routes — all page components are lazy-loaded via dynamic import().
 const routes = [
 
-    // Home variants
-    { path: '/', name: 'index1', component: () => import('./pages/index/index1.vue'), meta: { title: 'Home One' } },
-    { path: '/index2', name: 'index2', component: () => import('./pages/index/index2.vue'), meta: { title: 'Home Two' } },
+    // Home — index2 is now the default route
+    { path: '/', name: 'home', component: () => import('./pages/index/index2.vue'), meta: { title: 'Home' } },
+    { path: '/index1', name: 'index1', component: () => import('./pages/index/index1.vue'), meta: { title: 'Home One' } },
+    { path: '/index2', redirect: '/' },
     { path: '/index3', name: 'index3', component: () => import('./pages/index/index3.vue'), meta: { title: 'Home Three' } },
     { path: '/index4', name: 'index4', component: () => import('./pages/index/index4.vue'), meta: { title: 'Home Four' } },
 
@@ -56,7 +57,7 @@ const router = createRouter({
 
 // Update page title on route change
 router.afterEach((to) => {
-    const baseTitle = 'Tecture - Architecture & Interior Vue Js Template';
+    const baseTitle = 'Custherds';
     const pageTitle = to.meta.title || 'Home';
     document.title = `${pageTitle} || ${baseTitle}`;
 });
