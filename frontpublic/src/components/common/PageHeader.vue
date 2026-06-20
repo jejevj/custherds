@@ -32,7 +32,8 @@
 
 <script setup>
 import { defineProps } from 'vue';
-import defaultBg from '@/assets/images/backgrounds/page-header-bg.jpg';
+
+const defaultBg = 'https://www.custherds.com/assets/images/slide/page1-4.webp';
 
 const props = defineProps({
     title: {
@@ -41,7 +42,7 @@ const props = defineProps({
     },
     subtitle: {
         type: String,
-        default: 'Business Models you can Consider'
+        default: 'Custherds — Turn Your Network into Net Worth'
     },
     backgroundImage: {
         type: String,
