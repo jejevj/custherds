@@ -8,16 +8,23 @@
             </router-link>
         </li>
 
-        <!-- Register/Login button with dropdown -->
+        <!-- Register button (filled) + dropdown -->
         <li class="nav-register-btn" :class="{ expanded: registerOpen }">
-            <a href="#" class="thm-btn nav-register__toggle" @click.prevent="toggleRegister">
-                Register / Login <i class="fa fa-angle-down" style="margin-left: 6px;"></i>
+            <a href="#" class="thm-btn nav-btn nav-btn--filled" @click.prevent="toggleRegister">
+                Register <i class="fa fa-angle-down" style="margin-left:5px;"></i>
             </a>
             <ul class="nav-register__dropdown" v-show="registerOpen">
                 <li v-for="(reg, i) in registerItems" :key="i">
                     <a :href="reg.url" target="_blank" @click="registerOpen = false">{{ reg.name }}</a>
                 </li>
             </ul>
+        </li>
+
+        <!-- Login button (outlined) -->
+        <li class="nav-login-btn">
+            <a href="https://www.custherds.com/login" target="_blank" class="nav-btn nav-btn--outline">
+                Login
+            </a>
         </li>
     </ul>
 </template>
@@ -60,20 +67,56 @@ export default {
 </script>
 
 <style scoped>
+/* Shared button base */
+.nav-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 22px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 30px;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    line-height: 1.4;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+/* Filled — Register */
+.nav-btn--filled {
+    background: var(--thm-primary, #c9a84c);
+    color: #fff !important;
+    border: 2px solid var(--thm-primary, #c9a84c);
+}
+.nav-btn--filled:hover {
+    background: transparent;
+    color: var(--thm-primary, #c9a84c) !important;
+}
+
+/* Outlined — Login */
+.nav-btn--outline {
+    background: transparent;
+    color: var(--thm-primary, #c9a84c) !important;
+    border: 2px solid var(--thm-primary, #c9a84c);
+}
+.nav-btn--outline:hover {
+    background: var(--thm-primary, #c9a84c);
+    color: #fff !important;
+}
+
+/* Register dropdown wrapper */
 .nav-register-btn {
     position: relative;
     display: flex;
     align-items: center;
 }
 
-.nav-register__toggle {
-    padding: 8px 22px !important;
-    font-size: 14px !important;
-    line-height: 1.4 !important;
-    display: inline-flex;
+.nav-login-btn {
+    display: flex;
     align-items: center;
 }
 
+/* Dropdown */
 .nav-register__dropdown {
     position: absolute;
     top: calc(100% + 8px);
@@ -103,10 +146,13 @@ export default {
     color: var(--thm-primary, #c9a84c);
 }
 
+/* Mobile */
 @media (max-width: 1199px) {
-    .nav-register-btn {
+    .nav-register-btn,
+    .nav-login-btn {
         flex-direction: column;
         align-items: flex-start;
+        margin-top: 8px;
     }
 
     .nav-register__dropdown {
@@ -115,6 +161,7 @@ export default {
         background: rgba(255,255,255,0.05);
         border-radius: 4px;
         width: 100%;
+        margin-top: 4px;
     }
 
     .nav-register__dropdown li a {
