@@ -2,12 +2,14 @@ export const navItems = [
     {
         name: 'Home',
         path: '/',
-        dropdown: false
+        dropdown: false,
+        subItems: []
     },
     {
         name: 'About Us',
         path: '/about',
-        dropdown: false
+        dropdown: false,
+        subItems: []
     },
     {
         name: 'Pages',
@@ -58,6 +60,7 @@ export const navItems = [
     {
         name: 'Contact',
         path: '/contact',
-        dropdown: false
+        dropdown: false,
+        subItems: []
     }
 ];
