@@ -20,120 +20,73 @@
         <div class="container">
             <div class="site-footer__top">
                 <div class="row">
-                    <div class="col-xl-3 col-lg-6 col-md-6 wow fadeInUp" data-wow-delay="100ms">
+                    <!-- About -->
+                    <div class="col-xl-4 col-lg-6 col-md-6 wow fadeInUp" data-wow-delay="100ms">
                         <div class="footer-widget__column footer-widget__about">
                             <div class="footer-widget__logo">
-                                <router-link to="/"><img src="@/assets/images/resources/footer-logo-1.png"
-                                        alt=""></router-link>
+                                <router-link to="/"><img src="@/assets/images/resources/footer-logo-1.png" alt="Custherds"></router-link>
                             </div>
-                            <p class="footer-widget__about-text">Eros vivamus platea nullam id consequat eu sociis
-                                lectus aliquam nibh auctor elitsed libero pharetra consequat and fad sociis conubia
-                                favorite to risus.</p>
+                            <p class="footer-widget__about-text">Custherds connects affiliate partners with trusted business vendors — making it easy to earn, grow, and track your performance in one unified ecosystem.</p>
                             <div class="site-footer__social">
-                                <a href="#"><i class="fab fa-twitter"></i></a>
-                                <a href="#"><i class="fab fa-facebook"></i></a>
-                                <a href="#"><i class="fab fa-pinterest-p"></i></a>
                                 <a href="#"><i class="fab fa-instagram"></i></a>
+                                <a href="#"><i class="fab fa-facebook"></i></a>
+                                <a href="#"><i class="fab fa-whatsapp"></i></a>
                             </div>
                         </div>
                     </div>
-                    <div class="col-xl-4 col-lg-6 col-md-6 wow fadeInUp" data-wow-delay="200ms">
+                    <!-- Quick Links -->
+                    <div class="col-xl-2 col-lg-6 col-md-6 wow fadeInUp" data-wow-delay="200ms">
                         <div class="footer-widget__column footer-widget__usefull-link">
                             <div class="footer-widget__title-box">
-                                <h3 class="footer-widget__title">Useful Links</h3>
+                                <h3 class="footer-widget__title">Quick Links</h3>
                             </div>
                             <div class="footer-widget__link-box">
                                 <ul class="footer-widget__link list-unstyled">
-                                    <li><router-link to="/contact">Our Support</router-link></li>
-                                    <li><router-link to="/about">System Status</router-link></li>
-                                    <li><router-link to="/about">Knowledge base</router-link></li>
-                                    <li><router-link to="/blog">Blog</router-link></li>
-                                    <li><router-link to="/contact">Contact us</router-link></li>
-                                    <li><router-link to="/contact">Write For Us</router-link></li>
-                                </ul>
-                                <ul class="footer-widget__link footer-widget__link-2 list-unstyled">
-                                    <li><router-link to="/about">Ebooks</router-link></li>
-                                    <li><router-link to="/about">Cloudways Users</router-link></li>
-                                    <li><router-link to="/about">Group</router-link></li>
-                                    <li><router-link to="/about">Customer Voice</router-link></li>
-                                    <li><router-link to="/about">Properties Right</router-link></li>
+                                    <li><router-link to="/">Home</router-link></li>
+                                    <li><router-link to="/about">About Us</router-link></li>
+                                    <li><router-link to="/contact">Contact Us</router-link></li>
+                                    <li><a href="https://www.custherds.com/faq" target="_blank">FAQ</a></li>
+                                    <li><a href="https://www.custherds.com/termCondition" target="_blank">Terms &amp; Conditions</a></li>
                                 </ul>
                             </div>
                         </div>
                     </div>
+                    <!-- Register -->
                     <div class="col-xl-2 col-lg-6 col-md-6 wow fadeInUp" data-wow-delay="300ms">
                         <div class="footer-widget__column footer-widget__services">
                             <div class="footer-widget__title-box">
-                                <h3 class="footer-widget__title">Our Services</h3>
+                                <h3 class="footer-widget__title">Register</h3>
                             </div>
                             <ul class="footer-widget__link list-unstyled">
-                                <li><router-link to="/harmony-interiors">Harmony Interiors</router-link></li>
-                                <li><router-link to="/about">Amman Rotane Hotel</router-link></li>
-                                <li><router-link to="/about">European Lard Sration</router-link></li>
-                                <li><router-link to="/evolve-space-designs">Evolve Space Designs</router-link></li>
-                                <li><router-link to="/eden-home-styling">Eden Home Styling</router-link></li>
-                                <li><router-link to="/interior-design">Interior Design </router-link></li>
-                                <li><router-link to="/urban-design">Human Resources</router-link></li>
+                                <li><a href="https://www.custherds.com/register/partners?reg=true" target="_blank">Herd Partners</a></li>
+                                <li><a href="https://www.custherds.com/register/vendors?reg=true" target="_blank">Business Vendor</a></li>
                             </ul>
                         </div>
                     </div>
-                    <div class="col-xl-3 col-lg-6 col-md-6 wow fadeInUp" data-wow-delay="400ms">
-                        <div class="footer-widget__column footer-widget__instagram">
+                    <!-- Contact -->
+                    <div class="col-xl-4 col-lg-6 col-md-6 wow fadeInUp" data-wow-delay="400ms">
+                        <div class="footer-widget__column">
                             <div class="footer-widget__title-box">
-                                <h3 class="footer-widget__title">Instagram</h3>
+                                <h3 class="footer-widget__title">Get in Touch</h3>
                             </div>
-                            <ul class="footer-widget__instagram-list list-unstyled clearfix">
-                                <li>
-                                    <div class="footer-widget__instagram-img">
-                                        <img src="@/assets/images/resources/footer-widget-instagram-img-1.jpg" alt="">
-                                        <a href="#"><span class="fab fa-instagram"></span></a>
-                                    </div>
-                                </li>
-                                <li>
-                                    <div class="footer-widget__instagram-img">
-                                        <img src="@/assets/images/resources/footer-widget-instagram-img-2.jpg" alt="">
-                                        <a href="#"><span class="fab fa-instagram"></span></a>
-                                    </div>
-                                </li>
-                                <li>
-                                    <div class="footer-widget__instagram-img">
-                                        <img src="@/assets/images/resources/footer-widget-instagram-img-3.jpg" alt="">
-                                        <a href="#"><span class="fab fa-instagram"></span></a>
-                                    </div>
-                                </li>
-                                <li>
-                                    <div class="footer-widget__instagram-img">
-                                        <img src="@/assets/images/resources/footer-widget-instagram-img-4.jpg" alt="">
-                                        <a href="#"><span class="fab fa-instagram"></span></a>
-                                    </div>
-                                </li>
-                                <li>
-                                    <div class="footer-widget__instagram-img">
-                                        <img src="@/assets/images/resources/footer-widget-instagram-img-5.jpg" alt="">
-                                        <a href="#"><span class="fab fa-instagram"></span></a>
-                                    </div>
-                                </li>
-                                <li>
-                                    <div class="footer-widget__instagram-img">
-                                        <img src="@/assets/images/resources/footer-widget-instagram-img-6.jpg" alt="">
-                                        <a href="#"><span class="fab fa-instagram"></span></a>
-                                    </div>
-                                </li>
+                            <ul class="footer-widget__link list-unstyled">
+                                <li><i class="icon-pin" style="margin-right:8px"></i> Bali, Indonesia</li>
+                                <li><i class="icon-telephone" style="margin-right:8px"></i> <a href="tel:+6287761081555">+62877 6108 1555</a></li>
+                                <li><i class="icon-envelope" style="margin-right:8px"></i> <a href="mailto:team@custherds.com">team@custherds.com</a></li>
                             </ul>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
+
         <div class="site-footer__bottom">
             <div class="container">
                 <div class="site-footer__bottom-inner">
-                    <p class="site-footer__bottom-text">© 2026
-                        Copyright <a href="#">Tecture.</a> | All rights reserved</p>
+                    <p class="site-footer__bottom-text">&copy; 2025–2026 <a href="/">Custherds.</a> | All rights reserved</p>
                     <ul class="list-unstyled site-footer__bottom-menu">
-                        <li><router-link to="/about">Privacy & Policy</router-link></li>
-                        <li><router-link to="/about">Terms of use</router-link></li>
-                        <li><router-link to="/about">Cookie Policy</router-link></li>
+                        <li><a href="https://www.custherds.com/termCondition" target="_blank">Terms &amp; Conditions</a></li>
+                        <li><a href="https://www.custherds.com/faq" target="_blank">FAQ</a></li>
                     </ul>
                 </div>
             </div>
@@ -147,14 +100,14 @@ export default {
     data() {
         return {
             items: [
-                'Interior Design',
-                'luxury homes',
-                'construction simulator'
+                'Turn Your Network into Net Worth',
+                'Herd Your Networks to Trusted Vendors',
+                'Earn Commission After Service Completion',
+                'Grow Beyond Boundaries',
             ]
         };
     },
     computed: {
-        // Duplicate items 4× so the track is wide enough for seamless looping
         loopedItems() {
             return [...this.items, ...this.items, ...this.items, ...this.items];
         }
@@ -164,11 +117,11 @@ export default {
 
 <style scoped>
 .footer-marquee__track {
-    display: flex !important; /* Override public CSS */
+    display: flex !important;
     align-items: center;
     flex-wrap: nowrap;
-    width: max-content !important; /* Override public CSS */
-    animation: footerMarqueeSlide 30s linear infinite !important; /* Override public CSS */
+    width: max-content !important;
+    animation: footerMarqueeSlide 30s linear infinite !important;
     margin: 0;
     padding: 0;
 }
@@ -182,13 +135,13 @@ export default {
     align-items: center;
     flex-shrink: 0;
     margin-right: 50px;
-    margin-left: 0 !important; /* Reset faulty left margin */
-    float: none !important;    /* Block float layout breakage */
-    animation: none !important; /* Cancel the messy public CSS li animation */
+    margin-left: 0 !important;
+    float: none !important;
+    animation: none !important;
 }
 
 @keyframes footerMarqueeSlide {
     0%   { transform: translateX(0); }
-    100% { transform: translateX(-25%); } /* 4 sets, so we move exactly 1 set (25%) */
+    100% { transform: translateX(-25%); }
 }
 </style>
