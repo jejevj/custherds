@@ -15,7 +15,6 @@ import { nextTick } from 'vue';
 let _wowObserver = null;
 
 export function initWow() {
-    // Disconnect previous observer so we don't double-observe on re-init
     if (_wowObserver) {
         _wowObserver.disconnect();
         _wowObserver = null;
@@ -31,7 +30,6 @@ export function initWow() {
                 if (!entry.isIntersecting) return;
                 const el = entry.target;
 
-                // Apply data-wow-* attributes as inline animation props
                 const delay = el.getAttribute('data-wow-delay') || '0s';
                 const duration = el.getAttribute('data-wow-duration') || '1s';
                 const iteration = el.getAttribute('data-wow-iteration') || '1';
@@ -40,24 +38,20 @@ export function initWow() {
                 el.style.animationDuration = duration;
                 el.style.animationIterationCount = iteration;
 
-                // Force visibility and animation state 
                 el.style.visibility = 'visible';
-                el.style.animationName = ''; // Clear 'none'
+                el.style.animationName = '';
 
-                // Add 'animated' class — animate.css handles the actual animation
                 el.classList.add('animated');
                 _wowObserver.unobserve(el);
             });
         },
         {
-            // -60px: start animating when element is 60px inside the viewport
             rootMargin: '0px 0px -60px 0px',
             threshold: 0.1,
         }
     );
 
     wowEls.forEach((el) => {
-        // Prevent accidental early animation if class exists
         if (!el.classList.contains('animated')) {
             el.style.visibility = 'hidden';
             el.style.animationName = 'none';
@@ -86,7 +80,6 @@ export function initGsapAnimations() {
     const ST = window.ScrollTrigger;
     if (!g || !ST) return;
 
-    // ── .title-animation — character split fade-in ───────────────────────
     if (window.SplitText) {
         document.querySelectorAll('.title-animation:not([data-gsap-init])').forEach((el) => {
             el.setAttribute('data-gsap-init', '1');
@@ -101,7 +94,6 @@ export function initGsapAnimations() {
             });
         });
     } else {
-        // Fallback without SplitText — simple fade up on whole title
         document.querySelectorAll('.title-animation:not([data-gsap-init])').forEach((el) => {
             el.setAttribute('data-gsap-init', '1');
             g.from(el, {
@@ -114,7 +106,6 @@ export function initGsapAnimations() {
         });
     }
 
-    // ── .sec-title-animation — section title block ───────────────────────
     document.querySelectorAll('.sec-title-animation:not([data-gsap-init])').forEach((el) => {
         el.setAttribute('data-gsap-init', '1');
         g.from(el, {
@@ -126,7 +117,6 @@ export function initGsapAnimations() {
         });
     });
 
-    // ── .animation-style1 — fade up ──────────────────────────────────────
     document.querySelectorAll('.animation-style1:not([data-gsap-init])').forEach((el) => {
         el.setAttribute('data-gsap-init', '1');
         g.from(el, {
@@ -138,7 +128,6 @@ export function initGsapAnimations() {
         });
     });
 
-    // ── .animation-style2 — slide from left ──────────────────────────────
     document.querySelectorAll('.animation-style2:not([data-gsap-init])').forEach((el) => {
         el.setAttribute('data-gsap-init', '1');
         g.from(el, {
@@ -150,7 +139,6 @@ export function initGsapAnimations() {
         });
     });
 
-    // Refresh all ScrollTrigger instances after new elements are added
     ST.refresh();
 }
 
@@ -168,8 +156,10 @@ export function setupGlobalEvents() {
     if (window._globalEventsInit) return;
     window._globalEventsInit = true;
 
-    // Hover Image Reveal logic — replaces jQuery / script-pure.js
+    // Hover Image Reveal logic
+    // Guard: e.target must be a real Element before calling .closest()
     document.addEventListener("mousemove", (e) => {
+        if (!(e.target instanceof Element)) return;
         const item = e.target.closest(".hover-item");
         if (!item) return;
         const box = item.querySelector(".hover-item__box");
@@ -185,6 +175,7 @@ export function setupGlobalEvents() {
     }, { passive: true });
 
     document.addEventListener("mouseleave", (e) => {
+        if (!(e.target instanceof Element)) return;
         const item = e.target.closest(".hover-item");
         if (!item) return;
         const box = item.querySelector(".hover-item__box");
@@ -218,19 +209,14 @@ export function initAllAnimations() {
 /* ─── Vue Plugin ─────────────────────────────────────────────────────────── */
 export const AnimationsPlugin = {
     install(app, { router }) {
-        // Setup once globally
         setupGlobalEvents();
 
-        // After every route navigation, wait for Vue to render then run animations
         router.afterEach(() => {
-            // nextTick: Vue has committed the new page's DOM
             nextTick(() => {
-                // Extra setTimeout: allows lazy-loaded async components to mount
                 setTimeout(initAllAnimations, 120);
             });
         });
 
-        // Global access for manual calls if needed
         window.__initWow = initWow;
         window.__initAllAnimations = initAllAnimations;
     },
