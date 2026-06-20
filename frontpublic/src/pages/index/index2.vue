@@ -13,6 +13,7 @@
 
             <MainSliderTwo />
             <FeatureTwo />
+            <SlidingTextOne />
             <AboutTwo />
             <ServicesTwo />
             <CounterOne />
@@ -34,6 +35,7 @@ import SidebarWidget from "@/components/common/SidebarWidget.vue";
 import HeaderTwo from "@/components/layout/header/HeaderTwo.vue";
 import MainSliderTwo from "@/components/home-two/MainSliderTwo.vue";
 import FeatureTwo from "@/components/home-two/FeatureTwo.vue";
+import SlidingTextOne from "@/components/home-one/SlidingTextOne.vue";
 import AboutTwo from "@/components/home-two/AboutTwo.vue";
 import ServicesTwo from "@/components/home-two/ServicesTwo.vue";
 import CounterOne from "@/components/home-two/CounterOne.vue";
@@ -52,6 +54,7 @@ export default {
         HeaderTwo,
         MainSliderTwo,
         FeatureTwo,
+        SlidingTextOne,
         AboutTwo,
         ServicesTwo,
         CounterOne,
