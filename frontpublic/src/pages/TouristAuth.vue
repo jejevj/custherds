@@ -159,9 +159,14 @@
 
                     <p class="ta-error" v-if="loginError">{{ loginError }}</p>
 
+                    <!-- Coming soon notice -->
+                    <div class="ta-coming-soon">
+                      🔧 Tourist login is coming soon. Stay tuned!
+                    </div>
+
                     <div class="ta-actions">
-                      <button type="submit" class="thm-btn" :disabled="loading">
-                        {{ loading ? 'Signing in…' : 'Sign In' }}
+                      <button type="submit" class="thm-btn" disabled>
+                        Sign In — Coming Soon
                         <span class="icon-up-right-arrow"></span>
                       </button>
                     </div>
@@ -190,7 +195,7 @@
 
 <script setup>
 import { ref, computed } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
+import { useRoute } from 'vue-router';
 import Preloader from '@/components/common/Preloader.vue';
 import ChatPopup from '@/components/common/ChatPopup.vue';
 import SidebarWidget from '@/components/common/SidebarWidget.vue';
@@ -200,11 +205,8 @@ import ScrollToTop from '@/components/common/ScrollToTop.vue';
 import HeaderTwo from '@/components/layout/header/HeaderTwo.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import Footer1 from '@/components/layout/footer/Footer1.vue';
-import { useTouristStore } from '@/stores/tourist.js';
 
-const router = useRouter();
 const route = useRoute();
-const tourist = useTouristStore();
 
 // Default mode based on route path
 const mode = ref(route.path === '/tourist/login' ? 'login' : 'register');
@@ -217,11 +219,11 @@ const rf = ref({
   name: '', email: '', phone: '', nationality: '',
   visit_date: '', area_interest: '', password: '', password_confirm: ''
 });
-const registerError = ref('');
+const registerError   = ref('');
 const registerSuccess = ref('');
 
 async function submitRegister() {
-  registerError.value = '';
+  registerError.value   = '';
   registerSuccess.value = '';
   if (rf.value.password !== rf.value.password_confirm) {
     registerError.value = 'Passwords do not match.'; return;
@@ -233,9 +235,8 @@ async function submitRegister() {
     fd.append('user_type', '3'); // 3 = tourist
     const res = await fetch('https://www.custherds.com/register/saveTourist', { method: 'POST', body: fd });
     if (res.ok) {
-      registerSuccess.value = '🎉 Account created! You can now sign in.';
+      registerSuccess.value = '🎉 Account created! Login will be available soon.';
       rf.value = { name: '', email: '', phone: '', nationality: '', visit_date: '', area_interest: '', password: '', password_confirm: '' };
-      setTimeout(() => { mode.value = 'login'; registerSuccess.value = ''; }, 2000);
     } else {
       registerError.value = 'Registration failed. This email may already be in use.';
     }
@@ -246,34 +247,13 @@ async function submitRegister() {
   }
 }
 
-// ── Login form ────────────────────────────────────────────────
+// ── Login — disabled until backend is ready ───────────────────
 const lf = ref({ email: '', password: '' });
 const loginError = ref('');
 
-async function submitLogin() {
-  loginError.value = '';
-  loading.value = true;
-  try {
-    const fd = new FormData();
-    fd.append('uemail', lf.value.email);
-    fd.append('password', lf.value.password);
-    const res = await fetch('https://www.custherds.com/loginTourist/auth', { method: 'POST', body: fd });
-    if (res.ok) {
-      const data = await res.json().catch(() => null);
-      // If backend returns token + user, use them; otherwise use mock for dev
-      const token = data?.token || 'tourist-session-' + Date.now();
-      const user = data?.user || { name: lf.value.email.split('@')[0], email: lf.value.email };
-      tourist.login(token, user);
-      const redirect = route.query.redirect || '/tour-guides';
-      router.push(redirect);
-    } else {
-      loginError.value = 'Invalid email or password. Please try again.';
-    }
-  } catch {
-    loginError.value = 'Network error. Please try again.';
-  } finally {
-    loading.value = false;
-  }
+function submitLogin() {
+  // Login intentionally disabled — backend endpoint not ready yet.
+  loginError.value = 'Tourist login is not yet available. Please check back soon.';
 }
 </script>
 
@@ -426,10 +406,22 @@ async function submitLogin() {
   margin-bottom: 12px;
 }
 
+/* Coming soon notice */
+.ta-coming-soon {
+  background: #fffbea;
+  border: 1px solid #f6e05e;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 13px;
+  color: #744210;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
 /* Actions */
-.ta-actions { margin-top: 24px; margin-bottom: 16px; }
+.ta-actions { margin-top: 8px; margin-bottom: 16px; }
 .ta-actions .thm-btn { width: 100%; display: block; text-align: center; padding: 14px; }
-.ta-actions .thm-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.ta-actions .thm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .ta-forgot { text-align: right; margin-bottom: 4px; }
 .ta-forgot a { font-size: 13px; color: var(--thm-primary, #c9a84c); text-decoration: none; }
 .ta-terms { font-size: 12px; color: #aaa; margin-bottom: 10px; }
