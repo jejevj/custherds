@@ -12,12 +12,6 @@ export const navItems = [
         subItems: []
     },
     {
-        name: 'About Us2',
-        path: '/about',
-        dropdown: false,
-        subItems: []
-    },
-    {
         name: 'Pages',
         path: '#',
         dropdown: true,
