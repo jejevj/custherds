@@ -31,6 +31,18 @@ const routes = [
 const router = createRouter({
     history: createWebHistory(),
     routes,
+    scrollBehavior(to, from, savedPosition) {
+        // Jika browser back/forward — kembalikan posisi scroll sebelumnya
+        if (savedPosition) {
+            return savedPosition
+        }
+        // Jika ada hash anchor (misal /about#team) — scroll ke elemen tersebut
+        if (to.hash) {
+            return { el: to.hash, behavior: 'smooth' }
+        }
+        // Default: selalu scroll ke atas saat pindah halaman
+        return { top: 0, behavior: 'smooth' }
+    },
 })
 
 router.afterEach((to) => {
