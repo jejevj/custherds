@@ -5,11 +5,10 @@ import { LoginForm } from "@/components/login-form"
 
 export default function VendorLoginPage() {
   return (
-    <div className="min-h-svh grid lg:grid-cols-2">
-      {/* LEFT – LOGIN */}
-      <div className="flex items-center justify-center bg-muted p-6 md:p-10">
-        <div className="w-full max-w-sm">
-          <div className="mb-6 flex items-center justify-center gap-2 font-medium">
+    <div className="bg-muted min-h-svh w-full flex items-center justify-center p-6 md:p-10">
+      <div className="w-full max-w-sm">
+        <div className="flex flex-col gap-6">
+          <div className="flex items-center justify-center gap-2 font-medium">
             <div className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-md">
               <GalleryVerticalEnd className="size-5" />
             </div>
@@ -20,29 +19,6 @@ export default function VendorLoginPage() {
             loginEndpoint="https://www.custherds.com/vendor/login/doLogin"
             registerHref="https://custherds.ourtestcloud.my.id/register"
           />
-        </div>
-      </div>
-
-      {/* RIGHT – COVER */}
-      <div className="relative hidden lg:flex flex-col justify-between bg-gradient-to-br from-primary to-primary/80 p-10 text-primary-foreground">
-        <div className="absolute inset-0 bg-black/10" />
-        <div className="relative z-10">
-          <h1 className="text-3xl font-semibold leading-tight">
-            Business Vendor Portal 🛒
-          </h1>
-          <p className="mt-3 max-w-md text-primary-foreground/90">
-            Manage your listings, track affiliate-driven bookings,
-            and grow your customer base through Custherds.
-          </p>
-          <ul className="mt-6 space-y-2 text-sm">
-            <li>✔ Manage your product &amp; service listings</li>
-            <li>✔ Track referrals from Herd Guides</li>
-            <li>✔ Monitor revenue &amp; commissions in real-time</li>
-            <li>✔ Secure &amp; easy authentication</li>
-          </ul>
-        </div>
-        <div className="relative z-10 text-sm text-primary-foreground/80">
-          © {new Date().getFullYear()} Custherds. All rights reserved.
         </div>
       </div>
     </div>
