@@ -1,18 +1,23 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+from fastapi.openapi.utils import get_openapi
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from app.core.config import settings
 from app.api.v1.router import api_router
 import time
+import secrets
 
 START_TIME = time.time()
 
+# Disable default docs — we serve them manually with Basic Auth
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     description=settings.DESCRIPTION,
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 
 app.add_middleware(
@@ -25,6 +30,46 @@ app.add_middleware(
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
+security = HTTPBasic()
+
+
+def verify_docs_credentials(credentials: HTTPBasicCredentials = Depends(security)):
+    correct_username = secrets.compare_digest(credentials.username, settings.SWAGGER_USERNAME)
+    correct_password = secrets.compare_digest(credentials.password, settings.SWAGGER_PASSWORD)
+    if not (correct_username and correct_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+
+@app.get("/docs", include_in_schema=False)
+async def swagger_ui(credentials: HTTPBasicCredentials = Depends(verify_docs_credentials)):
+    return get_swagger_ui_html(
+        openapi_url="/openapi.json",
+        title=f"{settings.PROJECT_NAME} — Swagger UI",
+        swagger_favicon_url="https://fastapi.tiangolo.com/img/favicon.png",
+    )
+
+
+@app.get("/redoc", include_in_schema=False)
+async def redoc_ui(credentials: HTTPBasicCredentials = Depends(verify_docs_credentials)):
+    return get_redoc_html(
+        openapi_url="/openapi.json",
+        title=f"{settings.PROJECT_NAME} — ReDoc",
+    )
+
+
+@app.get("/openapi.json", include_in_schema=False)
+async def openapi_schema(credentials: HTTPBasicCredentials = Depends(verify_docs_credentials)):
+    return get_openapi(
+        title=settings.PROJECT_NAME,
+        version=settings.VERSION,
+        description=settings.DESCRIPTION,
+        routes=app.routes,
+    )
+
 
 @app.get("/", tags=["Health"])
 async def root():
@@ -32,6 +77,7 @@ async def root():
         "service": settings.PROJECT_NAME,
         "version": settings.VERSION,
         "status": "ok",
+        "docs": "/docs",
     }
 
 

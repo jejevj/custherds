@@ -16,6 +16,10 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "postgresql://user:password@localhost:5432/custherds"
 
+    # Swagger Basic Auth
+    SWAGGER_USERNAME: str = "admin"
+    SWAGGER_PASSWORD: str = "qwert12345!"
+
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:3000",
         "https://partners-custherds.ourtestcloud.my.id",
