@@ -26,6 +26,13 @@ const roleLabels: Record<string, string> = {
   default: "Partner",
 }
 
+// Default redirect per role if the API doesn't return a redirect URL
+const roleRedirects: Record<string, string> = {
+  vendor: "/vendor/dashboard",
+  guide:  "/guide/dashboard",
+  default: "/dashboard/analytics",
+}
+
 export function LoginForm({
   className,
   role = "default",
@@ -58,7 +65,9 @@ export function LoginForm({
       if (data.status) {
         setOk(true)
         setMsg(data.msg || "Login successful! Redirecting\u2026")
-        if (data.redirect) setTimeout(() => { window.location.href = data.redirect }, 800)
+        // Use API redirect if provided, otherwise fall back to role-based default
+        const redirectUrl = data.redirect || roleRedirects[role] || roleRedirects["default"]
+        setTimeout(() => { window.location.href = redirectUrl }, 800)
       } else {
         setOk(false)
         setMsg(data.msg || "Invalid email or password.")
