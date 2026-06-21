@@ -19,19 +19,18 @@
             <ul class="mobile-nav__contact list-unstyled">
                 <li>
                     <i class="fa fa-envelope"></i>
-                    <a href="mailto:info@tecture.com">info@tecture.com</a>
+                    <a href="mailto:team@custherds.com">team@custherds.com</a>
                 </li>
                 <li>
                     <i class="fa fa-phone-alt"></i>
-                    <a href="tel:6668880000">666 888 0000</a>
+                    <a href="tel:+6287761081555">+62877 6108 1555</a>
                 </li>
             </ul><!-- /.mobile-nav__contact -->
             <div class="mobile-nav__top">
                 <div class="mobile-nav__social">
-                    <a href="#" class="fab fa-twitter"></a>
-                    <a href="#" class="fab fa-facebook-square"></a>
-                    <a href="#" class="fab fa-pinterest-p"></a>
                     <a href="#" class="fab fa-instagram"></a>
+                    <a href="#" class="fab fa-facebook-square"></a>
+                    <a href="#" class="fab fa-whatsapp"></a>
                 </div><!-- /.mobile-nav__social -->
             </div><!-- /.mobile-nav__top -->
         </div>
@@ -67,7 +66,6 @@ export default {
         }
     },
     mounted() {
-        // Shared toggle handler
         this._onToggle = (e) => {
             if (e.target.closest(".mobile-nav__toggler")) {
                 e.preventDefault();
