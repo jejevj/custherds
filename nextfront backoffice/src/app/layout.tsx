@@ -10,99 +10,58 @@ const inter = Inter({
   display: "swap",
 })
 
-
-/* SEO Metadata */
 export const metadata: Metadata = {
-  metadataBase: new URL("https://codervent.com"),
+  metadataBase: new URL("https://partners-custherds.ourtestcloud.my.id"),
 
   title: {
-  default: "Dashtrans - Next.js & ShadCN Admin Dashboard Template",
-  template: "%s | Dashtrans",
-},
+    default: "Custherds Partners",
+    template: "%s | Custherds Partners",
+  },
 
   description:
-    "Dashtrans is a premium admin dashboard template built with Next.js 16, ShadCN UI, Tailwind CSS v4, and TypeScript. Includes CRM, Analytics, eCommerce, Authentication, Charts, Widgets, Forms, Tables, and reusable UI components.",
+    "Custherds partner dashboard for Herd Guides and Business Vendors. Manage bookings, track referrals, and monitor your earnings.",
 
   keywords: [
-  "Dashtrans",
-  "Next.js ShadCN Admin Template",
-  "Next.js Dashboard",
-  "Next.js 16 Admin Template",
-  "ShadCN UI Dashboard",
-  "ShadCN Admin Dashboard",
-  "ShadCN UI Template",
-  "Tailwind CSS Dashboard",
-  "Tailwind CSS Admin Template",
-  "TypeScript Dashboard",
-  "Admin Dashboard Template",
-  "CRM Dashboard",
-  "Analytics Dashboard",
-  "eCommerce Dashboard",
-  "SaaS Dashboard",
-  "Project Management Dashboard",
-  "Application Dashboard",
-  "Modern Admin Template",
-  "Web App Dashboard",
-  "Admin Panel Template",
-  "Next.js Starter Template",
-],
-
-  authors: [
-    {
-      name: "Codervent",
-      url: "https://codervent.com",
-    },
+    "Custherds",
+    "Herd Guide",
+    "Business Vendor",
+    "Affiliate Dashboard",
+    "Tour Guide Bali",
+    "Partner Dashboard",
   ],
 
-  creator: "Codervent",
-  publisher: "Codervent",
+  authors: [{ name: "Custherds", url: "https://custherds.com" }],
+  creator: "Custherds",
+  publisher: "Custherds",
 
-  robots: {
-    index: true,
-    follow: true,
+  robots: { index: false, follow: false },
+
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/logo-1.png",
   },
 
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://codervent.com",
-    siteName: "Dashtrans",
-    title: "Dashtrans - Next.js Admin Dashboard Template",
-    description:
-      "Premium admin dashboard template built with Next.js 16, ShadCN UI, Tailwind CSS v4 and TypeScript.",
-    images: [
-      {
-        url: "/og-image.jpg",
-        width: 1200,
-        height: 630,
-        alt: "Dashtrans Next.js Admin Dashboard",
-      },
-    ],
+    url: "https://partners-custherds.ourtestcloud.my.id",
+    siteName: "Custherds Partners",
+    title: "Custherds Partners Dashboard",
+    description: "Manage your Custherds guide or vendor account.",
+    images: [{ url: "/logo-1.png", width: 400, height: 120, alt: "Custherds" }],
   },
-
-  twitter: {
-    card: "summary_large_image",
-    title: "Dashtrans - Next.js Admin Dashboard Template",
-    description:
-      "Modern admin dashboard template built with Next.js 16, ShadCN UI, Tailwind CSS v4 and TypeScript.",
-    images: ["/og-image.jpg"],
-    creator: "@codervent",
-  },
-
 }
 
-/* Viewport */
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0f172a",
+  themeColor: "#c9a84c",
 }
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -110,7 +69,7 @@ export default function RootLayout({
           href="https://cdn.boxicons.com/3.0.8/fonts/basic/boxicons.min.css"
           rel="stylesheet"
         />
-        </head>
+      </head>
       <body className={`${inter.className} antialiased`}>
         <ThemeProvider
           attribute="class"
