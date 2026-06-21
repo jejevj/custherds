@@ -4,6 +4,7 @@ from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from app.core.config import settings
+from app.core.exceptions import register_exception_handlers
 from app.api.v1.router import api_router
 from app.middleware.logging import RequestLoggingMiddleware
 import time
@@ -20,7 +21,7 @@ app = FastAPI(
     openapi_url=None,
 )
 
-# Middleware — order matters: CORS first, then logging
+# Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
@@ -30,6 +31,10 @@ app.add_middleware(
 )
 app.add_middleware(RequestLoggingMiddleware)
 
+# Global exception handlers
+register_exception_handlers(app)
+
+# Routers
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 security = HTTPBasic()
