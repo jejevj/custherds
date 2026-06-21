@@ -35,6 +35,7 @@ import {
   FolderKanban
 } from "lucide-react"
 import { ScrollArea } from "./ui/scroll-area"
+import Image from "next/image"
 
 // nav menues
 const data = {
@@ -382,12 +383,10 @@ const data = {
   ],
 }
 
-// This is the sidebar component used in the app layout.
 type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
   onHoverChange?: (value: boolean) => void
 }
 
-// The sidebar component used in the app layout. It receives an `onHoverChange` prop to notify the parent layout when the sidebar is hovered or not.
 export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
   return (
      <div
@@ -400,12 +399,12 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild className="p-2">
               <a href="#">
-                <div className="flex aspect-square size-8 items-center justify-center mx-auto rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <PieChart className="size-4" />
+                <div className="flex aspect-square size-8 items-center justify-center mx-auto rounded-lg overflow-hidden bg-sidebar-primary">
+                  <Image src="/logo-4.png" alt="Custherds" width={32} height={32} className="object-contain" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">Dashtrans UI</span>
-                  <span className="truncate text-xs">Next.js Admin</span>
+                  <Image src="/logo-1.png" alt="Custherds" width={110} height={28} className="object-contain" />
+                  <span className="truncate text-xs text-muted-foreground">Admin Portal</span>
                 </div>
               </a>
             </SidebarMenuButton>

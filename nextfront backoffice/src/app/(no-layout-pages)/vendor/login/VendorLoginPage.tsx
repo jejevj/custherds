@@ -1,6 +1,6 @@
 "use client"
 
-import { GalleryVerticalEnd } from "lucide-react"
+import Image from "next/image"
 import { LoginForm } from "@/components/login-form"
 
 export default function VendorLoginPage() {
@@ -8,11 +8,15 @@ export default function VendorLoginPage() {
     <div className="bg-muted min-h-svh w-full flex items-center justify-center p-6 md:p-10">
       <div className="w-full max-w-sm">
         <div className="flex flex-col gap-6">
-          <div className="flex items-center justify-center gap-2 font-medium">
-            <div className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-md">
-              <GalleryVerticalEnd className="size-5" />
-            </div>
-            <span className="text-lg">Custherds</span>
+          <div className="flex items-center justify-center">
+            <Image
+              src="/logo-1.png"
+              alt="Custherds"
+              width={160}
+              height={48}
+              className="object-contain"
+              priority
+            />
           </div>
           <LoginForm
             role="vendor"

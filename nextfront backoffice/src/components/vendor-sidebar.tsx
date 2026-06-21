@@ -23,12 +23,12 @@ import {
   CircleUserRound,
   LifeBuoyIcon,
   SendIcon,
-  PieChart,
   Megaphone,
   PackageSearch,
   WalletCards,
 } from "lucide-react"
 import { ScrollArea } from "./ui/scroll-area"
+import Image from "next/image"
 
 const data = {
   user: {
@@ -131,12 +131,12 @@ export function VendorSidebar({ onHoverChange, ...props }: VendorSidebarProps) {
             <SidebarMenuItem>
               <SidebarMenuButton size="lg" asChild className="p-2">
                 <a href="/vendor/dashboard">
-                  <div className="flex aspect-square size-8 items-center justify-center mx-auto rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                    <PieChart className="size-4" />
+                  <div className="flex aspect-square size-8 items-center justify-center mx-auto rounded-lg overflow-hidden bg-sidebar-primary">
+                    <Image src="/logo-4.png" alt="Custherds" width={32} height={32} className="object-contain" />
                   </div>
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-medium">Custherds</span>
-                    <span className="truncate text-xs">Vendor Portal</span>
+                    <Image src="/logo-1.png" alt="Custherds" width={110} height={28} className="object-contain" />
+                    <span className="truncate text-xs text-muted-foreground">Vendor Portal</span>
                   </div>
                 </a>
               </SidebarMenuButton>
