@@ -15,21 +15,23 @@ import { useState } from "react"
 import { Eye, EyeOff, Loader2 } from "lucide-react"
 
 interface LoginFormProps extends React.ComponentPropsWithoutRef<"div"> {
-  role?: "vendor" | "guide" | "default"
+  role?: "vendor" | "guide" | "admin" | "default"
   loginEndpoint?: string
   registerHref?: string
 }
 
 const roleLabels: Record<string, string> = {
-  vendor: "Business Vendor",
-  guide:  "Herd Guide",
+  vendor:  "Business Vendor",
+  guide:   "Herd Guide",
+  admin:   "Administrator",
   default: "Partner",
 }
 
 // Default redirect per role
 const roleRedirects: Record<string, string> = {
-  vendor: "/vendor/dashboard",
-  guide:  "/guide/dashboard",
+  vendor:  "/vendor/dashboard",
+  guide:   "/guide/dashboard",
+  admin:   "/admin/dashboard",
   default: "/dashboard/analytics",
 }
 
@@ -161,7 +163,7 @@ export function LoginForm({
 
                 {DEMO_MODE && (
                   <p className="text-xs text-center text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
-                    ⚠️ Demo mode active &mdash; login without validation
+                    &#9888;&#65039; Demo mode active &mdash; login without validation
                   </p>
                 )}
 
