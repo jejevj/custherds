@@ -17,7 +17,7 @@
 
         <!-- Login button (outlined) -->
         <li class="nav-action-btn">
-            <router-link to="/tourist/login" class="nav-btn nav-btn--outline" @click="$emit('close')">
+            <router-link to="/login" class="nav-btn nav-btn--outline" @click="$emit('close')">
                 Login
             </router-link>
         </li>
