@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from app.db.base import Base
+from app.db.base_class import Base
 
 
 class Guide(Base):
@@ -10,7 +10,7 @@ class Guide(Base):
     id           = Column(Integer, primary_key=True, index=True)
     user_id      = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
     bio          = Column(Text)
-    languages    = Column(String)  # comma-separated e.g. "en,id,jp"
+    languages    = Column(String)
     expertise    = Column(String)
     phone        = Column(String)
     photo_url    = Column(String)

@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from app.db.base import Base
+from app.db.base_class import Base
 
 
 class Review(Base):
@@ -9,8 +9,8 @@ class Review(Base):
 
     id          = Column(Integer, primary_key=True, index=True)
     user_id     = Column(Integer, ForeignKey("users.id"), nullable=False)
-    target_id   = Column(Integer, nullable=False)  # vendor_id or guide_id
-    target_type = Column(String, nullable=False)   # "vendor" or "guide"
+    target_id   = Column(Integer, nullable=False)
+    target_type = Column(String, nullable=False)
     rating      = Column(Float, nullable=False)
     comment     = Column(Text)
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
