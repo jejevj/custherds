@@ -5,12 +5,12 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from app.core.config import settings
 from app.api.v1.router import api_router
+from app.middleware.logging import RequestLoggingMiddleware
 import time
 import secrets
 
 START_TIME = time.time()
 
-# Disable default docs — we serve them manually with Basic Auth
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
@@ -20,6 +20,7 @@ app = FastAPI(
     openapi_url=None,
 )
 
+# Middleware — order matters: CORS first, then logging
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
@@ -27,6 +28,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RequestLoggingMiddleware)
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
