@@ -56,7 +56,6 @@ export function LoginForm({
     setLoading(true)
 
     if (DEMO_MODE) {
-      // Demo: langsung redirect tanpa validasi
       setOk(true)
       setMsg("Login successful! Redirecting\u2026")
       const redirectUrl = roleRedirects[role] || roleRedirects["default"]
@@ -65,7 +64,7 @@ export function LoginForm({
       return
     }
 
-    // Production: validasi via API
+    // Production: validate via API
     if (!loginEndpoint) { setLoading(false); return }
     try {
       const params = new URLSearchParams()
@@ -162,7 +161,7 @@ export function LoginForm({
 
                 {DEMO_MODE && (
                   <p className="text-xs text-center text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
-                    ⚠️ Demo mode aktif — login tanpa validasi
+                    ⚠️ Demo mode active &mdash; login without validation
                   </p>
                 )}
 
