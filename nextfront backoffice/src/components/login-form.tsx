@@ -26,7 +26,7 @@ const roleLabels: Record<string, string> = {
   default: "Partner",
 }
 
-// Default redirect per role if the API doesn't return a redirect URL
+// Default redirect per role
 const roleRedirects: Record<string, string> = {
   vendor: "/vendor/dashboard",
   guide:  "/guide/dashboard",
@@ -47,11 +47,26 @@ export function LoginForm({
   const [msg, setMsg]                   = useState("")
   const [ok, setOk]                     = useState(false)
 
+  // TODO: Remove demo mode and re-enable API validation before production
+  const DEMO_MODE = true
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!loginEndpoint) return
     setMsg("")
     setLoading(true)
+
+    if (DEMO_MODE) {
+      // Demo: langsung redirect tanpa validasi
+      setOk(true)
+      setMsg("Login successful! Redirecting\u2026")
+      const redirectUrl = roleRedirects[role] || roleRedirects["default"]
+      setTimeout(() => { window.location.href = redirectUrl }, 800)
+      setLoading(false)
+      return
+    }
+
+    // Production: validasi via API
+    if (!loginEndpoint) { setLoading(false); return }
     try {
       const params = new URLSearchParams()
       params.append("email",    email)
@@ -65,7 +80,6 @@ export function LoginForm({
       if (data.status) {
         setOk(true)
         setMsg(data.msg || "Login successful! Redirecting\u2026")
-        // Use API redirect if provided, otherwise fall back to role-based default
         const redirectUrl = data.redirect || roleRedirects[role] || roleRedirects["default"]
         setTimeout(() => { window.location.href = redirectUrl }, 800)
       } else {
@@ -143,6 +157,12 @@ export function LoginForm({
                       : "text-red-600 bg-red-50 border border-red-200"
                   )}>
                     {msg}
+                  </p>
+                )}
+
+                {DEMO_MODE && (
+                  <p className="text-xs text-center text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
+                    ⚠️ Demo mode aktif — login tanpa validasi
                   </p>
                 )}
 
