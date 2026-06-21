@@ -2,6 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.v1.router import api_router
+import time
+
+START_TIME = time.time()
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -12,7 +15,6 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
@@ -21,15 +23,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Routers
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/", tags=["Health"])
 async def root():
-    return {"status": "ok", "service": settings.PROJECT_NAME, "version": settings.VERSION}
+    return {
+        "service": settings.PROJECT_NAME,
+        "version": settings.VERSION,
+        "status": "ok",
+    }
 
 
 @app.get("/health", tags=["Health"])
 async def health_check():
-    return {"status": "healthy"}
+    uptime_seconds = round(time.time() - START_TIME, 2)
+    return {
+        "status": "healthy",
+        "uptime_seconds": uptime_seconds,
+        "version": settings.VERSION,
+    }
