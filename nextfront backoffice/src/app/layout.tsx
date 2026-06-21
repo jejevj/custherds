@@ -36,12 +36,6 @@ export const metadata: Metadata = {
 
   robots: { index: false, follow: false },
 
-  icons: {
-    icon: "/favicon.ico",
-    shortcut: "/favicon.ico",
-    apple: "/logo-1.png",
-  },
-
   openGraph: {
     type: "website",
     locale: "en_US",
@@ -65,6 +59,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Favicon — explicit link to bypass Next.js default icon resolution */}
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="shortcut icon" href="/favicon.ico" />
+        <link rel="apple-touch-icon" href="/logo-1.png" />
         <link
           href="https://cdn.boxicons.com/3.0.8/fonts/basic/boxicons.min.css"
           rel="stylesheet"
