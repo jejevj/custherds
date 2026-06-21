@@ -8,6 +8,7 @@ const routes = [
     { path: '/about',   name: 'about',   component: () => import('./pages/About.vue'),   meta: { title: 'About Us' } },
     { path: '/contact', name: 'contact', component: () => import('./pages/Contact.vue'), meta: { title: 'Contact Us' } },
     { path: '/faq',     name: 'faq',     component: () => import('./pages/Faq.vue'),     meta: { title: 'FAQ' } },
+    { path: '/terms',   name: 'terms',   component: () => import('./pages/Terms.vue'),   meta: { title: 'Terms & Conditions' } },
 
     // Tour Guides — public
     { path: '/tour-guides', name: 'tour-guides', component: () => import('./pages/TourGuides.vue'), meta: { title: 'Find a Guide' } },
@@ -32,15 +33,12 @@ const router = createRouter({
     history: createWebHistory(),
     routes,
     scrollBehavior(to, from, savedPosition) {
-        // Jika browser back/forward — kembalikan posisi scroll sebelumnya
         if (savedPosition) {
             return savedPosition
         }
-        // Jika ada hash anchor (misal /about#team) — scroll ke elemen tersebut
         if (to.hash) {
             return { el: to.hash, behavior: 'smooth' }
         }
-        // Default: selalu scroll ke atas saat pindah halaman
         return { top: 0, behavior: 'smooth' }
     },
 })
