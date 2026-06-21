@@ -2,7 +2,7 @@ import VendorLoginPage from "./VendorLoginPage"
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: "Vendor Login | Custherds Partners",
+  title: "Vendor Login",
   description: "Login to your Custherds Business Vendor dashboard.",
 }
 
