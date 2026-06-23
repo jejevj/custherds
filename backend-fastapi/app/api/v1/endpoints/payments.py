@@ -2,24 +2,17 @@ from fastapi import APIRouter, HTTPException, Request, Header
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 import xendit
-from xendit.apis import InvoiceApi, PaymentRequestApi
-from xendit.model.create_invoice_request import CreateInvoiceRequest
 from app.core.config import settings
 import uuid
-import hmac
-import hashlib
 
 router = APIRouter()
 
 # ---------------------------------------------------------------------------
-# Xendit API client (initialised once, reused per request)
+# Init Xendit (Python 3.9 compatible — uses xendit-python v0.x API style)
 # ---------------------------------------------------------------------------
 
-def _get_api_client() -> xendit.ApiClient:
-    configuration = xendit.Configuration(
-        access_token=settings.XENDIT_SECRET_KEY
-    )
-    return xendit.ApiClient(configuration)
+def _init_xendit():
+    xendit.api_key = settings.XENDIT_SECRET_KEY
 
 
 # ---------------------------------------------------------------------------
@@ -36,16 +29,20 @@ class CreateInvoicePayload(BaseModel):
     failure_redirect_url: Optional[str] = None
 
 
-class CreatePaymentRequestPayload(BaseModel):
-    amount: float
-    currency: Optional[str] = "IDR"
-    payment_method_type: str  # e.g. "QR_CODE" or "VIRTUAL_ACCOUNT"
-    reference_id: Optional[str] = None
-    description: Optional[str] = ""
-    # Virtual Account specific
-    bank_code: Optional[str] = None          # e.g. "BNI", "BCA", "MANDIRI"
-    # QR Code specific
-    qr_type: Optional[str] = "DYNAMIC"       # STATIC | DYNAMIC
+class CreateVAPayload(BaseModel):
+    external_id: Optional[str] = None
+    bank_code: str  # e.g. "BNI", "BCA", "MANDIRI", "BRI"
+    name: str
+    expected_amount: Optional[float] = None
+    is_closed: Optional[bool] = False
+    expiration_date: Optional[str] = None  # ISO8601 string
+
+
+class CreateQRPayload(BaseModel):
+    external_id: Optional[str] = None
+    type: Optional[str] = "DYNAMIC"   # STATIC | DYNAMIC
+    callback_url: Optional[str] = None
+    amount: Optional[float] = None
 
 
 # ---------------------------------------------------------------------------
@@ -55,24 +52,26 @@ class CreatePaymentRequestPayload(BaseModel):
 @router.post("/invoice", summary="Create a Xendit Invoice")
 async def create_invoice(payload: CreateInvoicePayload):
     """
-    Creates a Xendit-hosted payment invoice and returns the `invoice_url`
-    that the payer can open in a browser to complete payment.
+    Creates a Xendit-hosted payment invoice and returns `invoice_url`
+    that the payer opens to complete payment.
     """
+    _init_xendit()
     external_id = payload.external_id or f"inv-{uuid.uuid4().hex[:12]}"
 
     try:
-        with _get_api_client() as api_client:
-            api_instance = InvoiceApi(api_client)
-            body = CreateInvoiceRequest(
-                external_id=external_id,
-                amount=payload.amount,
-                payer_email=payload.payer_email,
-                description=payload.description,
-                currency=payload.currency,
-                **(dict(success_redirect_url=payload.success_redirect_url) if payload.success_redirect_url else {}),
-                **(dict(failure_redirect_url=payload.failure_redirect_url) if payload.failure_redirect_url else {}),
-            )
-            invoice = api_instance.create_invoice(create_invoice_request=body)
+        kwargs = dict(
+            external_id=external_id,
+            amount=payload.amount,
+            payer_email=payload.payer_email,
+            description=payload.description,
+            currency=payload.currency,
+        )
+        if payload.success_redirect_url:
+            kwargs["success_redirect_url"] = payload.success_redirect_url
+        if payload.failure_redirect_url:
+            kwargs["failure_redirect_url"] = payload.failure_redirect_url
+
+        invoice = xendit.Invoice.create(**kwargs)
 
         return {
             "status": "ok",
@@ -84,8 +83,8 @@ async def create_invoice(payload: CreateInvoicePayload):
             "expiry_date": str(invoice.expiry_date) if hasattr(invoice, 'expiry_date') else None,
         }
 
-    except xendit.ApiException as e:
-        raise HTTPException(status_code=e.status, detail=e.reason)
+    except xendit.XenditError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -99,11 +98,9 @@ async def get_invoice(invoice_id: str):
     """
     Fetches the current status and details of a Xendit invoice.
     """
+    _init_xendit()
     try:
-        with _get_api_client() as api_client:
-            api_instance = InvoiceApi(api_client)
-            invoice = api_instance.get_invoice_by_id(invoice_id=invoice_id)
-
+        invoice = xendit.Invoice.get(invoice_id=invoice_id)
         return {
             "invoice_id": invoice.id,
             "external_id": invoice.external_id,
@@ -113,9 +110,8 @@ async def get_invoice(invoice_id: str):
             "invoice_url": invoice.invoice_url,
             "paid_at": str(invoice.paid_at) if hasattr(invoice, 'paid_at') and invoice.paid_at else None,
         }
-
-    except xendit.ApiException as e:
-        raise HTTPException(status_code=e.status, detail=e.reason)
+    except xendit.XenditError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -129,122 +125,141 @@ async def expire_invoice(invoice_id: str):
     """
     Marks an unpaid invoice as EXPIRED so it can no longer be paid.
     """
+    _init_xendit()
     try:
-        with _get_api_client() as api_client:
-            api_instance = InvoiceApi(api_client)
-            result = api_instance.expire_invoice(invoice_id=invoice_id)
-
+        result = xendit.Invoice.expire(invoice_id=invoice_id)
         return {
             "status": "ok",
             "invoice_id": result.id,
             "new_status": result.status,
         }
-
-    except xendit.ApiException as e:
-        raise HTTPException(status_code=e.status, detail=e.reason)
+    except xendit.XenditError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 # ---------------------------------------------------------------------------
-# 4. Create Payment Request (Virtual Account or QR Code / QRIS)
+# 4. Create Virtual Account
 # ---------------------------------------------------------------------------
 
-@router.post("/payment-request", summary="Create Virtual Account or QR Code payment")
-async def create_payment_request(payload: CreatePaymentRequestPayload):
+@router.post("/virtual-account", summary="Create a Virtual Account")
+async def create_virtual_account(payload: CreateVAPayload):
     """
-    Creates a Xendit Payment Request for:
-    - **Virtual Account** (`payment_method_type="VIRTUAL_ACCOUNT"`, provide `bank_code`)
-    - **QRIS / QR Code** (`payment_method_type="QR_CODE"`)
-
-    Returns the payment method details (VA number or QR string).
+    Creates a Virtual Account for payment.
+    `bank_code` options: BNI, BCA, MANDIRI, BRI, PERMATA, BSI, BJB
     """
-    reference_id = payload.reference_id or f"pr-{uuid.uuid4().hex[:12]}"
+    _init_xendit()
+    external_id = payload.external_id or f"va-{uuid.uuid4().hex[:12]}"
 
     try:
-        with _get_api_client() as api_client:
-            api_instance = PaymentRequestApi(api_client)
+        kwargs = dict(
+            external_id=external_id,
+            bank_code=payload.bank_code.upper(),
+            name=payload.name,
+        )
+        if payload.expected_amount is not None:
+            kwargs["expected_amount"] = payload.expected_amount
+            kwargs["is_closed"] = True
+        if payload.expiration_date:
+            kwargs["expiration_date"] = payload.expiration_date
 
-            pmt_type = payload.payment_method_type.upper()
-
-            if pmt_type == "VIRTUAL_ACCOUNT":
-                if not payload.bank_code:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="bank_code is required for VIRTUAL_ACCOUNT payment method"
-                    )
-                payment_method = {
-                    "type": "VIRTUAL_ACCOUNT",
-                    "reusability": "ONE_TIME_USE",
-                    "virtual_account": {
-                        "channel_code": payload.bank_code.upper(),
-                        "channel_properties": {
-                            "customer_name": "Custherds Customer",
-                            "expires_at": None,
-                        },
-                    },
-                }
-            elif pmt_type == "QR_CODE":
-                payment_method = {
-                    "type": "QR_CODE",
-                    "reusability": "ONE_TIME_USE",
-                    "qr_code": {
-                        "channel_code": "QRIS",
-                    },
-                }
-            else:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Unsupported payment_method_type: {pmt_type}. Use VIRTUAL_ACCOUNT or QR_CODE."
-                )
-
-            body = {
-                "reference_id": reference_id,
-                "amount": payload.amount,
-                "currency": payload.currency,
-                "payment_method": payment_method,
-                "description": payload.description,
-            }
-
-            result = api_instance.create_payment_request(
-                for_user_id=None,
-                payment_request_parameters=body
-            )
+        va = xendit.VirtualAccount.create(**kwargs)
 
         return {
             "status": "ok",
-            "payment_request_id": result.id,
-            "reference_id": result.reference_id,
-            "payment_method_type": pmt_type,
-            "amount": result.amount,
-            "currency": result.currency,
-            "payment_method": result.payment_method,
+            "id": va.id,
+            "external_id": va.external_id,
+            "bank_code": va.bank_code,
+            "account_number": va.account_number,
+            "name": va.name,
+            "expected_amount": getattr(va, 'expected_amount', None),
+            "expiration_date": str(va.expiration_date) if hasattr(va, 'expiration_date') and va.expiration_date else None,
         }
 
-    except HTTPException:
-        raise
-    except xendit.ApiException as e:
-        raise HTTPException(status_code=e.status, detail=e.reason)
+    except xendit.XenditError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 # ---------------------------------------------------------------------------
-# 5. Webhook handler
+# 5. Get Virtual Account by ID
 # ---------------------------------------------------------------------------
 
-@router.post("/webhook", summary="Xendit Webhook Receiver", include_in_schema=True)
+@router.get("/virtual-account/{va_id}", summary="Get Virtual Account by ID")
+async def get_virtual_account(va_id: str):
+    _init_xendit()
+    try:
+        va = xendit.VirtualAccount.get(id=va_id)
+        return {
+            "id": va.id,
+            "external_id": va.external_id,
+            "bank_code": va.bank_code,
+            "account_number": va.account_number,
+            "status": getattr(va, 'status', None),
+            "name": va.name,
+        }
+    except xendit.XenditError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# 6. Create QR Code (QRIS)
+# ---------------------------------------------------------------------------
+
+@router.post("/qr-code", summary="Create a QRIS / QR Code")
+async def create_qr_code(payload: CreateQRPayload):
+    """
+    Creates a QRIS QR Code for payment.
+    - `type`: DYNAMIC (one-time) or STATIC (reusable)
+    - `amount`: required for DYNAMIC QR
+    """
+    _init_xendit()
+    external_id = payload.external_id or f"qr-{uuid.uuid4().hex[:12]}"
+
+    try:
+        kwargs = dict(
+            external_id=external_id,
+            type=payload.type.upper(),
+        )
+        if payload.callback_url:
+            kwargs["callback_url"] = payload.callback_url
+        if payload.amount is not None:
+            kwargs["amount"] = payload.amount
+
+        qr = xendit.QRCode.create(**kwargs)
+
+        return {
+            "status": "ok",
+            "id": qr.id,
+            "external_id": qr.external_id,
+            "qr_string": qr.qr_string,
+            "type": qr.type,
+            "amount": getattr(qr, 'amount', None),
+        }
+
+    except xendit.XenditError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# 7. Webhook handler
+# ---------------------------------------------------------------------------
+
+@router.post("/webhook", summary="Xendit Webhook Receiver")
 async def xendit_webhook(
     request: Request,
     x_callback_token: Optional[str] = Header(None)
 ):
     """
-    Receives Xendit callback/webhook events (invoice paid, payment completed, etc.).
-
-    Xendit sends an `x-callback-token` header — verify it matches
-    `XENDIT_WEBHOOK_TOKEN` in your `.env` before processing.
+    Receives Xendit callback/webhook events.
+    Verifies `x-callback-token` against `XENDIT_WEBHOOK_TOKEN` in `.env`.
     """
-    # Verify callback token
     if settings.XENDIT_WEBHOOK_TOKEN:
         if x_callback_token != settings.XENDIT_WEBHOOK_TOKEN:
             raise HTTPException(status_code=401, detail="Invalid webhook token")
@@ -252,23 +267,23 @@ async def xendit_webhook(
     body = await request.json()
     event_type = body.get("event") or body.get("status", "UNKNOWN")
 
-    # --- Handle events ---
     if event_type in ("PAID", "SETTLED"):
-        # Invoice paid — update your DB order status here
         external_id = body.get("external_id")
         paid_amount = body.get("paid_amount")
-        # TODO: update order status in DB via SQLAlchemy
-        return {"status": "ok", "message": f"Invoice {external_id} marked as paid", "amount": paid_amount}
-
-    if event_type == "payment.succeeded":
-        # Payment Request succeeded (VA / QRIS)
-        reference_id = body.get("data", {}).get("reference_id")
         # TODO: update order status in DB
-        return {"status": "ok", "message": f"Payment {reference_id} succeeded"}
+        return {"status": "ok", "message": f"Invoice {external_id} paid", "amount": paid_amount}
+
+    if event_type == "ACTIVE":
+        # Virtual Account created / active
+        return {"status": "ok", "event": "VA_ACTIVE", "data": body}
+
+    if event_type == "COMPLETED":
+        # QR Code payment completed
+        external_id = body.get("external_id")
+        return {"status": "ok", "message": f"QR payment {external_id} completed"}
 
     if event_type == "EXPIRED":
         external_id = body.get("external_id")
         return {"status": "ok", "message": f"Invoice {external_id} expired"}
 
-    # Default ack
     return {"status": "ok", "event": event_type, "raw": body}
