@@ -5,41 +5,46 @@ import {
   Map,
   TrendingUp,
 } from "lucide-react"
+import { AdminDashboardClient } from "./AdminDashboardClient"
 
 export const metadata: Metadata = {
   title: "Admin Dashboard | Custherds",
 }
 
 const stats = [
-  { label: "Total Users",      value: "1,240",  change: "+12%",  icon: Users },
-  { label: "Active Vendors",   value: "84",     change: "+5%",   icon: ShoppingBag },
-  { label: "Active Guides",    value: "137",    change: "+8%",   icon: Map },
+  { label: "Total Users",        value: "1,240",    change: "+12%", icon: Users },
+  { label: "Active Vendors",     value: "84",       change: "+5%",  icon: ShoppingBag },
+  { label: "Active Guides",      value: "137",      change: "+8%",  icon: Map },
   { label: "Revenue This Month", value: "Rp 48.2M", change: "+21%", icon: TrendingUp },
 ]
 
 const recentUsers = [
-  { name: "Andi Prasetyo",   role: "Vendor",  status: "Active",  joined: "21 Jun 2026" },
-  { name: "Sari Dewi",       role: "Guide",   status: "Pending", joined: "21 Jun 2026" },
-  { name: "Budi Santoso",    role: "Tourist", status: "Active",  joined: "20 Jun 2026" },
-  { name: "Maya Wulandari",  role: "Vendor",  status: "Pending", joined: "20 Jun 2026" },
-  { name: "Rizky Fauzan",    role: "Guide",   status: "Active",  joined: "19 Jun 2026" },
+  { name: "Andi Prasetyo",  role: "Vendor",  status: "Active",  joined: "21 Jun 2026" },
+  { name: "Sari Dewi",      role: "Guide",   status: "Pending", joined: "21 Jun 2026" },
+  { name: "Budi Santoso",   role: "Tourist", status: "Active",  joined: "20 Jun 2026" },
+  { name: "Maya Wulandari", role: "Vendor",  status: "Pending", joined: "20 Jun 2026" },
+  { name: "Rizky Fauzan",   role: "Guide",   status: "Active",  joined: "19 Jun 2026" },
 ]
 
 const recentTransactions = [
-  { id: "TRX-001", user: "Andi Prasetyo",  amount: "Rp 250,000",  type: "Tour Package", status: "Completed" },
-  { id: "TRX-002", user: "Sari Dewi",      amount: "Rp 180,000",  type: "Admission",    status: "Pending" },
-  { id: "TRX-003", user: "Budi Santoso",   amount: "Rp 500,000",  type: "Tour Package", status: "Completed" },
-  { id: "TRX-004", user: "Maya Wulandari", amount: "Rp 320,000",  type: "Admission",    status: "Failed" },
+  { id: "TRX-001", user: "Andi Prasetyo",  amount: "Rp 250,000", type: "Tour Package", status: "Completed" },
+  { id: "TRX-002", user: "Sari Dewi",      amount: "Rp 180,000", type: "Admission",    status: "Pending" },
+  { id: "TRX-003", user: "Budi Santoso",   amount: "Rp 500,000", type: "Tour Package", status: "Completed" },
+  { id: "TRX-004", user: "Maya Wulandari", amount: "Rp 320,000", type: "Admission",    status: "Failed" },
 ]
 
 export default function AdminDashboardPage() {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Admin Dashboard</h1>
-        <p className="text-muted-foreground">
-          Welcome to the Custherds admin portal. Monitor and manage the entire platform here.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Admin Dashboard</h1>
+          <p className="text-muted-foreground">
+            Welcome to the Custherds admin portal. Monitor and manage the entire platform here.
+          </p>
+        </div>
+        {/* Client component handles the modal button */}
+        <AdminDashboardClient />
       </div>
 
       {/* Stats */}
