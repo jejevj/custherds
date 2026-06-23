@@ -17,59 +17,6 @@
       <section class="login-page">
         <div class="container">
 
-          <!-- ── Tourist Login Form ── -->
-          <div class="row justify-content-center">
-            <div class="col-12 col-lg-5">
-              <div class="lp-card">
-                <div class="lp-card__icon-wrap">
-                  <span class="icon-user"></span>
-                </div>
-                <h3 class="lp-card__title">Tourist / Traveller</h3>
-                <p class="lp-card__desc">Login to explore guides, browse experiences, and manage your trips.</p>
-
-                <form @submit.prevent="submitLogin" class="lp-form">
-                  <div class="lp-form__field">
-                    <label>Email <span class="req">*</span></label>
-                    <input type="email" v-model="form.email" placeholder="Enter your email" required />
-                  </div>
-                  <div class="lp-form__field">
-                    <label>Password <span class="req">*</span></label>
-                    <div class="lp-form__pw-wrap">
-                      <input
-                        :type="showPw ? 'text' : 'password'"
-                        v-model="form.password"
-                        placeholder="Enter your password"
-                        required
-                      />
-                      <button type="button" class="lp-form__pw-toggle" @click="showPw = !showPw" tabindex="-1">
-                        <i :class="showPw ? 'fa fa-eye-slash' : 'fa fa-eye'"></i>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div v-if="loginMsg">
-                    <p :class="loginOk ? 'lp-msg lp-msg--ok' : 'lp-msg lp-msg--err'">{{ loginMsg }}</p>
-                  </div>
-
-                  <button type="submit" class="thm-btn lp-form__submit" :disabled="loading">
-                    {{ loading ? 'Logging in…' : 'Login' }}
-                    <span class="icon-up-right-arrow"></span>
-                  </button>
-                </form>
-
-                <p class="lp-card__register">
-                  Don&rsquo;t have an account?
-                  <router-link to="/tourist/register">Register here</router-link>
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <!-- ── Divider ── -->
-          <div class="lp-divider-wrap">
-            <div class="lp-divider"><span>Are you a Partner or Vendor?</span></div>
-          </div>
-
           <!-- ── Redirect cards ── -->
           <div class="row justify-content-center" style="row-gap: 24px;">
 
@@ -121,7 +68,6 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
 import Preloader    from '@/components/common/Preloader.vue';
 import ChatPopup    from '@/components/common/ChatPopup.vue';
 import SidebarWidget from '@/components/common/SidebarWidget.vue';
@@ -131,43 +77,6 @@ import ScrollToTop  from '@/components/common/ScrollToTop.vue';
 import HeaderTwo    from '@/components/layout/header/HeaderTwo.vue';
 import PageHeader   from '@/components/common/PageHeader.vue';
 import Footer1      from '@/components/layout/footer/Footer1.vue';
-
-const form     = ref({ email: '', password: '' });
-const showPw   = ref(false);
-const loading  = ref(false);
-const loginMsg = ref('');
-const loginOk  = ref(false);
-
-async function submitLogin() {
-  loginMsg.value = '';
-  loading.value  = true;
-  try {
-    const params = new URLSearchParams();
-    params.append('email',    form.value.email);
-    params.append('password', form.value.password);
-    const res  = await fetch('https://www.custherds.com/tourist/login/doLogin', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body:    params.toString(),
-    });
-    const data = await res.json();
-    if (data.status) {
-      loginOk.value  = true;
-      loginMsg.value = data.msg || 'Login successful! Redirecting…';
-      if (data.redirect) {
-        setTimeout(() => { window.location.href = data.redirect; }, 800);
-      }
-    } else {
-      loginOk.value  = false;
-      loginMsg.value = data.msg || 'Invalid email or password.';
-    }
-  } catch {
-    loginOk.value  = false;
-    loginMsg.value = 'Network error. Please try again.';
-  } finally {
-    loading.value = false;
-  }
-}
 </script>
 
 <style scoped>
@@ -225,91 +134,5 @@ async function submitLogin() {
 .lp-card__btn {
   width: 100%;
   text-align: center;
-}
-.lp-card__register {
-  margin-top: 20px;
-  font-size: 14px;
-  color: #888;
-}
-.lp-card__register a {
-  color: var(--thm-primary, #c9a84c);
-  font-weight: 600;
-  text-decoration: none;
-}
-.lp-card__register a:hover { text-decoration: underline; }
-
-/* ─── Form ─── */
-.lp-form { width: 100%; text-align: left; }
-.lp-form__field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 16px;
-}
-.lp-form__field label { font-size: 13px; font-weight: 600; color: #ccc; }
-.lp-form__field input {
-  background: #1e1e1e;
-  border: 1px solid #333;
-  color: #fff;
-  border-radius: 8px;
-  padding: 11px 14px;
-  font-size: 15px;
-  outline: none;
-  width: 100%;
-  transition: border 0.2s;
-}
-.lp-form__field input::placeholder { color: #555; }
-.lp-form__field input:focus { border-color: var(--thm-primary, #c9a84c); }
-
-.lp-form__pw-wrap { position: relative; }
-.lp-form__pw-wrap input { padding-right: 44px; }
-.lp-form__pw-toggle {
-  position: absolute; right: 12px; top: 50%;
-  transform: translateY(-50%);
-  background: none; border: none;
-  color: #666; cursor: pointer; font-size: 15px; padding: 0;
-}
-.lp-form__pw-toggle:hover { color: var(--thm-primary, #c9a84c); }
-
-.lp-form__submit {
-  width: 100%; text-align: center; margin-top: 4px;
-}
-.lp-form__submit[disabled] { opacity: 0.45; cursor: not-allowed; }
-
-.lp-msg {
-  font-size: 13px; border-radius: 6px;
-  padding: 9px 12px; margin-bottom: 12px;
-}
-.lp-msg--ok  { color: #68d391; background: rgba(104,211,145,0.1); border: 1px solid rgba(104,211,145,0.3); }
-.lp-msg--err { color: #fc8181; background: rgba(252,129,129,0.1); border: 1px solid rgba(252,129,129,0.3); }
-.req { color: #e53e3e; }
-
-/* ─── Divider ─── */
-.lp-divider-wrap {
-  display: flex;
-  justify-content: center;
-  padding: 40px 0 32px;
-}
-.lp-divider {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  width: 100%;
-  max-width: 480px;
-}
-.lp-divider::before,
-.lp-divider::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: #2a2a2a;
-}
-.lp-divider span {
-  white-space: nowrap;
-  color: #666;
-  font-size: 13px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
 }
 </style>
