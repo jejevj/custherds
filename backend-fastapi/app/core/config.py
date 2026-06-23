@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     SWAGGER_USERNAME: str = "admin"
     SWAGGER_PASSWORD: str = "qwert12345!"
 
+    # Xendit Payment Gateway
+    XENDIT_SECRET_KEY: str = "xnd_development_xxxxxxxxxxxxxxxxxxxxxxxx"
+    XENDIT_WEBHOOK_TOKEN: str = ""
+
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:3000",
         "https://partners-custherds.ourtestcloud.my.id",
