@@ -79,13 +79,13 @@ export function SimulatePaymentModal({ open, onClose }: SimulatePaymentModalProp
   function validate(): boolean {
     const errors: Record<string, string> = {}
     if (!nominal || Number(nominal) < 1000) {
-      errors.nominal = "Nominal minimum Rp 1.000"
+      errors.nominal = "Minimum amount is Rp 1,000"
     }
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errors.email = "Email tidak valid"
+      errors.email = "Please enter a valid email address"
     }
     if (!description.trim()) {
-      errors.description = "Deskripsi wajib diisi"
+      errors.description = "Description is required"
     }
     setFieldErrors(errors)
     return Object.keys(errors).length === 0
@@ -108,7 +108,7 @@ export function SimulatePaymentModal({ open, onClose }: SimulatePaymentModalProp
       setInvoiceData(result)
       setStep("redirecting")
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Terjadi kesalahan, coba lagi"
+      const msg = err instanceof Error ? err.message : "Something went wrong, please try again"
       setApiError(msg)
       setStep("error")
     }
@@ -135,22 +135,22 @@ export function SimulatePaymentModal({ open, onClose }: SimulatePaymentModalProp
                 </div>
                 <div>
                   <h2 className="text-base font-semibold leading-tight">Simulate Payment</h2>
-                  <p className="text-xs text-muted-foreground">Buat invoice Xendit untuk simulasi pembayaran</p>
+                  <p className="text-xs text-muted-foreground">Create a Xendit invoice for payment simulation</p>
                 </div>
               </div>
               <button
                 onClick={onClose}
                 className="rounded-lg p-1.5 hover:bg-muted text-muted-foreground transition-colors"
-                aria-label="Tutup"
+                aria-label="Close"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              {/* Nominal */}
+              {/* Amount */}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium" htmlFor="nominal">Nominal Pembayaran</label>
+                <label className="text-sm font-medium" htmlFor="nominal">Payment Amount</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground font-medium">Rp</span>
                   <input
@@ -184,14 +184,14 @@ export function SimulatePaymentModal({ open, onClose }: SimulatePaymentModalProp
                 </div>
               </div>
 
-              {/* Email Payer */}
+              {/* Payer Email */}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium" htmlFor="email">Email Pembayar</label>
+                <label className="text-sm font-medium" htmlFor="email">Payer Email</label>
                 <input
                   id="email"
                   type="email"
                   inputMode="email"
-                  placeholder="nama@email.com"
+                  placeholder="name@email.com"
                   value={email}
                   onChange={(e) => {
                     setEmail(e.target.value)
@@ -204,13 +204,13 @@ export function SimulatePaymentModal({ open, onClose }: SimulatePaymentModalProp
                 {fieldErrors.email && <p className="text-xs text-destructive">{fieldErrors.email}</p>}
               </div>
 
-              {/* Deskripsi */}
+              {/* Description */}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium" htmlFor="description">Deskripsi Pembayaran</label>
+                <label className="text-sm font-medium" htmlFor="description">Payment Description</label>
                 <input
                   id="description"
                   type="text"
-                  placeholder="misal: Tour Package - Bali 3D2N"
+                  placeholder="e.g. Tour Package - Bali 3D2N"
                   value={description}
                   onChange={(e) => {
                     setDescription(e.target.value)
@@ -231,7 +231,7 @@ export function SimulatePaymentModal({ open, onClose }: SimulatePaymentModalProp
                   onClick={onClose}
                   className="flex-1 px-4 py-2.5 rounded-lg border border-input text-sm font-medium hover:bg-muted transition-colors"
                 >
-                  Batal
+                  Cancel
                 </button>
                 <button
                   type="submit"
@@ -263,8 +263,8 @@ export function SimulatePaymentModal({ open, onClose }: SimulatePaymentModalProp
               </div>
             </div>
             <div className="text-center space-y-1">
-              <p className="font-semibold text-base">Membuat Invoice...</p>
-              <p className="text-sm text-muted-foreground">Menghubungi Xendit, harap tunggu</p>
+              <p className="font-semibold text-base">Creating Invoice...</p>
+              <p className="text-sm text-muted-foreground">Connecting to Xendit, please wait</p>
             </div>
           </div>
         )}
@@ -280,8 +280,8 @@ export function SimulatePaymentModal({ open, onClose }: SimulatePaymentModalProp
             </div>
 
             <div className="text-center space-y-1">
-              <p className="font-semibold text-base">Invoice Berhasil Dibuat!</p>
-              <p className="text-sm text-muted-foreground">Kamu akan diarahkan ke halaman pembayaran Xendit</p>
+              <p className="font-semibold text-base">Invoice Created Successfully!</p>
+              <p className="text-sm text-muted-foreground">You will be redirected to the Xendit payment page</p>
             </div>
 
             {/* Invoice detail card */}
@@ -291,17 +291,17 @@ export function SimulatePaymentModal({ open, onClose }: SimulatePaymentModalProp
                 <span className="font-mono text-xs font-medium">{invoiceData.invoice_id}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Jumlah</span>
+                <span className="text-muted-foreground">Amount</span>
                 <span className="font-semibold">Rp {invoiceData.amount.toLocaleString("id-ID")}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Mata Uang</span>
+                <span className="text-muted-foreground">Currency</span>
                 <span>{invoiceData.currency}</span>
               </div>
               {invoiceData.expiry_date && (
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Kadaluarsa</span>
-                  <span className="text-xs">{new Date(invoiceData.expiry_date).toLocaleString("id-ID")}</span>
+                  <span className="text-muted-foreground">Expires At</span>
+                  <span className="text-xs">{new Date(invoiceData.expiry_date).toLocaleString("en-US")}</span>
                 </div>
               )}
             </div>
@@ -334,7 +334,7 @@ export function SimulatePaymentModal({ open, onClose }: SimulatePaymentModalProp
               rel="noopener noreferrer"
               className="text-xs text-primary underline underline-offset-4 hover:text-primary/80 transition-colors"
             >
-              Klik di sini jika tidak otomatis redirect
+              Click here if you are not redirected automatically
             </a>
           </div>
         )}
@@ -348,14 +348,14 @@ export function SimulatePaymentModal({ open, onClose }: SimulatePaymentModalProp
                   <AlertCircle className="h-4 w-4 text-destructive" />
                 </div>
                 <div>
-                  <h2 className="text-base font-semibold leading-tight">Pembayaran Gagal</h2>
-                  <p className="text-xs text-muted-foreground">Terjadi kesalahan saat membuat invoice</p>
+                  <h2 className="text-base font-semibold leading-tight">Payment Failed</h2>
+                  <p className="text-xs text-muted-foreground">An error occurred while creating the invoice</p>
                 </div>
               </div>
               <button
                 onClick={onClose}
                 className="rounded-lg p-1.5 hover:bg-muted text-muted-foreground transition-colors"
-                aria-label="Tutup"
+                aria-label="Close"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -369,13 +369,13 @@ export function SimulatePaymentModal({ open, onClose }: SimulatePaymentModalProp
                   onClick={onClose}
                   className="flex-1 px-4 py-2.5 rounded-lg border border-input text-sm font-medium hover:bg-muted transition-colors"
                 >
-                  Tutup
+                  Close
                 </button>
                 <button
                   onClick={() => setStep("form")}
                   className="flex-1 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
                 >
-                  Coba Lagi
+                  Try Again
                 </button>
               </div>
             </div>
