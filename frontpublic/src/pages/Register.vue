@@ -13,7 +13,7 @@
       <section class="auth-page py-5">
         <div class="container">
           <div class="row justify-content-center">
-            <div :class="mode === 'tourist' ? 'col-12 col-lg-7' : 'col-12 col-lg-9'">
+            <div class="col-12 col-lg-9">
 
               <!-- MODE TABS -->
               <div v-show="mode !== 'login'" class="auth-page__tabs">
@@ -22,9 +22,6 @@
                 </button>
                 <button :class="['auth-page__tab', { active: mode === 'vendor' }]" @click="switchMode('vendor')">
                   <span class="icon-trading"></span> Business Vendor
-                </button>
-                <button :class="['auth-page__tab', { active: mode === 'tourist' }]" @click="switchMode('tourist')">
-                  🌍 Tourist
                 </button>
               </div>
 
@@ -333,105 +330,6 @@
                 </div>
               </div>
 
-              <!-- ===== TOURIST REGISTER ===== -->
-              <div v-show="mode === 'tourist'" class="auth-page__box">
-                <div class="auth-page__hero" :style="{ backgroundImage: 'url(https://www.custherds.com/assets/images/slide/page3.webp)' }">
-                  <div class="auth-page__hero-overlay"></div>
-                  <div class="auth-page__hero-content">
-                    <h2>Join as a Traveller</h2>
-                    <p>Create a free account to connect directly with verified local guides across Bali.</p>
-                    <div class="auth-page__hero-perks">
-                      <span>✓ Free to join</span>
-                      <span>✓ Chat guides via WhatsApp</span>
-                      <span>✓ No booking fees</span>
-                    </div>
-                  </div>
-                </div>
-                <div class="auth-page__form-wrap">
-                  <form @submit.prevent="handleSubmit('tourist')">
-                    <h4 class="auth-page__section-title">Your Details</h4>
-                    <hr />
-                    <div class="auth-page__field">
-                      <label>Full Name <span class="req">*</span></label>
-                      <input type="text" v-model="tf.name" placeholder="e.g. John Smith" required />
-                    </div>
-                    <div class="auth-page__field">
-                      <label>Email Address <span class="req">*</span></label>
-                      <input type="email" v-model="tf.email" placeholder="your@email.com" required />
-                    </div>
-                    <div class="auth-page__field">
-                      <label>Phone / WhatsApp</label>
-                      <input type="tel" v-model="tf.phone" placeholder="e.g. +44 7911 123456" />
-                    </div>
-                    <div class="auth-page__field">
-                      <label>Nationality <span class="req">*</span></label>
-                      <input type="text" v-model="tf.nationality" placeholder="e.g. British" required />
-                    </div>
-                    <div class="auth-page__field">
-                      <label>Planned Visit Date</label>
-                      <input type="date" v-model="tf.visit_date" :min="today" />
-                    </div>
-                    <div class="auth-page__field">
-                      <label>Area of Interest</label>
-                      <select v-model="tf.area_interest">
-                        <option value="">Select area (optional)</option>
-                        <optgroup label="South Bali">
-                          <option>Canggu</option><option>Seminyak</option>
-                          <option>Kuta</option><option>Uluwatu</option>
-                          <option>Jimbaran</option><option>Nusa Dua</option>
-                        </optgroup>
-                        <optgroup label="Central Bali">
-                          <option>Ubud</option><option>Tegallalang</option>
-                          <option>Sidemen</option><option>Tabanan</option>
-                        </optgroup>
-                        <optgroup label="North Bali">
-                          <option>Lovina</option><option>Munduk</option>
-                        </optgroup>
-                        <optgroup label="East Bali">
-                          <option>Amed</option><option>Candidasa</option>
-                        </optgroup>
-                        <optgroup label="Islands">
-                          <option>Nusa Penida</option><option>Nusa Lembongan</option>
-                        </optgroup>
-                      </select>
-                    </div>
-                    <div class="row g-3">
-                      <div class="col-md-6">
-                        <div class="auth-page__field">
-                          <label>Password <span class="req">*</span></label>
-                          <input type="password" v-model="tf.password" placeholder="Min. 8 characters" minlength="8" required />
-                        </div>
-                      </div>
-                      <div class="col-md-6">
-                        <div class="auth-page__field">
-                          <label>Confirm Password <span class="req">*</span></label>
-                          <input type="password" v-model="tf.password_confirm" placeholder="Repeat password" minlength="8" required />
-                        </div>
-                      </div>
-                    </div>
-                    <p class="auth-page__error" v-if="touristError">{{ touristError }}</p>
-                    <p class="auth-page__success" v-if="touristSuccess">{{ touristSuccess }}</p>
-                    <!-- TnC checkbox -->
-                    <div class="auth-page__tnc-row">
-                      <label class="auth-page__tnc-label">
-                        <input type="checkbox" v-model="tncAccepted" disabled />
-                        I have read and agree to the
-                        <a href="#" @click.prevent="openTnc('tourist')">Terms &amp; Conditions</a>
-                        <span class="req">*</span>
-                      </label>
-                      <span v-if="!tncAccepted" class="auth-page__tnc-hint">Please read the T&amp;C fully to enable this checkbox</span>
-                    </div>
-                    <div class="auth-page__actions">
-                      <button type="submit" class="thm-btn" :disabled="touristLoading || !tncAccepted">
-                        {{ touristLoading ? 'Creating account…' : 'Create Free Account' }}
-                        <span class="icon-up-right-arrow"></span>
-                      </button>
-                    </div>
-                    <p class="auth-page__switch">Already have an account? <router-link to="/tourist/login">Sign in here</router-link></p>
-                  </form>
-                </div>
-              </div>
-
               <!-- ===== LOGIN ===== -->
               <div v-show="mode === 'login'" class="auth-page__box">
                 <div class="auth-page__hero" :style="{ backgroundImage: 'url(https://www.custherds.com/assets/images/slide/page5.webp)' }">
@@ -486,8 +384,6 @@
             <h3>Custherds.com — Terms &amp; Conditions</h3>
             <button class="tnc-modal__close" @click="closeTnc" aria-label="Close">✕</button>
           </div>
-
-          <!-- Scrollable body -->
           <div class="tnc-modal__body" ref="tncBody" @scroll="onTncScroll">
             <p><strong>Effective Date:</strong> 14 October 2025</p>
             <p>Welcome to Custherds.com ("we," "our," or "the Platform"). By accessing or using the Platform, you agree to the following Terms &amp; Conditions. Please read them carefully.</p>
@@ -555,8 +451,6 @@
             </ul>
             <p>By using Custherds.com, you acknowledge that you have read, understood, and agreed to these Terms &amp; Conditions.</p>
           </div>
-
-          <!-- Footer: progress indicator + checkbox + button -->
           <div class="tnc-modal__footer">
             <div class="tnc-modal__progress-wrap">
               <div class="tnc-modal__progress-bar" :style="{ width: tncScrollPct + '%' }"></div>
@@ -597,7 +491,7 @@ import PageHeader from '@/components/common/PageHeader.vue';
 import Footer1 from '@/components/layout/footer/Footer1.vue';
 
 const route = useRoute();
-const mode = ref(route.path.startsWith('/tourist') ? 'tourist' : 'partner');
+const mode = ref('partner');
 const loginType = ref('partner');
 
 function switchMode(m) {
@@ -606,13 +500,10 @@ function switchMode(m) {
 }
 
 const pageTitle = computed(() => {
-  if (mode.value === 'login')   return 'Welcome Back';
-  if (mode.value === 'vendor')  return 'Business Vendor Registration';
-  if (mode.value === 'tourist') return 'Join as a Traveller';
+  if (mode.value === 'login')  return 'Welcome Back';
+  if (mode.value === 'vendor') return 'Business Vendor Registration';
   return 'Partner Registration';
 });
-
-const today = computed(() => new Date().toISOString().split('T')[0]);
 
 // ─────────────────────────────────────────────
 // TnC Modal state
@@ -621,7 +512,7 @@ const tncModalOpen      = ref(false);
 const tncScrolledToEnd  = ref(false);
 const tncScrollPct      = ref(0);
 const tncModalChecked   = ref(false);
-const tncAccepted       = ref(false);   // controls checkbox + submit button in form
+const tncAccepted       = ref(false);
 const tncBody           = ref(null);
 
 function openTnc() {
@@ -654,14 +545,10 @@ function confirmTnc() {
   closeTnc();
 }
 
-// ─────────────────────────────────────────────
-// Form gate — intercept submit if TnC not accepted
-// ─────────────────────────────────────────────
 function handleSubmit(type) {
   if (!tncAccepted.value) { openTnc(); return; }
   if (type === 'partner') submitPartner();
-  else if (type === 'vendor') submitVendor();
-  else submitTourist();
+  else submitVendor();
 }
 
 // ─ Partner form
@@ -703,40 +590,6 @@ function submitVendor() {
   fetch('https://www.custherds.com/register/saveRegistration', { method: 'POST', body: fd })
     .then(r => r.ok ? alert('Registration submitted!') : alert('Something went wrong.'))
     .catch(() => alert('Network error. Please try again.'));
-}
-
-// ─ Tourist form
-const touristError   = ref('');
-const touristSuccess = ref('');
-const touristLoading = ref(false);
-const tf = ref({
-  name: '', email: '', phone: '', nationality: '',
-  visit_date: '', area_interest: '', password: '', password_confirm: ''
-});
-async function submitTourist() {
-  touristError.value   = '';
-  touristSuccess.value = '';
-  if (tf.value.password !== tf.value.password_confirm) {
-    touristError.value = 'Passwords do not match.'; return;
-  }
-  touristLoading.value = true;
-  try {
-    const fd = new FormData();
-    Object.entries(tf.value).forEach(([k, v]) => { if (v) fd.append(k, v); });
-    fd.append('user_type', '3');
-    const res = await fetch('https://www.custherds.com/register/saveTourist', { method: 'POST', body: fd });
-    if (res.ok) {
-      touristSuccess.value = '🎉 Account created! Tourist login will be available soon.';
-      tf.value = { name: '', email: '', phone: '', nationality: '', visit_date: '', area_interest: '', password: '', password_confirm: '' };
-      tncAccepted.value = false;
-    } else {
-      touristError.value = 'Registration failed. This email may already be in use.';
-    }
-  } catch {
-    touristError.value = 'Network error. Please try again.';
-  } finally {
-    touristLoading.value = false;
-  }
 }
 
 // ─ Login
@@ -784,11 +637,6 @@ function submitLogin() {
 .auth-page__hero-content { position: relative; z-index: 2; text-align: center; color: #fff; }
 .auth-page__hero-content h2 { font-size: 36px; font-weight: 700; margin-bottom: 12px; }
 .auth-page__hero-content p { font-size: 16px; opacity: 0.85; margin-bottom: 16px; }
-.auth-page__hero-perks { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; }
-.auth-page__hero-perks span {
-  background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3);
-  border-radius: 20px; padding: 5px 14px; font-size: 12px; font-weight: 600; backdrop-filter: blur(4px);
-}
 /* ─── Form ─── */
 .auth-page__form-wrap { background: #fff; padding: 40px; }
 .auth-page__section-title { font-size: 22px; font-weight: 700; color: var(--thm-black, #1a1a1a); margin-bottom: 12px; }
@@ -817,10 +665,6 @@ function submitLogin() {
   color: #e53e3e; font-size: 13px; background: #fff5f5;
   border: 1px solid #fed7d7; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;
 }
-.auth-page__success {
-  color: #276749; font-size: 13px; background: #f0fff4;
-  border: 1px solid #9ae6b4; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;
-}
 /* ─── TnC Row in form ─── */
 .auth-page__tnc-row { margin-bottom: 8px; }
 .auth-page__tnc-label {
@@ -830,20 +674,17 @@ function submitLogin() {
 .auth-page__tnc-label input[type="checkbox"] { width: 16px; height: 16px; cursor: default; }
 .auth-page__tnc-label a { color: var(--thm-primary, #c9a84c); text-decoration: underline; cursor: pointer; }
 .auth-page__tnc-hint { display: block; font-size: 11px; color: #999; margin-top: 4px; margin-left: 24px; }
-
 /* ─── TnC MODAL ─── */
 .tnc-modal__backdrop {
   position: fixed; inset: 0; z-index: 99999;
   background: rgba(0,0,0,0.65); backdrop-filter: blur(3px);
-  display: flex; align-items: center; justify-content: center;
-  padding: 16px;
+  display: flex; align-items: center; justify-content: center; padding: 16px;
 }
 .tnc-modal {
   background: #fff; border-radius: 16px;
   width: 100%; max-width: 680px;
   max-height: 90vh; display: flex; flex-direction: column;
-  box-shadow: 0 24px 80px rgba(0,0,0,0.3);
-  overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.3); overflow: hidden;
 }
 .tnc-modal__header {
   display: flex; align-items: center; justify-content: space-between;
@@ -860,41 +701,27 @@ function submitLogin() {
 .tnc-modal__close:hover { background: rgba(255,255,255,0.45); }
 .tnc-modal__body {
   flex: 1; overflow-y: auto; padding: 28px;
-  font-size: 14px; line-height: 1.75; color: #333;
-  scroll-behavior: smooth;
+  font-size: 14px; line-height: 1.75; color: #333; scroll-behavior: smooth;
 }
 .tnc-modal__body p { margin-bottom: 12px; }
 .tnc-modal__body ul { padding-left: 20px; margin-bottom: 12px; }
 .tnc-modal__body ul li { margin-bottom: 6px; }
 .tnc-modal__body hr { margin: 16px 0; border-color: #eee; }
-.tnc-modal__footer {
-  padding: 16px 28px 20px;
-  border-top: 2px solid #eee;
-  background: #fafafa;
-}
+.tnc-modal__footer { padding: 16px 28px 20px; border-top: 2px solid #eee; background: #fafafa; }
 .tnc-modal__progress-wrap {
-  height: 6px; background: #e2e2e2; border-radius: 3px;
-  margin-bottom: 12px; overflow: hidden;
+  height: 6px; background: #e2e2e2; border-radius: 3px; margin-bottom: 12px; overflow: hidden;
 }
 .tnc-modal__progress-bar {
-  height: 100%; background: var(--thm-primary, #c9a84c);
-  border-radius: 3px; transition: width 0.2s;
+  height: 100%; background: var(--thm-primary, #c9a84c); border-radius: 3px; transition: width 0.2s;
 }
-.tnc-modal__scroll-hint {
-  font-size: 13px; color: #888; text-align: center; margin-bottom: 12px;
-}
+.tnc-modal__scroll-hint { font-size: 13px; color: #888; text-align: center; margin-bottom: 12px; }
 .tnc-modal__agree-label {
   display: flex; align-items: center; gap: 10px;
-  font-size: 14px; font-weight: 600; color: #333;
-  cursor: pointer; margin-bottom: 14px;
+  font-size: 14px; font-weight: 600; color: #333; cursor: pointer; margin-bottom: 14px;
 }
 .tnc-modal__agree-label input { width: 18px; height: 18px; cursor: pointer; accent-color: var(--thm-primary, #c9a84c); }
-.tnc-modal__confirm-btn {
-  width: 100%; padding: 13px; text-align: center;
-  display: block; border-radius: 30px;
-}
+.tnc-modal__confirm-btn { width: 100%; padding: 13px; text-align: center; display: block; border-radius: 30px; }
 .tnc-modal__confirm-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
 @media (max-width: 768px) {
   .auth-page__form-wrap { padding: 24px 16px; }
   .auth-page__hero { padding: 40px 20px; }
