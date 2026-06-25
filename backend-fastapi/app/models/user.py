@@ -3,7 +3,7 @@ from sqlalchemy import Column, String, SmallInteger, Boolean, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from app.db.base import Base
+from app.db.base_class import Base
 
 
 class User(Base):
@@ -17,7 +17,7 @@ class User(Base):
     user_name         = Column(String(255), nullable=False)
     user_email        = Column(String(255), unique=True, nullable=False, index=True)
     user_phone        = Column(String(30), nullable=True)
-    user_password     = Column(String(255), nullable=False)  # bcrypt hash
+    user_password     = Column(String(255), nullable=False)
     user_type         = Column(SmallInteger, nullable=False)  # 1=Guide, 2=Vendor, 99=Admin
     ig_link           = Column(String(255), nullable=True)
     fb_link           = Column(String(255), nullable=True)
