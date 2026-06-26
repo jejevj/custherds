@@ -28,18 +28,25 @@ function getTokens() {
   }
 }
 
-function saveTokens(access: string, refresh?: string) {
+/**
+ * Simpan token + user_type ke cookie agar middleware (edge runtime)
+ * bisa membaca role tanpa decode JWT.
+ */
+function saveTokens(access: string, refresh?: string, userType?: number) {
   localStorage.setItem('access_token', access)
   if (refresh) localStorage.setItem('refresh_token', refresh)
-  // Set cookie supaya middleware (SSR) bisa baca token
+  // Cookie dibaca oleh middleware di server-side
   document.cookie = `access_token=${access}; path=/; SameSite=Lax`
+  if (userType !== undefined) {
+    document.cookie = `user_type=${userType}; path=/; SameSite=Lax`
+  }
 }
 
 function clearTokens() {
   localStorage.removeItem('access_token')
   localStorage.removeItem('refresh_token')
-  // Hapus cookie juga
   document.cookie = 'access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+  document.cookie = 'user_type=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
 }
 
 async function refreshAccessToken(): Promise<string | null> {
@@ -54,7 +61,7 @@ async function refreshAccessToken(): Promise<string | null> {
     if (!res.ok) return null
     const data = await res.json()
     const newAccess: string = data.access_token
-    saveTokens(newAccess)
+    saveTokens(newAccess)  // refresh tidak ubah user_type
     return newAccess
   } catch {
     return null
@@ -75,7 +82,6 @@ async function request<T>(path: string, options: RequestOptions = {}, retry = tr
     },
   })
 
-  // Token expired — coba refresh sekali
   if (res.status === 401 && retry) {
     const newAccess = await refreshAccessToken()
     if (newAccess) {

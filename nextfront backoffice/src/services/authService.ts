@@ -18,7 +18,6 @@ export interface LoginResponse {
 }
 
 export const login = async (payload: LoginRequest): Promise<LoginResponse> => {
-  // OAuth2PasswordRequestForm: wajib form-urlencoded dengan field `username` & `password`
   const body = new URLSearchParams()
   body.append('username', payload.user_email)
   body.append('password', payload.user_password)
@@ -35,7 +34,10 @@ export const login = async (payload: LoginRequest): Promise<LoginResponse> => {
   }
 
   const data: LoginResponse = await res.json()
-  saveTokens(data.access_token, data.refresh_token)
+
+  // Simpan token + user_type ke cookie agar middleware bisa baca role
+  saveTokens(data.access_token, data.refresh_token, data.user_type)
+
   useAuthStore.getState().setTokens(data.access_token, data.refresh_token)
   useAuthStore.getState().setUser({
     id:         data.user_id,
@@ -49,7 +51,7 @@ export const login = async (payload: LoginRequest): Promise<LoginResponse> => {
 
 export const logout = () => {
   useAuthStore.getState().logout()
-  if (typeof window !== 'undefined') window.location.href = '/login'
+  if (typeof window !== 'undefined') window.location.href = '/'
 }
 
 export const refreshToken = async () => {
