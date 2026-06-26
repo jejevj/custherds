@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import { login } from '@/services/authService'
 import { useAuthStore } from '@/store/auth.store'
 import { Button } from '@/components/ui/button'
@@ -12,7 +11,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, Eye, EyeOff } from 'lucide-react'
 
 export default function LoginPage() {
-  const router = useRouter()
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn)
 
   const [email, setEmail]       = useState('')
@@ -21,12 +19,12 @@ export default function LoginPage() {
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState<string | null>(null)
 
-  // ✅ Redirect setelah render selesai, bukan saat render
+  // Kalau sudah login, hard redirect supaya middleware baca cookie
   useEffect(() => {
     if (isLoggedIn) {
-      router.replace('/dashboard')
+      window.location.href = '/dashboard'
     }
-  }, [isLoggedIn, router])
+  }, [isLoggedIn])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -34,7 +32,8 @@ export default function LoginPage() {
     setLoading(true)
     try {
       await login({ user_email: email, user_password: password })
-      router.replace('/dashboard')
+      // Hard navigation — browser kirim cookie ke server saat request berikutnya
+      window.location.href = '/dashboard'
     } catch (err: unknown) {
       const e = err as { detail?: string }
       setError(e?.detail || 'Email atau password salah.')
