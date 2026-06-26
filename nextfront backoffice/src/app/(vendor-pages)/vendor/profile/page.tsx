@@ -22,10 +22,12 @@ export default function VendorProfilePage() {
     setSaving(true); setError(""); setSuccess(false)
     try {
       const updated = await vendorsService.updateProfile({
-        vendor_name: profile.vendor_name,
-        vendor_description: profile.vendor_description,
-        vendor_phone: profile.vendor_phone,
-        vendor_address: profile.vendor_address,
+        vendor_business_name:     profile.vendor_business_name,
+        vendor_short_description: profile.vendor_short_description,
+        vendor_contact_person:    profile.vendor_contact_person,
+        vendor_location:          profile.vendor_location,
+        vendor_website:           profile.vendor_website,
+        vendor_opening_hours:     profile.vendor_opening_hours,
       })
       setProfile(updated); setSuccess(true)
     } catch { setError("Gagal menyimpan profil.") }
@@ -36,19 +38,82 @@ export default function VendorProfilePage() {
 
   return (
     <div className="space-y-6">
-      <div><h1 className="text-2xl font-bold tracking-tight">Store Profile</h1><p className="text-muted-foreground">Kelola profil toko kamu.</p></div>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Store Profile</h1>
+        <p className="text-muted-foreground">Kelola profil toko kamu.</p>
+      </div>
       <div className="rounded-xl border bg-card p-6 shadow-sm max-w-lg space-y-4">
         {error   && <p className="text-sm text-red-500">{error}</p>}
         {success && <p className="text-sm text-green-600">Profil berhasil disimpan.</p>}
+
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Status:</span>
-          <Badge variant={profile?.vendor_status==="approved"?"default":"secondary"}>{profile?.vendor_status}</Badge>
+          <Badge variant={profile?.vendor_status === "approved" ? "default" : "secondary"}>
+            {profile?.vendor_status}
+          </Badge>
         </div>
-        <div className="grid gap-1"><Label>Nama Toko</Label><Input value={profile?.vendor_name??""} onChange={e=>setProfile(p=>p?{...p,vendor_name:e.target.value}:p)} /></div>
-        <div className="grid gap-1"><Label>Deskripsi</Label><Input value={profile?.vendor_description??""} onChange={e=>setProfile(p=>p?{...p,vendor_description:e.target.value}:p)} /></div>
-        <div className="grid gap-1"><Label>Phone</Label><Input value={profile?.vendor_phone??""} onChange={e=>setProfile(p=>p?{...p,vendor_phone:e.target.value}:p)} /></div>
-        <div className="grid gap-1"><Label>Alamat</Label><Input value={profile?.vendor_address??""} onChange={e=>setProfile(p=>p?{...p,vendor_address:e.target.value}:p)} /></div>
-        <Button onClick={handleSave} disabled={saving} className="w-full">{saving?"Menyimpan…":"Simpan"}</Button>
+
+        <div className="grid gap-1">
+          <Label>Nama Toko</Label>
+          <Input
+            value={profile?.vendor_business_name ?? ""}
+            onChange={e => setProfile(p => p ? { ...p, vendor_business_name: e.target.value } : p)}
+            placeholder="Nama toko / usaha"
+          />
+        </div>
+
+        <div className="grid gap-1">
+          <Label>Deskripsi Singkat</Label>
+          <textarea
+            className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
+            rows={3}
+            value={profile?.vendor_short_description ?? ""}
+            onChange={e => setProfile(p => p ? { ...p, vendor_short_description: e.target.value } : p)}
+            placeholder="Ceritakan produk & layanan bisnis kamu"
+          />
+        </div>
+
+        <div className="grid gap-1">
+          <Label>Contact Person</Label>
+          <Input
+            value={profile?.vendor_contact_person ?? ""}
+            onChange={e => setProfile(p => p ? { ...p, vendor_contact_person: e.target.value } : p)}
+            placeholder="Nama PIC yang bisa dihubungi"
+          />
+        </div>
+
+        <div className="grid gap-1">
+          <Label>Alamat / Lokasi</Label>
+          <textarea
+            className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
+            rows={2}
+            value={profile?.vendor_location ?? ""}
+            onChange={e => setProfile(p => p ? { ...p, vendor_location: e.target.value } : p)}
+            placeholder="Alamat lengkap toko / outlet"
+          />
+        </div>
+
+        <div className="grid gap-1">
+          <Label>Website</Label>
+          <Input
+            value={profile?.vendor_website ?? ""}
+            onChange={e => setProfile(p => p ? { ...p, vendor_website: e.target.value } : p)}
+            placeholder="https://"
+          />
+        </div>
+
+        <div className="grid gap-1">
+          <Label>Jam Operasional</Label>
+          <Input
+            value={profile?.vendor_opening_hours ?? ""}
+            onChange={e => setProfile(p => p ? { ...p, vendor_opening_hours: e.target.value } : p)}
+            placeholder="Senin-Jumat 09.00-17.00"
+          />
+        </div>
+
+        <Button onClick={handleSave} disabled={saving} className="w-full">
+          {saving ? "Menyimpan…" : "Simpan"}
+        </Button>
       </div>
     </div>
   )
