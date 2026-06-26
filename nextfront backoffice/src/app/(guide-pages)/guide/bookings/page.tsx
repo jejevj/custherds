@@ -4,6 +4,7 @@ import { bookingsService, Booking } from "@/services/bookings.service"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   Dialog,
   DialogContent,
@@ -13,28 +14,50 @@ import {
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { AlertTriangle } from "lucide-react"
+import { AlertTriangle, MapPin, Upload, CheckCircle2 } from "lucide-react"
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
-  confirmed:      "default",
-  pending_vendor: "secondary",
-  rejected:       "destructive",
-  cancelled:      "destructive",
+  confirmed:          "default",
+  pending_vendor:     "secondary",
+  pending_receipt:    "secondary",
+  pending_completion: "secondary",
+  completed:          "default",
+  rejected:           "destructive",
+  cancelled:          "destructive",
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  pending_vendor:     "Menunggu Approval",
+  confirmed:          "Dikonfirmasi",
+  pending_receipt:    "Perlu Upload Receipt",
+  pending_completion: "Menunggu Konfirmasi Vendor",
+  completed:          "Selesai",
+  rejected:           "Ditolak",
+  cancelled:          "Dibatalkan",
 }
 
 export default function GuideBookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState("")
+  const [submitting, setSubmitting] = useState(false)
 
-  // cancel dialog state
-  const [cancelTarget,  setCancelTarget]  = useState<string | null>(null)
-  const [cancelReason,  setCancelReason]  = useState("")
-  const [cancelError,   setCancelError]   = useState("")
-  const [submitting,    setSubmitting]    = useState(false)
+  // cancel dialog
+  const [cancelTarget, setCancelTarget] = useState<string | null>(null)
+  const [cancelReason, setCancelReason] = useState("")
+  const [cancelError,  setCancelError]  = useState("")
 
-  // rejection reason detail dialog
-  const [viewReason,    setViewReason]    = useState<string | null>(null)
+  // checkin dialog
+  const [checkinTarget, setCheckinTarget] = useState<string | null>(null)
+  const [checkinError,  setCheckinError]  = useState("")
+
+  // upload receipt dialog
+  const [receiptTarget,  setReceiptTarget]  = useState<string | null>(null)
+  const [receiptUrl,     setReceiptUrl]     = useState("")
+  const [receiptError,   setReceiptError]   = useState("")
+
+  // view rejection reason
+  const [viewReason, setViewReason] = useState<string | null>(null)
 
   useEffect(() => {
     bookingsService.list()
@@ -43,33 +66,44 @@ export default function GuideBookingsPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const openCancelDialog = (id: string) => {
-    setCancelTarget(id)
-    setCancelReason("")
-    setCancelError("")
-  }
+  // ── Handlers ────────────────────────────────────────────────────────────────
 
   const submitCancel = async () => {
     if (!cancelTarget) return
-    if (!cancelReason.trim()) {
-      setCancelError("Alasan pembatalan wajib diisi.")
-      return
-    }
+    if (!cancelReason.trim()) { setCancelError("Alasan pembatalan wajib diisi."); return }
     setSubmitting(true)
     try {
       await bookingsService.cancel(cancelTarget, cancelReason.trim())
-      setBookings(prev =>
-        prev.map(b => b.id === cancelTarget
-          ? { ...b, status: "cancelled", cancelled_reason: cancelReason.trim(), cancelled_by: "guide" }
-          : b
-        )
-      )
+      setBookings(prev => prev.map(b =>
+        b.id === cancelTarget ? { ...b, status: "cancelled", cancelled_reason: cancelReason.trim(), cancelled_by: "guide" } : b
+      ))
       setCancelTarget(null)
-    } catch {
-      setCancelError("Gagal membatalkan booking. Coba lagi.")
-    } finally {
-      setSubmitting(false)
-    }
+    } catch { setCancelError("Gagal membatalkan booking. Coba lagi.") }
+    finally { setSubmitting(false) }
+  }
+
+  const submitCheckin = async () => {
+    if (!checkinTarget) return
+    setSubmitting(true)
+    try {
+      const updated = await bookingsService.checkin(checkinTarget)
+      setBookings(prev => prev.map(b => b.id === updated.id ? updated : b))
+      setCheckinTarget(null)
+    } catch { setCheckinError("Gagal checkin. Coba lagi.") }
+    finally { setSubmitting(false) }
+  }
+
+  const submitReceipt = async () => {
+    if (!receiptTarget) return
+    if (!receiptUrl.trim()) { setReceiptError("URL receipt wajib diisi."); return }
+    setSubmitting(true)
+    try {
+      const updated = await bookingsService.uploadReceipt(receiptTarget, receiptUrl.trim())
+      setBookings(prev => prev.map(b => b.id === updated.id ? updated : b))
+      setReceiptTarget(null)
+      setReceiptUrl("")
+    } catch { setReceiptError("Gagal upload receipt. Coba lagi.") }
+    finally { setSubmitting(false) }
   }
 
   return (
@@ -107,33 +141,64 @@ export default function GuideBookingsPage() {
                 <td className="px-4 py-3">{new Date(b.booking_date).toLocaleDateString("id-ID")}</td>
                 <td className="px-4 py-3">{b.pax_count}</td>
                 <td className="px-4 py-3">
-                  <Badge variant={STATUS_VARIANT[b.status] ?? "secondary"}>{b.status}</Badge>
+                  <Badge variant={STATUS_VARIANT[b.status] ?? "secondary"}>
+                    {STATUS_LABEL[b.status] ?? b.status}
+                  </Badge>
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3 text-xs text-muted-foreground">
                   {b.status === "rejected" && b.vendor_rejection_reason && (
-                    <button
-                      onClick={() => setViewReason(b.vendor_rejection_reason!)}
-                      className="flex items-center gap-1 text-xs text-red-500 hover:underline"
-                    >
-                      <AlertTriangle className="w-3 h-3" />
-                      Lihat alasan
+                    <button onClick={() => setViewReason(b.vendor_rejection_reason!)} className="flex items-center gap-1 text-red-500 hover:underline">
+                      <AlertTriangle className="w-3 h-3" /> Lihat alasan
                     </button>
                   )}
                   {b.status === "cancelled" && b.cancelled_reason && (
-                    <span className="text-xs text-muted-foreground">{b.cancelled_reason}</span>
+                    <span>{b.cancelled_reason}</span>
+                  )}
+                  {b.status === "pending_receipt" && (
+                    <span className="text-amber-500">Upload bukti kunjungan</span>
+                  )}
+                  {b.status === "pending_completion" && (
+                    <span className="text-blue-400">Menunggu vendor konfirmasi</span>
+                  )}
+                  {b.status === "completed" && b.completed_at && (
+                    <span className="text-emerald-500">Selesai ✓</span>
                   )}
                 </td>
                 <td className="px-4 py-3">
-                  {(b.status === "pending_vendor" || b.status === "confirmed") && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-red-500 border-red-300 hover:bg-red-50"
-                      onClick={() => openCancelDialog(b.id)}
-                    >
-                      Batalkan
-                    </Button>
-                  )}
+                  <div className="flex gap-2 flex-wrap">
+                    {/* Checkin: hanya saat confirmed */}
+                    {b.status === "confirmed" && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => { setCheckinTarget(b.id); setCheckinError("") }}
+                      >
+                        <MapPin size={13} className="mr-1" /> Checkin
+                      </Button>
+                    )}
+                    {/* Upload Receipt: hanya saat pending_receipt */}
+                    {b.status === "pending_receipt" && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="bg-amber-500 hover:bg-amber-600 text-white"
+                        onClick={() => { setReceiptTarget(b.id); setReceiptUrl(""); setReceiptError("") }}
+                      >
+                        <Upload size={13} className="mr-1" /> Upload Receipt
+                      </Button>
+                    )}
+                    {/* Cancel: dari pending_vendor, confirmed, pending_receipt, pending_completion */}
+                    {["pending_vendor", "confirmed", "pending_receipt", "pending_completion"].includes(b.status) && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-red-500 border-red-300 hover:bg-red-50"
+                        onClick={() => { setCancelTarget(b.id); setCancelReason(""); setCancelError("") }}
+                      >
+                        Batalkan
+                      </Button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -141,12 +206,69 @@ export default function GuideBookingsPage() {
         </table>
       </div>
 
+      {/* Checkin Dialog */}
+      <Dialog open={!!checkinTarget} onOpenChange={open => { if (!open) setCheckinTarget(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-emerald-500" /> Konfirmasi Checkin
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Klik <strong>Checkin Sekarang</strong> untuk konfirmasi bahwa kamu sudah tiba di lokasi vendor.
+              Setelah checkin, kamu wajib mengupload bukti kunjungan (receipt).
+            </p>
+            {checkinError && <p className="text-sm text-red-500">{checkinError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCheckinTarget(null)} disabled={submitting}>Batal</Button>
+            <Button onClick={submitCheckin} disabled={submitting}>
+              <MapPin size={14} className="mr-1" />
+              {submitting ? "Memproses..." : "Checkin Sekarang"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Upload Receipt Dialog */}
+      <Dialog open={!!receiptTarget} onOpenChange={open => { if (!open) setReceiptTarget(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="w-5 h-5 text-amber-500" /> Upload Bukti Kunjungan
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Upload URL file bukti kunjungan (foto, invoice, atau dokumen lainnya).
+              File bisa diupload terlebih dahulu via menu Upload.
+            </p>
+            <div className="space-y-1">
+              <Label htmlFor="receipt-url">URL Receipt <span className="text-red-500">*</span></Label>
+              <Input
+                id="receipt-url"
+                placeholder="https://..."
+                value={receiptUrl}
+                onChange={e => { setReceiptUrl(e.target.value); setReceiptError("") }}
+              />
+            </div>
+            {receiptError && <p className="text-sm text-red-500">{receiptError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReceiptTarget(null)} disabled={submitting}>Batal</Button>
+            <Button onClick={submitReceipt} disabled={submitting} className="bg-amber-500 hover:bg-amber-600 text-white">
+              <Upload size={14} className="mr-1" />
+              {submitting ? "Mengupload..." : "Submit Receipt"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Cancel Dialog */}
       <Dialog open={!!cancelTarget} onOpenChange={open => { if (!open) setCancelTarget(null) }}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Batalkan Booking</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Batalkan Booking</DialogTitle></DialogHeader>
           <div className="space-y-3 py-2">
             <Label htmlFor="cancel-reason">Alasan Pembatalan <span className="text-red-500">*</span></Label>
             <Textarea
@@ -172,8 +294,7 @@ export default function GuideBookingsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-600">
-              <AlertTriangle className="w-5 h-5" />
-              Alasan Penolakan
+              <AlertTriangle className="w-5 h-5" /> Alasan Penolakan
             </DialogTitle>
           </DialogHeader>
           <div className="py-2">
