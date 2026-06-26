@@ -1,29 +1,34 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import Image from 'next/image'
-import { vendorsService, VendorPublic, resolveCoverPhoto } from '@/services/vendors.service'
+import { vendorsBrowseService, VendorPublic, resolveCoverPhoto } from '@/services/vendors.service'
 import { formatRupiah } from '@/services/packages-browse.service'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { MapPin, Package, TrendingUp, Zap, Search, SlidersHorizontal } from 'lucide-react'
 
 const SORT_OPTIONS = [
-  { value: 'name',           label: 'Nama A–Z' },
-  { value: 'commission_desc',label: 'Komisi Terbesar' },
-  { value: 'packages_desc',  label: 'Package Terbanyak' },
+  { value: 'name',            label: 'Nama A–Z' },
+  { value: 'commission_desc', label: 'Komisi Terbesar' },
+  { value: 'packages_desc',   label: 'Package Terbanyak' },
 ]
 
 export default function GuideVendorsContent() {
-  const [vendors, setVendors]   = useState<VendorPublic[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [search,  setSearch]    = useState('')
-  const [sort,    setSort]       = useState('commission_desc')
+  const [vendors,    setVendors]    = useState<VendorPublic[]>([])
+  const [loading,    setLoading]    = useState(true)
+  const [search,     setSearch]     = useState('')
+  const [sort,       setSort]       = useState('commission_desc')
   const [directOnly, setDirectOnly] = useState(false)
-  const [error,   setError]     = useState('')
+  const [error,      setError]      = useState('')
 
   const load = useCallback(() => {
     setLoading(true)
-    vendorsService.browse({ search, sort: sort as never, allow_direct: directOnly || undefined, limit: 50 })
+    vendorsBrowseService.browse({
+      search,
+      sort: sort as never,
+      allow_direct: directOnly || undefined,
+      limit: 50,
+    })
       .then(setVendors)
       .catch(() => setError('Gagal memuat vendor.'))
       .finally(() => setLoading(false))
@@ -33,7 +38,6 @@ export default function GuideVendorsContent() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Jelajahi Vendor</h1>
         <p className="text-muted-foreground text-sm">Temukan vendor terbaik dan lihat potensi komisimu.</p>
@@ -85,9 +89,7 @@ export default function GuideVendorsContent() {
         <p className="text-muted-foreground text-center py-16">Tidak ada vendor ditemukan.</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {vendors.map(v => (
-            <VendorCard key={v.id} vendor={v} />
-          ))}
+          {vendors.map(v => <VendorCard key={v.id} vendor={v} />)}
         </div>
       )}
     </div>
@@ -98,7 +100,6 @@ function VendorCard({ vendor: v }: { vendor: VendorPublic }) {
   const cover = resolveCoverPhoto(v.cover_photo)
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md overflow-hidden hover:border-white/20 transition-all group">
-      {/* Cover */}
       <div className="relative h-36 bg-white/5">
         {cover ? (
           <Image src={cover} alt={v.vendor_business_name} fill className="object-cover" unoptimized />
@@ -111,8 +112,6 @@ function VendorCard({ vendor: v }: { vendor: VendorPublic }) {
           </span>
         )}
       </div>
-
-      {/* Body */}
       <div className="p-4 space-y-2">
         <h3 className="font-semibold text-sm leading-tight line-clamp-1">{v.vendor_business_name}</h3>
         {v.vendor_location && (
@@ -123,7 +122,6 @@ function VendorCard({ vendor: v }: { vendor: VendorPublic }) {
         {v.vendor_short_description && (
           <p className="text-xs text-muted-foreground line-clamp-2">{v.vendor_short_description}</p>
         )}
-
         <div className="flex items-center justify-between pt-1">
           <span className="flex items-center gap-1 text-xs text-muted-foreground">
             <Package size={11} /> {v.package_count} package
