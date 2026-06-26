@@ -11,7 +11,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, Eye, EyeOff } from 'lucide-react'
 
 export default function LoginPage() {
-  const isLoggedIn = useAuthStore((s) => s.isLoggedIn)
+  const isLoggedIn   = useAuthStore((s) => s.isLoggedIn)
+  const hasHydrated  = useAuthStore((s) => s._hasHydrated)
 
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
@@ -19,12 +20,12 @@ export default function LoginPage() {
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState<string | null>(null)
 
-  // Kalau sudah login, hard redirect supaya middleware baca cookie
   useEffect(() => {
-    if (isLoggedIn) {
+    // Tunggu hydration selesai dulu sebelum redirect
+    if (hasHydrated && isLoggedIn) {
       window.location.href = '/dashboard'
     }
-  }, [isLoggedIn])
+  }, [hasHydrated, isLoggedIn])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -32,7 +33,6 @@ export default function LoginPage() {
     setLoading(true)
     try {
       await login({ user_email: email, user_password: password })
-      // Hard navigation — browser kirim cookie ke server saat request berikutnya
       window.location.href = '/dashboard'
     } catch (err: unknown) {
       const e = err as { detail?: string }
@@ -42,7 +42,9 @@ export default function LoginPage() {
     }
   }
 
-  if (isLoggedIn) return null
+  // Tampilkan blank dulu saat hydration belum selesai (cegah flicker)
+  if (!hasHydrated) return null
+  if (isLoggedIn)   return null
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 px-4">
