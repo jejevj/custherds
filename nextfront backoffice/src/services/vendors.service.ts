@@ -7,6 +7,7 @@ export interface VendorProfile {
   id: string
   vendor_status: string
   approval_notes: string | null
+  rejection_notes: string | null
   vendor_business_name: string
   vendor_category: number
   vendor_area: number
@@ -38,6 +39,18 @@ export interface VendorUpdatePayload {
   allow_direct_booking?: boolean
 }
 
+export interface VendorSubmitPayload {
+  vendor_business_name: string
+  vendor_location?: string | null
+  vendor_contact_person: string
+  vendor_npwp?: string | null
+  vendor_nib?: string | null
+  vendor_owner_id_card_url?: string | null
+  vendor_short_description: string
+  vendor_opening_hours?: string | null
+  vendor_website?: string | null
+}
+
 export interface VendorDepositInfo {
   id: string
   vendor_business_name: string
@@ -46,9 +59,10 @@ export interface VendorDepositInfo {
 }
 
 export const vendorsService = {
-  getProfile:    ()                              => api.get<VendorProfile>('/vendors/me'),
-  updateProfile: (payload: VendorUpdatePayload) => api.put<VendorProfile>('/vendors/me', payload),
-  getDeposit:    ()                              => api.get<VendorDepositInfo>('/vendors/me/deposit'),
+  getProfile:    ()                               => api.get<VendorProfile>('/vendors/me'),
+  updateProfile: (payload: VendorUpdatePayload)  => api.put<VendorProfile>('/vendors/me', payload),
+  submitReview:  (payload: VendorSubmitPayload)  => api.post<VendorProfile>('/vendors/me/submit', payload),
+  getDeposit:    ()                               => api.get<VendorDepositInfo>('/vendors/me/deposit'),
 }
 
 // ────────────────────────── GUIDE BROWSE ─────────────────────────────────
