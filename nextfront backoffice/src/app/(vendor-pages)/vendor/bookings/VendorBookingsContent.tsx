@@ -28,7 +28,7 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = 
 const STATUS_LABEL: Record<string, string> = {
   pending_vendor:     "Menunggu Approval",
   confirmed:          "Dikonfirmasi",
-  pending_receipt:    "Menunggu Receipt Guide",
+  pending_receipt:    "Checkin ✓ — Menunggu Receipt Guide",
   pending_completion: "Perlu Konfirmasi Selesai",
   completed:          "Selesai",
   rejected:           "Ditolak",
@@ -50,10 +50,10 @@ export default function VendorBookingsContent() {
   const [loading,    setLoading]    = useState(true)
   const [error,      setError]      = useState("")
 
-  const [detailBook, setDetailBook] = useState<Booking | null>(null)
+  const [detailBook,   setDetailBook]   = useState<Booking | null>(null)
   const [showReject,   setShowReject]   = useState(false)
   const [rejectReason, setRejectReason] = useState("")
-  const [rejectError,  setRejectError]  = useState("")
+  const [actionError,  setActionError]  = useState("")
   const [submitting,   setSubmitting]   = useState(false)
 
   useEffect(() => {
@@ -67,7 +67,7 @@ export default function VendorBookingsContent() {
     setDetailBook(b)
     setShowReject(false)
     setRejectReason("")
-    setRejectError("")
+    setActionError("")
   }
 
   const closeDetail = () => {
@@ -79,24 +79,33 @@ export default function VendorBookingsContent() {
     if (!detailBook) return
     setSubmitting(true)
     try {
-      await bookingsService.approve(detailBook.id, "approve")
-      setBookings(prev => prev.map(b => b.id === detailBook.id ? { ...b, status: "confirmed" } : b))
-      closeDetail()
-    } catch { setRejectError("Gagal approve booking. Coba lagi.") }
+      const updated = await bookingsService.approve(detailBook.id, "approve")
+      setBookings(prev => prev.map(b => b.id === updated.id ? updated : b))
+      setDetailBook(updated)
+    } catch { setActionError("Gagal approve booking. Coba lagi.") }
     finally { setSubmitting(false) }
   }
 
   const handleReject = async () => {
     if (!detailBook) return
-    if (!rejectReason.trim()) { setRejectError("Alasan penolakan wajib diisi."); return }
+    if (!rejectReason.trim()) { setActionError("Alasan penolakan wajib diisi."); return }
     setSubmitting(true)
     try {
-      await bookingsService.approve(detailBook.id, "reject", rejectReason.trim())
-      setBookings(prev => prev.map(b =>
-        b.id === detailBook.id ? { ...b, status: "rejected", vendor_rejection_reason: rejectReason.trim() } : b
-      ))
+      const updated = await bookingsService.approve(detailBook.id, "reject", rejectReason.trim())
+      setBookings(prev => prev.map(b => b.id === updated.id ? updated : b))
       closeDetail()
-    } catch { setRejectError("Gagal menolak booking. Coba lagi.") }
+    } catch { setActionError("Gagal menolak booking. Coba lagi.") }
+    finally { setSubmitting(false) }
+  }
+
+  const handleCheckin = async () => {
+    if (!detailBook) return
+    setSubmitting(true)
+    try {
+      const updated = await bookingsService.checkin(detailBook.id)
+      setBookings(prev => prev.map(b => b.id === updated.id ? updated : b))
+      setDetailBook(updated)
+    } catch { setActionError("Gagal checkin. Coba lagi.") }
     finally { setSubmitting(false) }
   }
 
@@ -107,18 +116,19 @@ export default function VendorBookingsContent() {
       const updated = await bookingsService.complete(detailBook.id)
       setBookings(prev => prev.map(b => b.id === updated.id ? updated : b))
       setDetailBook(updated)
-    } catch { setRejectError("Gagal menyelesaikan booking. Coba lagi.") }
+    } catch { setActionError("Gagal menyelesaikan booking. Coba lagi.") }
     finally { setSubmitting(false) }
   }
 
-  const isPending    = detailBook?.status === "pending_vendor"
+  const isPending      = detailBook?.status === "pending_vendor"
+  const isConfirmed    = detailBook?.status === "confirmed"
   const isNeedComplete = detailBook?.status === "pending_completion"
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
-          {status === "pending_vendor" ? "Bookings — Pending Approval"
+          {status === "pending_vendor"     ? "Bookings — Pending Approval"
           : status === "pending_completion" ? "Bookings — Perlu Konfirmasi Selesai"
           : "All Bookings"}
         </h1>
@@ -187,16 +197,16 @@ export default function VendorBookingsContent() {
                 <Row icon={<FileText size={13}/>}     label="Kode Booking"  value={detailBook.booking_code} mono />
                 <Row icon={<CalendarDays size={13}/>} label="Tanggal"        value={new Date(detailBook.booking_date).toLocaleDateString("id-ID", { weekday:"long", year:"numeric", month:"long", day:"numeric" })} />
                 {detailBook.booking_time && <Row label="Waktu" value={detailBook.booking_time} />}
-                <Row icon={<Users size={13}/>}        label="Jumlah Pax"     value={`${detailBook.pax_count} orang`} />
+                <Row icon={<Users size={13}/>} label="Jumlah Pax" value={`${detailBook.pax_count} orang`} />
                 {detailBook.tourist_nationality && <Row label="Kewarganegaraan" value={detailBook.tourist_nationality} />}
                 {detailBook.booking_type === "package" && detailBook.package_price_snapshot && (
                   <Row icon={<Package size={13}/>} label="Harga / Pax (snapshot)" value={formatRupiah(detailBook.package_price_snapshot)} />
                 )}
                 {detailBook.checkin_at && (
-                  <Row icon={<MapPin size={13}/>} label="Checkin" value={new Date(detailBook.checkin_at).toLocaleString("id-ID")} />
+                  <Row icon={<MapPin size={13}/>} label="Checkin oleh Vendor" value={new Date(detailBook.checkin_at).toLocaleString("id-ID")} />
                 )}
                 {detailBook.receipt_uploaded_at && (
-                  <Row icon={<Upload size={13}/>} label="Receipt diupload" value={new Date(detailBook.receipt_uploaded_at).toLocaleString("id-ID")} />
+                  <Row icon={<Upload size={13}/>} label="Receipt diupload Guide" value={new Date(detailBook.receipt_uploaded_at).toLocaleString("id-ID")} />
                 )}
                 {detailBook.completed_at && (
                   <Row icon={<CheckCircle2 size={13}/>} label="Selesai pada" value={new Date(detailBook.completed_at).toLocaleString("id-ID")} />
@@ -206,7 +216,7 @@ export default function VendorBookingsContent() {
               {/* Receipt link */}
               {detailBook.receipt_url && (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3">
-                  <p className="text-xs text-muted-foreground mb-1">Bukti Kunjungan (Receipt)</p>
+                  <p className="text-xs text-muted-foreground mb-1">Bukti Kunjungan (Receipt dari Guide)</p>
                   <a
                     href={detailBook.receipt_url}
                     target="_blank"
@@ -254,14 +264,13 @@ export default function VendorBookingsContent() {
                     id="reject-reason"
                     placeholder="Tuliskan alasan kenapa booking ini ditolak..."
                     value={rejectReason}
-                    onChange={e => { setRejectReason(e.target.value); setRejectError("") }}
+                    onChange={e => { setRejectReason(e.target.value); setActionError("") }}
                     rows={3}
                   />
-                  {rejectError && <p className="text-xs text-red-500">{rejectError}</p>}
                 </div>
               )}
 
-              {rejectError && !showReject && <p className="text-xs text-red-500">{rejectError}</p>}
+              {actionError && <p className="text-xs text-red-500">{actionError}</p>}
             </div>
           )}
 
@@ -290,7 +299,19 @@ export default function VendorBookingsContent() {
               </>
             )}
 
-            {/* pending_completion: tombol Complete */}
+            {/* confirmed: vendor checkin guide yang datang */}
+            {isConfirmed && (
+              <Button
+                onClick={handleCheckin}
+                disabled={submitting}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <MapPin size={14} className="mr-1" />
+                {submitting ? "Memproses..." : "Checkin Guide"}
+              </Button>
+            )}
+
+            {/* pending_completion: vendor konfirmasi selesai setelah cek receipt */}
             {isNeedComplete && (
               <Button
                 onClick={handleComplete}

@@ -39,10 +39,6 @@ def _check_quota(
     quota_per_slot: int,
     exclude_booking_id: Optional[uuid.UUID] = None,
 ) -> None:
-    """
-    Cek apakah slot (package + tanggal + jam) masih ada quota.
-    Quota = max jumlah BOOKING (bukan pax) berstatus pending_vendor / confirmed / pending_receipt / pending_completion.
-    """
     q = db.query(Booking).filter(
         Booking.package_id == package_id,
         Booking.booking_date == booking_date,
@@ -201,27 +197,28 @@ def vendor_action_booking(
     return booking
 
 
-# ─────────────────────────────── GUIDE CHECKIN ─────────────────────────────────
+# ─────────────────────────────── VENDOR CHECKIN ────────────────────────────────
 
-@router.post("/{booking_id}/checkin", response_model=BookingResponse, summary="Guide checkin saat tiba di lokasi vendor")
-def guide_checkin(
+@router.post("/{booking_id}/checkin", response_model=BookingResponse, summary="Vendor approve checkin guide yang datang")
+def vendor_checkin(
     booking_id: uuid.UUID,
     payload: BookingCheckinRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_user_type(1)),
+    current_user: User = Depends(require_user_type(2)),
 ) -> Any:
     """
-    Guide menekan tombol checkin saat sudah tiba di lokasi vendor.
+    Petugas vendor menerima guide yang datang dan meng-approve checkin.
+    Guide menunjukkan booking code / detail ke petugas, lalu petugas klik Checkin.
     Status: confirmed → pending_receipt
-    Guide wajib upload receipt setelah checkin.
+    Setelah checkin, guide wajib upload receipt/bukti kunjungan.
     """
-    guide = db.query(Guide).filter(Guide.user_id == current_user.id).first()
-    if not guide:
-        raise HTTPException(404, "Profil guide tidak ditemukan")
+    vendor = db.query(Vendor).filter(Vendor.user_id == current_user.id).first()
+    if not vendor:
+        raise HTTPException(404, "Profil vendor tidak ditemukan")
 
     booking = db.query(Booking).filter(
         Booking.id == booking_id,
-        Booking.guide_id == guide.id,
+        Booking.vendor_id == vendor.id,
     ).first()
     if not booking:
         raise HTTPException(404, "Booking tidak ditemukan")
@@ -230,8 +227,6 @@ def guide_checkin(
 
     booking.status = "pending_receipt"
     booking.checkin_at = datetime.now(timezone.utc)
-    if payload.notes:
-        booking.notes = (booking.notes or "") + f"\n[Checkin note] {payload.notes}"
 
     db.commit()
     db.refresh(booking)
@@ -248,7 +243,7 @@ def upload_receipt(
     current_user: User = Depends(require_user_type(1)),
 ) -> Any:
     """
-    Guide mengupload URL receipt/bukti kunjungan setelah checkin.
+    Guide mengupload URL receipt/bukti kunjungan setelah vendor checkin.
     Status: pending_receipt → pending_completion
     Vendor kemudian akan mengkonfirmasi dan mengubah status ke completed.
     """
@@ -283,7 +278,7 @@ def complete_booking(
     current_user: User = Depends(require_user_type(2)),
 ) -> Any:
     """
-    Vendor mengkonfirmasi bahwa kunjungan sudah selesai setelah melihat receipt.
+    Vendor mengkonfirmasi bahwa kunjungan sudah selesai setelah melihat receipt guide.
     Status: pending_completion → completed
     Setelah completed, transaksi/komisi bisa diproses.
     """
