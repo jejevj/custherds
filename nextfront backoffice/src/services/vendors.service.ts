@@ -1,7 +1,42 @@
 import { api } from './api'
 import { resolveUploadUrl } from './uploads.service'
 
-// ── Vendor self-service types (vendor portal) ─────────────────────────
+// ────────────────────────── VENDOR SELF-SERVICE ──────────────────────────
+
+export interface VendorProfile {
+  id: string
+  vendor_status: string
+  approval_notes: string | null
+  vendor_business_name: string
+  vendor_category: number
+  vendor_area: number
+  vendor_npwp: string | null
+  vendor_nib: string | null
+  vendor_owner_id_card_url: string | null
+  vendor_location: string | null
+  vendor_contact_person: string | null
+  vendor_website: string | null
+  vendor_short_description: string | null
+  vendor_opening_hours: string | null
+  vendor_min_spend: string | null
+  vendor_cashback_percent: number
+  deposit_balance: string
+  allow_direct_booking: boolean
+}
+
+export interface VendorUpdatePayload {
+  vendor_business_name?: string
+  vendor_location?: string
+  vendor_contact_person?: string
+  vendor_website?: string
+  vendor_short_description?: string
+  vendor_opening_hours?: string
+  vendor_min_spend?: string | null
+  vendor_npwp?: string
+  vendor_nib?: string
+  vendor_owner_id_card_url?: string
+  allow_direct_booking?: boolean
+}
 
 export interface VendorDepositInfo {
   id: string
@@ -11,10 +46,12 @@ export interface VendorDepositInfo {
 }
 
 export const vendorsService = {
-  getDeposit: () => api.get<VendorDepositInfo>('/vendors/me/deposit'),
+  getProfile:    ()                              => api.get<VendorProfile>('/vendors/me'),
+  updateProfile: (payload: VendorUpdatePayload) => api.put<VendorProfile>('/vendors/me', payload),
+  getDeposit:    ()                              => api.get<VendorDepositInfo>('/vendors/me/deposit'),
 }
 
-// ── Public browse types (guide portal) ──────────────────────────────
+// ────────────────────────── GUIDE BROWSE ─────────────────────────────────
 
 export interface VendorPublic {
   id: string
