@@ -3,7 +3,7 @@
  * Import from here instead of individual service files when needed across multiple features.
  */
 
-export type { LoginPayload, AuthResponse } from '../services/authService'
+export type { LoginRequest, LoginResponse } from '../services/authService'
 export type { BlogPost } from '../services/blogService'
 export type { Project } from '../services/projectService'
 export type { TeamMember } from '../services/teamService'
