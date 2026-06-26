@@ -32,16 +32,16 @@ const EMPTY_FORM: PackageCreate = {
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
 const DAYS_ID: Record<string,string> = {
   Mon:'Senin', Tue:'Selasa', Wed:'Rabu',
-  Thu:'Kamis', Fri:'Jumat', Sat:'Sabtu', Sun:'Minggu'
+  Thu:'Kamis', Fri:'Jumat', Sat:'Sabtu', Sun:'Minggu',
 }
 
 export default function PackageFormContent({ mode, packageId }: Props) {
   const router  = useRouter()
-  const [form,    setForm]    = useState<PackageCreate>(EMPTY_FORM)
-  const [loading, setLoading] = useState(mode === 'edit')
-  const [saving,  setSaving]  = useState(false)
-  const [slotInput, setSlotInput] = useState('')   // input tambah jam slot
-  const [photoInput, setPhotoInput] = useState('') // input tambah URL foto
+  const [form,       setForm]       = useState<PackageCreate>(EMPTY_FORM)
+  const [loading,    setLoading]    = useState(mode === 'edit')
+  const [saving,     setSaving]     = useState(false)
+  const [slotInput,  setSlotInput]  = useState('')
+  const [photoInput, setPhotoInput] = useState('')
 
   useEffect(() => {
     if (mode === 'edit' && packageId) {
@@ -65,40 +65,41 @@ export default function PackageFormContent({ mode, packageId }: Props) {
     }
   }, [mode, packageId])
 
-  const set = (key: keyof PackageCreate, value: any) =>
+  const set = <K extends keyof PackageCreate>(key: K, value: PackageCreate[K]) =>
     setForm(prev => ({ ...prev, [key]: value }))
 
   const toggleDay = (day: string) => {
-    const days = form.available_days ?? []
+    const days = form.available_days
     set('available_days', days.includes(day) ? days.filter(d => d !== day) : [...days, day])
   }
 
   const addSlot = () => {
     const val = slotInput.trim()
     if (!val) return
-    const slots = form.available_slots ?? []
-    if (!slots.includes(val)) set('available_slots', [...slots, val])
+    if (!form.available_slots.includes(val))
+      set('available_slots', [...form.available_slots, val])
     setSlotInput('')
   }
 
   const removeSlot = (slot: string) =>
-    set('available_slots', (form.available_slots ?? []).filter(s => s !== slot))
+    set('available_slots', form.available_slots.filter(s => s !== slot))
 
   const addPhoto = () => {
     const val = photoInput.trim()
     if (!val) return
-    const urls = form.photo_urls ?? []
-    if (!urls.includes(val)) set('photo_urls', [...urls, val])
+    if (!form.photo_urls.includes(val))
+      set('photo_urls', [...form.photo_urls, val])
     setPhotoInput('')
   }
 
   const removePhoto = (url: string) =>
-    set('photo_urls', (form.photo_urls ?? []).filter(u => u !== url))
+    set('photo_urls', form.photo_urls.filter(u => u !== url))
 
   const handleSubmit = async () => {
-    if (!form.name.trim()) return toast.error('Nama package wajib diisi.')
+    if (!form.name.trim())                            return toast.error('Nama package wajib diisi.')
     if (!form.price_per_pax || form.price_per_pax <= 0) return toast.error('Harga per pax harus lebih dari 0.')
-    if (form.max_pax && form.max_pax < form.min_pax) return toast.error('Max pax tidak boleh kurang dari min pax.')
+    if (form.max_pax !== null && form.max_pax < form.min_pax)
+      return toast.error('Max pax tidak boleh kurang dari min pax.')
 
     setSaving(true)
     try {
@@ -110,8 +111,9 @@ export default function PackageFormContent({ mode, packageId }: Props) {
         toast.success('Package berhasil diupdate!')
       }
       router.push('/vendor/packages')
-    } catch (e: any) {
-      toast.error(e?.message ?? 'Gagal menyimpan package.')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Gagal menyimpan package.'
+      toast.error(msg)
     } finally {
       setSaving(false)
     }
@@ -121,7 +123,6 @@ export default function PackageFormContent({ mode, packageId }: Props) {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      {/* Header */}
       <div className="flex items-center gap-3">
         <Link href="/vendor/packages">
           <button className="text-muted-foreground hover:text-foreground transition-colors">
@@ -138,7 +139,6 @@ export default function PackageFormContent({ mode, packageId }: Props) {
 
       <div className="rounded-xl border bg-card p-6 shadow-sm space-y-5">
 
-        {/* Nama */}
         <div className="grid gap-1">
           <Label>Nama Package <span className="text-red-500">*</span></Label>
           <Input
@@ -148,7 +148,6 @@ export default function PackageFormContent({ mode, packageId }: Props) {
           />
         </div>
 
-        {/* Deskripsi */}
         <div className="grid gap-1">
           <Label>Deskripsi</Label>
           <textarea
@@ -160,7 +159,6 @@ export default function PackageFormContent({ mode, packageId }: Props) {
           />
         </div>
 
-        {/* Harga & Pax */}
         <div className="grid grid-cols-3 gap-3">
           <div className="grid gap-1">
             <Label>Harga / Pax (Rp) <span className="text-red-500">*</span></Label>
@@ -190,7 +188,6 @@ export default function PackageFormContent({ mode, packageId }: Props) {
           </div>
         </div>
 
-        {/* Durasi & Quota */}
         <div className="grid grid-cols-2 gap-3">
           <div className="grid gap-1">
             <Label>Durasi (menit) <span className="text-xs text-muted-foreground">(opsional)</span></Label>
@@ -211,7 +208,6 @@ export default function PackageFormContent({ mode, packageId }: Props) {
           </div>
         </div>
 
-        {/* Hari tersedia */}
         <div className="grid gap-2">
           <Label>Hari Tersedia <span className="text-xs text-muted-foreground">(panduan)</span></Label>
           <div className="flex flex-wrap gap-2">
@@ -222,9 +218,9 @@ export default function PackageFormContent({ mode, packageId }: Props) {
                 onClick={() => toggleDay(day)}
                 className={[
                   'px-3 py-1 rounded-full text-xs font-medium border transition-colors',
-                  (form.available_days ?? []).includes(day)
+                  form.available_days.includes(day)
                     ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-background border-border text-muted-foreground hover:border-primary'
+                    : 'bg-background border-border text-muted-foreground hover:border-primary',
                 ].join(' ')}
               >
                 {DAYS_ID[day]}
@@ -233,7 +229,6 @@ export default function PackageFormContent({ mode, packageId }: Props) {
           </div>
         </div>
 
-        {/* Slot jam */}
         <div className="grid gap-2">
           <Label>Slot Jam <span className="text-xs text-muted-foreground">(panduan)</span></Label>
           <div className="flex gap-2">
@@ -247,7 +242,7 @@ export default function PackageFormContent({ mode, packageId }: Props) {
             <Button type="button" variant="outline" size="sm" onClick={addSlot}>Tambah</Button>
           </div>
           <div className="flex flex-wrap gap-2">
-            {(form.available_slots ?? []).map(slot => (
+            {form.available_slots.map(slot => (
               <span key={slot} className="flex items-center gap-1 bg-muted px-2 py-0.5 rounded-full text-xs">
                 {slot}
                 <button type="button" onClick={() => removeSlot(slot)} className="hover:text-destructive">×</button>
@@ -256,7 +251,6 @@ export default function PackageFormContent({ mode, packageId }: Props) {
           </div>
         </div>
 
-        {/* Foto */}
         <div className="grid gap-2">
           <Label>Foto Package <span className="text-xs text-muted-foreground">(URL)</span></Label>
           <div className="flex gap-2">
@@ -269,7 +263,7 @@ export default function PackageFormContent({ mode, packageId }: Props) {
             <Button type="button" variant="outline" size="sm" onClick={addPhoto}>Tambah</Button>
           </div>
           <div className="flex flex-wrap gap-2">
-            {(form.photo_urls ?? []).map(url => (
+            {form.photo_urls.map(url => (
               <div key={url} className="relative group">
                 <img src={url} alt="" className="h-16 w-24 object-cover rounded-lg border" />
                 <button
@@ -282,7 +276,6 @@ export default function PackageFormContent({ mode, packageId }: Props) {
           </div>
         </div>
 
-        {/* Syarat */}
         <div className="grid gap-1">
           <Label>Syarat & Ketentuan <span className="text-xs text-muted-foreground">(opsional)</span></Label>
           <textarea
@@ -294,7 +287,6 @@ export default function PackageFormContent({ mode, packageId }: Props) {
           />
         </div>
 
-        {/* Catatan */}
         <div className="grid gap-1">
           <Label>Catatan Internal <span className="text-xs text-muted-foreground">(opsional)</span></Label>
           <textarea
@@ -306,7 +298,6 @@ export default function PackageFormContent({ mode, packageId }: Props) {
           />
         </div>
 
-        {/* Submit */}
         <div className="flex gap-3 pt-2">
           <Button onClick={handleSubmit} disabled={saving} className="flex-1">
             {saving ? 'Menyimpan…' : mode === 'create' ? 'Buat Package' : 'Simpan Perubahan'}
