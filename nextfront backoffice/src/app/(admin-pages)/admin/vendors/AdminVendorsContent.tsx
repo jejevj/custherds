@@ -3,19 +3,103 @@ import { useEffect, useState, useCallback } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { adminService, AdminVendor } from "@/services/admin.service"
 import { Button } from "@/components/ui/button"
-import { Store, UserCheck, UserX } from "lucide-react"
+import { UserCheck, UserX, Eye, X } from "lucide-react"
 
 const STATUS_TABS = [
-  { label: "All",      value: undefined },
-  { label: "Pending",  value: "pending" },
-  { label: "Approved", value: "approved" },
-  { label: "Rejected", value: "rejected" },
+  { label: "All",       value: undefined },
+  { label: "Pending",   value: "pending" },
+  { label: "Approved",  value: "approved" },
+  { label: "Rejected",  value: "rejected" },
 ] as const
 
 const STATUS_BADGE: Record<string, string> = {
-  pending:  "bg-amber-100 text-amber-700",
-  approved: "bg-green-100 text-green-700",
-  rejected: "bg-red-100 text-red-700",
+  pending:    "bg-amber-100 text-amber-700",
+  approved:   "bg-green-100 text-green-700",
+  rejected:   "bg-red-100 text-red-700",
+  incomplete: "bg-gray-100 text-gray-500",
+}
+
+function VendorDetailModal({ vendor, onClose }: { vendor: AdminVendor; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-background rounded-2xl shadow-2xl w-full max-w-xl my-auto border">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b">
+          <div>
+            <h3 className="font-semibold text-base">{vendor.vendor_business_name ?? vendor.user_name}</h3>
+            <p className="text-xs text-muted-foreground">{vendor.user_email}</p>
+          </div>
+          <button onClick={onClose} className="rounded-full p-1 hover:bg-muted transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-5">
+          {/* Status */}
+          <span className={`text-xs px-2.5 py-1 rounded-full font-medium capitalize ${
+            STATUS_BADGE[vendor.vendor_status] ?? 'bg-muted text-muted-foreground'
+          }`}>
+            Status: {vendor.vendor_status}
+          </span>
+
+          {/* Rejection notes */}
+          {vendor.approval_notes && vendor.vendor_status === 'rejected' && (
+            <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm">
+              <p className="font-semibold text-red-700 mb-0.5">Catatan Penolakan</p>
+              <p className="text-red-600">{vendor.approval_notes}</p>
+            </div>
+          )}
+
+          {/* Info grid */}
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {([
+              ["Nama Toko",        vendor.vendor_business_name],
+              ["Contact Person",   vendor.user_name],
+              ["Telepon",          vendor.user_phone],
+              ["Kategori",         vendor.vendor_category],
+              ["Area",             vendor.vendor_area],
+              ["Jam Operasional",  vendor.vendor_opening_hours],
+              ["NPWP",             vendor.vendor_npwp],
+              ["NIB",              vendor.vendor_nib],
+              ["Terdaftar",        new Date(vendor.created_at).toLocaleDateString('id-ID', { day:'2-digit', month:'long', year:'numeric' })],
+            ] as [string, string | null | undefined][]).map(([k, v]) => (
+              <div key={k}>
+                <p className="text-xs text-muted-foreground">{k}</p>
+                <p className="font-medium">{v ?? '—'}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Alamat */}
+          {vendor.vendor_location && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-1">Alamat / Lokasi</p>
+              <p className="text-sm leading-relaxed">{vendor.vendor_location}</p>
+            </div>
+          )}
+
+          {/* Deskripsi */}
+          {vendor.vendor_short_description && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-1">Deskripsi Singkat</p>
+              <p className="text-sm leading-relaxed">{vendor.vendor_short_description}</p>
+            </div>
+          )}
+
+          {/* Website */}
+          {vendor.vendor_website && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-1">Website</p>
+              <a href={vendor.vendor_website} target="_blank" rel="noopener noreferrer"
+                className="text-sm text-blue-600 underline break-all">
+                {vendor.vendor_website}
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function AdminVendorsContent() {
@@ -29,6 +113,7 @@ export default function AdminVendorsContent() {
   const [acting,     setActing]     = useState<string | null>(null)
   const [rejectId,   setRejectId]   = useState<string | null>(null)
   const [rejectNote, setRejectNote] = useState("")
+  const [detail,     setDetail]     = useState<AdminVendor | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -48,11 +133,8 @@ export default function AdminVendorsContent() {
       setVendors(prev => prev.map(v =>
         v.vendor_id === vendor.vendor_id ? { ...v, vendor_status: 'approved' } : v
       ))
-    } catch {
-      alert('Failed to approve vendor.')
-    } finally {
-      setActing(null)
-    }
+    } catch { alert('Failed to approve vendor.') }
+    finally { setActing(null) }
   }
 
   const handleRejectConfirm = async () => {
@@ -61,21 +143,17 @@ export default function AdminVendorsContent() {
     try {
       await adminService.approveVendor(rejectId, 'reject', rejectNote || undefined)
       setVendors(prev => prev.map(v =>
-        v.vendor_id === rejectId ? { ...v, vendor_status: 'rejected' } : v
+        v.vendor_id === rejectId
+          ? { ...v, vendor_status: 'rejected', approval_notes: rejectNote } : v
       ))
-    } catch {
-      alert('Failed to reject vendor.')
-    } finally {
-      setActing(null)
-      setRejectId(null)
-      setRejectNote("")
-    }
+    } catch { alert('Failed to reject vendor.') }
+    finally { setActing(null); setRejectId(null); setRejectNote("") }
   }
 
   const setTab = (val?: string) => {
-    const params = new URLSearchParams()
-    if (val) params.set('status', val)
-    router.push(`/admin/vendors?${params.toString()}`)
+    const p = new URLSearchParams()
+    if (val) p.set('status', val)
+    router.push(`/admin/vendors?${p.toString()}`)
   }
 
   return (
@@ -85,18 +163,14 @@ export default function AdminVendorsContent() {
         <p className="text-muted-foreground">Review and approve vendor registrations.</p>
       </div>
 
-      {/* Filter tabs */}
       <div className="flex gap-2 flex-wrap">
         {STATUS_TABS.map(tab => (
-          <button
-            key={tab.label}
-            onClick={() => setTab(tab.value)}
+          <button key={tab.label} onClick={() => setTab(tab.value)}
             className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
               statusFilter === tab.value
                 ? 'bg-primary text-primary-foreground border-primary'
                 : 'bg-background text-muted-foreground border-border hover:border-primary/60'
-            }`}
-          >
+            }`}>
             {tab.label}
           </button>
         ))}
@@ -109,9 +183,9 @@ export default function AdminVendorsContent() {
           <thead>
             <tr className="text-left text-muted-foreground border-b bg-muted/40">
               <th className="px-4 py-3 font-medium">Business Name</th>
-              <th className="px-4 py-3 font-medium">Owner</th>
               <th className="px-4 py-3 font-medium">Email</th>
-              <th className="px-4 py-3 font-medium">Location</th>
+              <th className="px-4 py-3 font-medium">Phone</th>
+              <th className="px-4 py-3 font-medium">Category</th>
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium">Registered</th>
               <th className="px-4 py-3 font-medium">Actions</th>
@@ -124,17 +198,10 @@ export default function AdminVendorsContent() {
               <tr><td colSpan={7} className="text-center py-10 text-muted-foreground">No vendors found.</td></tr>
             ) : vendors.map(v => (
               <tr key={v.vendor_id} className="border-b last:border-0 hover:bg-muted/30">
-                <td className="px-4 py-3 font-medium">
-                  <div className="flex items-center gap-2">
-                    <Store className="h-4 w-4 text-muted-foreground shrink-0" />
-                    {v.vendor_business_name ?? <span className="italic text-muted-foreground">—</span>}
-                  </div>
-                </td>
-                <td className="px-4 py-3">{v.user_name}</td>
+                <td className="px-4 py-3 font-medium">{v.vendor_business_name ?? '—'}</td>
                 <td className="px-4 py-3 text-muted-foreground text-xs">{v.user_email}</td>
-                <td className="px-4 py-3 text-xs text-muted-foreground max-w-[180px] truncate">
-                  {v.vendor_location ?? '—'}
-                </td>
+                <td className="px-4 py-3 text-muted-foreground text-xs">{v.user_phone ?? '—'}</td>
+                <td className="px-4 py-3">{v.vendor_category ?? <span className="text-muted-foreground">—</span>}</td>
                 <td className="px-4 py-3">
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${
                     STATUS_BADGE[v.vendor_status] ?? 'bg-muted text-muted-foreground'
@@ -146,26 +213,30 @@ export default function AdminVendorsContent() {
                   {new Date(v.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                 </td>
                 <td className="px-4 py-3">
-                  {v.vendor_status === 'pending' ? (
-                    <div className="flex gap-2">
-                      <Button size="sm"
-                        className="h-7 px-3 text-xs bg-green-600 hover:bg-green-700 text-white gap-1"
-                        disabled={acting === v.vendor_id}
-                        onClick={() => handleApprove(v)}>
-                        <UserCheck className="h-3.5 w-3.5" />
-                        {acting === v.vendor_id ? '...' : 'Approve'}
-                      </Button>
-                      <Button size="sm" variant="outline"
-                        className="h-7 px-3 text-xs text-red-600 border-red-300 hover:bg-red-50 gap-1"
-                        disabled={acting === v.vendor_id}
-                        onClick={() => { setRejectId(v.vendor_id); setRejectNote("") }}>
-                        <UserX className="h-3.5 w-3.5" />
-                        Reject
-                      </Button>
-                    </div>
-                  ) : (
-                    <span className="text-xs text-muted-foreground capitalize">{v.vendor_status}</span>
-                  )}
+                  <div className="flex gap-2 items-center">
+                    <Button size="sm" variant="outline"
+                      className="h-7 px-2.5 text-xs gap-1"
+                      onClick={() => setDetail(v)}>
+                      <Eye className="h-3.5 w-3.5" /> Detail
+                    </Button>
+                    {v.vendor_status === 'pending' && (
+                      <>
+                        <Button size="sm"
+                          className="h-7 px-3 text-xs bg-green-600 hover:bg-green-700 text-white gap-1"
+                          disabled={acting === v.vendor_id}
+                          onClick={() => handleApprove(v)}>
+                          <UserCheck className="h-3.5 w-3.5" />
+                          {acting === v.vendor_id ? '...' : 'Approve'}
+                        </Button>
+                        <Button size="sm" variant="outline"
+                          className="h-7 px-3 text-xs text-red-600 border-red-300 hover:bg-red-50 gap-1"
+                          disabled={acting === v.vendor_id}
+                          onClick={() => { setRejectId(v.vendor_id); setRejectNote("") }}>
+                          <UserX className="h-3.5 w-3.5" /> Reject
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -173,30 +244,26 @@ export default function AdminVendorsContent() {
         </table>
       </div>
 
-      {/* Reject confirmation modal */}
+      {/* Detail modal */}
+      {detail && <VendorDetailModal vendor={detail} onClose={() => setDetail(null)} />}
+
+      {/* Reject modal */}
       {rejectId && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md space-y-4">
+          <div className="bg-background rounded-xl shadow-2xl p-6 w-full max-w-md space-y-4 border">
             <h3 className="font-semibold text-lg">Reject Vendor</h3>
-            <p className="text-sm text-muted-foreground">
-              Please provide a reason for rejection (optional).
-            </p>
+            <p className="text-sm text-muted-foreground">Berikan alasan penolakan (opsional). Akan ditampilkan ke vendor.</p>
             <textarea
               className="w-full border rounded-lg p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
               rows={3}
-              placeholder="e.g. Business documents incomplete or unverifiable"
+              placeholder="Contoh: Dokumen NIB tidak valid"
               value={rejectNote}
               onChange={e => setRejectNote(e.target.value)}
             />
             <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => { setRejectId(null); setRejectNote("") }}>
-                Cancel
-              </Button>
-              <Button
-                className="bg-red-600 hover:bg-red-700 text-white"
-                disabled={!!acting}
-                onClick={handleRejectConfirm}
-              >
+              <Button variant="outline" onClick={() => { setRejectId(null); setRejectNote("") }}>Cancel</Button>
+              <Button className="bg-red-600 hover:bg-red-700 text-white"
+                disabled={!!acting} onClick={handleRejectConfirm}>
                 {acting ? 'Processing...' : 'Confirm Reject'}
               </Button>
             </div>
