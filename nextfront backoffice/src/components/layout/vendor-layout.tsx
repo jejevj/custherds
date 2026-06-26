@@ -7,7 +7,7 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { GlobalSearch } from "@/components/global-search"
 import { UserDropdown } from "@/components/UserDropdown"
 import Footer from "@/components/layout/Footer"
-import { VendorStatusGate } from "@/components/layout/VendorStatusGate"
+import VendorStatusGate from "@/components/layout/VendorStatusGate"
 import {
   SidebarInset,
   SidebarProvider,
