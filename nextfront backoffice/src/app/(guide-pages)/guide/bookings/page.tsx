@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { AlertTriangle, Upload } from "lucide-react"
+import { AlertTriangle, Upload, Eye, CalendarDays, Users, FileText, MapPin, CheckCircle2 } from "lucide-react"
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
   confirmed:          "default",
@@ -27,13 +27,27 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = 
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  pending_vendor:     "Menunggu Approval Vendor",
-  confirmed:          "Dikonfirmasi — Tunjukkan ke Vendor",
-  pending_receipt:    "Sudah Checkin — Upload Receipt",
-  pending_completion: "Menunggu Konfirmasi Vendor",
-  completed:          "Selesai ✓",
+  pending_vendor:     "Menunggu Approval",
+  confirmed:          "Dikonfirmasi",
+  pending_receipt:    "Upload Receipt",
+  pending_completion: "Menunggu Konfirmasi",
+  completed:          "Selesai",
   rejected:           "Ditolak",
   cancelled:          "Dibatalkan",
+}
+
+function Row({ icon, label, value, mono }: {
+  icon?: React.ReactNode
+  label: string
+  value: string
+  mono?: boolean
+}) {
+  return (
+    <div className="flex justify-between items-start px-3 py-2 gap-4">
+      <span className="text-muted-foreground flex items-center gap-1.5 shrink-0 text-xs">{icon}{label}</span>
+      <span className={`text-right text-sm ${mono ? "font-mono text-xs" : ""}`}>{value}</span>
+    </div>
+  )
 }
 
 export default function GuideBookingsPage() {
@@ -41,6 +55,9 @@ export default function GuideBookingsPage() {
   const [loading,    setLoading]    = useState(true)
   const [error,      setError]      = useState("")
   const [submitting, setSubmitting] = useState(false)
+
+  // detail modal
+  const [detailBook, setDetailBook] = useState<Booking | null>(null)
 
   // cancel dialog
   const [cancelTarget, setCancelTarget] = useState<string | null>(null)
@@ -109,7 +126,7 @@ export default function GuideBookingsPage() {
               <th className="px-4 py-3 font-medium">Tanggal</th>
               <th className="px-4 py-3 font-medium">Pax</th>
               <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Info</th>
+              <th className="px-4 py-3 font-medium">Detail</th>
               <th className="px-4 py-3 font-medium">Aksi</th>
             </tr>
           </thead>
@@ -128,28 +145,18 @@ export default function GuideBookingsPage() {
                     {STATUS_LABEL[b.status] ?? b.status}
                   </Badge>
                 </td>
-                <td className="px-4 py-3 text-xs text-muted-foreground max-w-[160px]">
-                  {b.status === "confirmed" && (
-                    <span className="text-blue-400">Tunjukkan kode booking ini ke petugas vendor saat tiba</span>
-                  )}
-                  {b.status === "rejected" && b.vendor_rejection_reason && (
-                    <button onClick={() => setViewReason(b.vendor_rejection_reason!)} className="flex items-center gap-1 text-red-500 hover:underline">
-                      <AlertTriangle className="w-3 h-3" /> Lihat alasan
-                    </button>
-                  )}
-                  {b.status === "cancelled" && b.cancelled_reason && (
-                    <span>{b.cancelled_reason}</span>
-                  )}
-                  {b.status === "pending_completion" && (
-                    <span className="text-blue-400">Menunggu vendor konfirmasi selesai</span>
-                  )}
-                  {b.status === "completed" && (
-                    <span className="text-emerald-500">Kunjungan selesai ✓</span>
-                  )}
+                {/* Kolom Detail: tombol Lihat Detail untuk semua status */}
+                <td className="px-4 py-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setDetailBook(b)}
+                  >
+                    <Eye size={13} className="mr-1" /> Lihat Detail
+                  </Button>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex gap-2 flex-wrap">
-                    {/* Upload Receipt: hanya guide, hanya saat pending_receipt (setelah vendor checkin) */}
                     {b.status === "pending_receipt" && (
                       <Button
                         size="sm"
@@ -160,7 +167,6 @@ export default function GuideBookingsPage() {
                         <Upload size={13} className="mr-1" /> Upload Receipt
                       </Button>
                     )}
-                    {/* Cancel */}
                     {["pending_vendor", "confirmed", "pending_receipt", "pending_completion"].includes(b.status) && (
                       <Button
                         size="sm"
@@ -179,7 +185,97 @@ export default function GuideBookingsPage() {
         </table>
       </div>
 
-      {/* Upload Receipt Dialog */}
+      {/* ─── Detail Booking Modal ─────────────────────────────────────────── */}
+      <Dialog open={!!detailBook} onOpenChange={open => { if (!open) setDetailBook(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText size={17} /> Detail Booking
+              {detailBook && (
+                <Badge variant={STATUS_VARIANT[detailBook.status] ?? "secondary"} className="ml-auto">
+                  {STATUS_LABEL[detailBook.status] ?? detailBook.status}
+                </Badge>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+
+          {detailBook && (
+            <div className="space-y-4 py-1">
+              {/* Info rows */}
+              <div className="rounded-lg border bg-muted/20 divide-y text-sm">
+                <Row icon={<FileText size={12}/>}     label="Kode Booking" value={detailBook.booking_code} mono />
+                <Row icon={<CalendarDays size={12}/>} label="Tanggal"       value={new Date(detailBook.booking_date).toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })} />
+                {detailBook.booking_time && <Row label="Waktu" value={detailBook.booking_time} />}
+                <Row icon={<Users size={12}/>} label="Jumlah Pax" value={`${detailBook.pax_count} orang`} />
+                {detailBook.tourist_nationality && <Row label="Kewarganegaraan" value={detailBook.tourist_nationality} />}
+                {detailBook.checkin_at && (
+                  <Row icon={<MapPin size={12}/>} label="Checkin" value={new Date(detailBook.checkin_at).toLocaleString("id-ID")} />
+                )}
+                {detailBook.receipt_uploaded_at && (
+                  <Row icon={<Upload size={12}/>} label="Receipt diupload" value={new Date(detailBook.receipt_uploaded_at).toLocaleString("id-ID")} />
+                )}
+                {detailBook.completed_at && (
+                  <Row icon={<CheckCircle2 size={12}/>} label="Selesai pada" value={new Date(detailBook.completed_at).toLocaleString("id-ID")} />
+                )}
+              </div>
+
+              {/* Instruksi khusus status confirmed */}
+              {detailBook.status === "confirmed" && (
+                <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3 text-sm">
+                  <p className="font-medium text-blue-400 mb-1">📋 Instruksi Checkin</p>
+                  <p className="text-muted-foreground text-xs">
+                    Tunjukkan halaman ini atau kode booking
+                    <span className="font-mono font-bold text-foreground mx-1">{detailBook.booking_code}</span>
+                    ke petugas vendor saat tiba di lokasi. Petugas akan melakukan checkin dari sistem mereka.
+                  </p>
+                </div>
+              )}
+
+              {/* Rejection reason */}
+              {detailBook.status === "rejected" && detailBook.vendor_rejection_reason && (
+                <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm">
+                  <p className="text-xs text-muted-foreground mb-1">Alasan Penolakan</p>
+                  <p className="text-red-400">{detailBook.vendor_rejection_reason}</p>
+                </div>
+              )}
+
+              {/* Cancelled reason */}
+              {detailBook.status === "cancelled" && detailBook.cancelled_reason && (
+                <div className="rounded-lg border border-orange-500/20 bg-orange-500/5 px-4 py-3 text-sm">
+                  <p className="text-xs text-muted-foreground mb-1">Alasan Pembatalan</p>
+                  <p className="text-orange-400">{detailBook.cancelled_reason}</p>
+                </div>
+              )}
+
+              {detailBook.notes && (
+                <div className="text-sm">
+                  <p className="text-muted-foreground text-xs mb-1">Catatan</p>
+                  <p className="bg-muted/30 rounded-lg px-3 py-2">{detailBook.notes}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDetailBook(null)}>Tutup</Button>
+            {detailBook?.status === "pending_receipt" && (
+              <Button
+                className="bg-amber-500 hover:bg-amber-600 text-white"
+                onClick={() => {
+                  setReceiptTarget(detailBook.id)
+                  setReceiptUrl("")
+                  setReceiptError("")
+                  setDetailBook(null)
+                }}
+              >
+                <Upload size={14} className="mr-1" /> Upload Receipt
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Upload Receipt Dialog ────────────────────────────────────────── */}
       <Dialog open={!!receiptTarget} onOpenChange={open => { if (!open) setReceiptTarget(null) }}>
         <DialogContent>
           <DialogHeader>
@@ -189,8 +285,8 @@ export default function GuideBookingsPage() {
           </DialogHeader>
           <div className="py-2 space-y-3">
             <p className="text-sm text-muted-foreground">
-              Upload URL file bukti kunjungan (foto, invoice, atau dokumen lainnya).
-              Vendor sudah melakukan checkin, sekarang kamu perlu submit receipt.
+              Vendor sudah melakukan checkin. Upload URL file bukti kunjungan
+              (foto, invoice, atau dokumen lainnya).
             </p>
             <div className="space-y-1">
               <Label htmlFor="receipt-url">URL Receipt <span className="text-red-500">*</span></Label>
@@ -213,7 +309,7 @@ export default function GuideBookingsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Cancel Dialog */}
+      {/* ─── Cancel Dialog ────────────────────────────────────────────────── */}
       <Dialog open={!!cancelTarget} onOpenChange={open => { if (!open) setCancelTarget(null) }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Batalkan Booking</DialogTitle></DialogHeader>
@@ -237,7 +333,7 @@ export default function GuideBookingsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* View Rejection Reason Dialog */}
+      {/* ─── View Rejection Reason (shortcut dari tabel) ──────────────────── */}
       <Dialog open={!!viewReason} onOpenChange={open => { if (!open) setViewReason(null) }}>
         <DialogContent>
           <DialogHeader>
