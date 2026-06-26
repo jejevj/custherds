@@ -30,7 +30,7 @@ export default function GuidePackagesContent() {
       available_day: day || undefined,
       limit:         60,
     })
-      .then(res => setPackages(res.data))
+      .then(res => setPackages(res))
       .catch(() => setError('Gagal memuat packages. Coba lagi.'))
       .finally(() => setLoading(false))
   }, [search, sort, day])
