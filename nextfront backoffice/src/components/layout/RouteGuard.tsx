@@ -1,25 +1,29 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/auth.store'
 
 export default function RouteGuard({ children }: { children: React.ReactNode }) {
-  const router    = useRouter()
-  const isLoggedIn = useAuthStore((s) => s.isLoggedIn)
-  const user      = useAuthStore((s) => s.user)
+  const isLoggedIn  = useAuthStore((s) => s.isLoggedIn)
+  const user        = useAuthStore((s) => s.user)
+  const hasHydrated = useAuthStore((s) => s._hasHydrated)
 
   useEffect(() => {
+    // Tunggu hydration selesai dulu
+    if (!hasHydrated) return
+
     if (!isLoggedIn) {
-      router.replace('/login')
+      window.location.href = '/login'
       return
     }
     if (user && user.user_type !== 99) {
-      router.replace('/login')
+      window.location.href = '/login'
     }
-  }, [isLoggedIn, user, router])
+  }, [hasHydrated, isLoggedIn, user])
 
-  if (!isLoggedIn) return null
+  // Jangan render apapun sebelum hydration selesai
+  if (!hasHydrated) return null
+  if (!isLoggedIn)  return null
 
   return <>{children}</>
 }
