@@ -50,15 +50,16 @@ class GuideUpdateRequest(BaseModel):
 
 
 class GuideSubmitRequest(BaseModel):
-    """Called when guide clicks 'Submit for Review' after filling all required fields.
-    All required fields must be non-empty for submission to succeed.
+    """
+    Field wajib untuk submit ke review admin.
+    KTP & sertifikat harus sudah diupload terlebih dahulu via /uploads.
     """
     guide_nationality: str
     guide_phone: str
-    guide_id_card_url: str        # URL KTP/Paspor sudah diupload
-    guide_certificate: str        # URL sertifikat guide sudah diupload
+    guide_id_card_url: str          # URL KTP / Paspor
+    guide_certificate: str          # URL sertifikat guide
     bio: str
-    languages: str
-    bank_name: str
-    bank_account_number: str
-    bank_account_name: str
+    languages: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_account_number: Optional[str] = None
+    bank_account_name: Optional[str] = None

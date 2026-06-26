@@ -1,12 +1,75 @@
 "use client"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { guidesService, GuideProfile } from "@/services/guides.service"
+import { uploadsService } from "@/services/uploads.service"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 
 interface Props { children: React.ReactNode }
+
+function FileUploadField({
+  label, required, currentUrl, fieldKey, onUploaded,
+}: {
+  label: string
+  required?: boolean
+  currentUrl: string
+  fieldKey: string
+  onUploaded: (url: string) => void
+}) {
+  const ref = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [err, setErr] = useState("")
+
+  const handleChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setErr("")
+    setUploading(true)
+    try {
+      const { url } = await uploadsService.upload(file)
+      onUploaded(url)
+    } catch (ex: unknown) {
+      setErr(ex instanceof Error ? ex.message : "Upload gagal")
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="grid gap-1.5">
+      <Label className="text-sm">{label}{required && <span className="text-destructive"> *</span>}</Label>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => ref.current?.click()}
+          disabled={uploading}
+          className="flex-1 h-9 rounded-lg px-3 text-sm text-left truncate transition-colors"
+          style={{
+            background: "oklch(1 0 0 / 0.06)",
+            border: "1px solid oklch(1 0 0 / 0.15)",
+            color: currentUrl ? "inherit" : "oklch(0.556 0 0)",
+          }}
+        >
+          {uploading ? "Mengupload…" : currentUrl ? `✓ ${currentUrl.split("/").pop()}` : "Pilih file (JPG/PNG/PDF, maks 5MB)"}
+        </button>
+        {currentUrl && (
+          <a
+            href={uploadsService.getUrl(currentUrl)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs underline text-muted-foreground whitespace-nowrap"
+          >
+            Lihat
+          </a>
+        )}
+      </div>
+      {err && <p className="text-xs text-destructive">{err}</p>}
+      <input ref={ref} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="hidden" onChange={handleChange} />
+    </div>
+  )
+}
 
 export default function GuideStatusGate({ children }: Props) {
   const [profile, setProfile] = useState<GuideProfile | null>(null)
@@ -19,7 +82,12 @@ export default function GuideStatusGate({ children }: Props) {
   const set = (k: keyof GuideProfile, v: string) =>
     setForm(f => ({ ...f, [k]: v }))
 
-  const isComplete = !!form.bio && !!form.guide_phone && !!form.guide_nationality
+  const isComplete =
+    !!form.bio &&
+    !!form.guide_phone &&
+    !!form.guide_nationality &&
+    !!form.guide_id_card_url &&
+    !!form.guide_certificate
 
   useEffect(() => {
     guidesService.getProfile()
@@ -30,6 +98,8 @@ export default function GuideStatusGate({ children }: Props) {
           guide_phone: p.guide_phone ?? "",
           guide_nationality: p.guide_nationality ?? "",
           languages: p.languages ?? "",
+          guide_id_card_url: p.guide_id_card_url ?? "",
+          guide_certificate: p.guide_certificate ?? "",
           bank_name: p.bank_name ?? "",
           bank_account_number: p.bank_account_number ?? "",
           bank_account_name: p.bank_account_name ?? "",
@@ -119,16 +189,12 @@ export default function GuideStatusGate({ children }: Props) {
             )}
           </div>
 
-          {/* Pending state */}
           {status === "pending" ? (
             <div className="px-8 py-8">
               <div className="space-y-2">
-                {["Bio / Deskripsi Diri", "Nomor HP", "Kewarganegaraan", "Bahasa", "Nama Bank", "No. Rekening", "Atas Nama Rekening"].map(item => (
+                {["Bio / Deskripsi Diri", "Nomor HP", "Kewarganegaraan", "KTP / Paspor", "Sertifikat Guide", "Bahasa", "Rekening Bank"].map(item => (
                   <div key={item} className="flex items-center gap-3 text-sm">
-                    <div
-                      className="w-4 h-4 rounded-full flex items-center justify-center text-xs"
-                      style={{ background: "oklch(1 0 0 / 0.15)" }}
-                    >✓</div>
+                    <div className="w-4 h-4 rounded-full flex items-center justify-center text-xs" style={{ background: "oklch(1 0 0 / 0.15)" }}>✓</div>
                     <span className="text-muted-foreground">{item}</span>
                   </div>
                 ))}
@@ -136,7 +202,6 @@ export default function GuideStatusGate({ children }: Props) {
               <p className="mt-6 text-xs text-muted-foreground">Kamu akan mendapat notifikasi saat verifikasi selesai.</p>
             </div>
           ) : (
-            /* incomplete / rejected — form */
             <div className="px-8 py-6 space-y-5">
               {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -169,6 +234,29 @@ export default function GuideStatusGate({ children }: Props) {
                     <Label className="text-sm">Bahasa yang Dikuasai</Label>
                     <Input value={form.languages ?? ""} onChange={e => set("languages", e.target.value)} placeholder="Indonesia, English, dll." className="bg-white/[0.06] border-white/[0.15]" />
                   </div>
+                </div>
+              </div>
+
+              <Separator style={{ background: "oklch(1 0 0 / 0.10)" }} />
+
+              {/* Dokumen */}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Dokumen Identitas</p>
+                <div className="space-y-3">
+                  <FileUploadField
+                    label="KTP / Paspor"
+                    required
+                    currentUrl={form.guide_id_card_url ?? ""}
+                    fieldKey="guide_id_card_url"
+                    onUploaded={url => set("guide_id_card_url", url)}
+                  />
+                  <FileUploadField
+                    label="Sertifikat Guide"
+                    required
+                    currentUrl={form.guide_certificate ?? ""}
+                    fieldKey="guide_certificate"
+                    onUploaded={url => set("guide_certificate", url)}
+                  />
                 </div>
               </div>
 
