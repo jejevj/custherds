@@ -4,6 +4,15 @@ import { bookingsService, Booking } from "@/services/bookings.service"
 import { useSearchParams } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
   confirmed:      "default",
@@ -19,6 +28,12 @@ export default function VendorBookingsContent() {
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState("")
 
+  // reject dialog state
+  const [rejectTarget, setRejectTarget] = useState<string | null>(null)
+  const [rejectReason, setRejectReason] = useState("")
+  const [rejectError,  setRejectError]  = useState("")
+  const [submitting,   setSubmitting]   = useState(false)
+
   useEffect(() => {
     bookingsService.list()
       .then(d => setBookings(status ? d.filter(b => b.status === status) : d))
@@ -30,9 +45,34 @@ export default function VendorBookingsContent() {
     await bookingsService.approve(id, "approve")
     setBookings(prev => prev.map(b => b.id === id ? { ...b, status: "confirmed" } : b))
   }
-  const reject = async (id: string) => {
-    await bookingsService.approve(id, "reject")
-    setBookings(prev => prev.map(b => b.id === id ? { ...b, status: "rejected" } : b))
+
+  const openRejectDialog = (id: string) => {
+    setRejectTarget(id)
+    setRejectReason("")
+    setRejectError("")
+  }
+
+  const submitReject = async () => {
+    if (!rejectTarget) return
+    if (!rejectReason.trim()) {
+      setRejectError("Alasan penolakan wajib diisi.")
+      return
+    }
+    setSubmitting(true)
+    try {
+      await bookingsService.approve(rejectTarget, "reject", rejectReason.trim())
+      setBookings(prev =>
+        prev.map(b => b.id === rejectTarget
+          ? { ...b, status: "rejected", vendor_rejection_reason: rejectReason.trim() }
+          : b
+        )
+      )
+      setRejectTarget(null)
+    } catch {
+      setRejectError("Gagal menolak booking. Coba lagi.")
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -43,7 +83,9 @@ export default function VendorBookingsContent() {
         </h1>
         <p className="text-muted-foreground">Booking dari guide untuk produk kamu.</p>
       </div>
+
       {error && <p className="text-sm text-red-500">{error}</p>}
+
       <div className="rounded-xl border bg-card shadow-sm overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -71,7 +113,7 @@ export default function VendorBookingsContent() {
                 {status === "pending_vendor" && (
                   <td className="px-4 py-3 flex gap-2">
                     <Button size="sm" onClick={() => approve(b.id)}>Approve</Button>
-                    <Button size="sm" variant="destructive" onClick={() => reject(b.id)}>Reject</Button>
+                    <Button size="sm" variant="destructive" onClick={() => openRejectDialog(b.id)}>Reject</Button>
                   </td>
                 )}
               </tr>
@@ -79,6 +121,32 @@ export default function VendorBookingsContent() {
           </tbody>
         </table>
       </div>
+
+      {/* Reject Dialog */}
+      <Dialog open={!!rejectTarget} onOpenChange={open => { if (!open) setRejectTarget(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Tolak Booking</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Label htmlFor="reject-reason">Alasan Penolakan <span className="text-red-500">*</span></Label>
+            <Textarea
+              id="reject-reason"
+              placeholder="Tuliskan alasan kenapa booking ini ditolak..."
+              value={rejectReason}
+              onChange={e => { setRejectReason(e.target.value); setRejectError("") }}
+              rows={4}
+            />
+            {rejectError && <p className="text-sm text-red-500">{rejectError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectTarget(null)} disabled={submitting}>Batal</Button>
+            <Button variant="destructive" onClick={submitReject} disabled={submitting}>
+              {submitting ? "Menolak..." : "Tolak Booking"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
