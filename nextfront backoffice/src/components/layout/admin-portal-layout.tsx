@@ -60,7 +60,7 @@ export default function AdminPortalLayout({
               <div className="relative hidden md:inline-flex">
                 <NotificationDropdown />
               </div>
-              <UserDropdown />
+              <UserDropdown loginPath="/admin/login" />
             </div>
           </div>
         </header>

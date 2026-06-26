@@ -7,14 +7,14 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const token = request.cookies.get('access_token')?.value
 
-  // Izinkan semua public paths
+  // Izinkan public paths
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next()
   }
 
   // Protected routes
   const isProtected =
-    pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/admin/dashboard') ||
     pathname.startsWith('/guide/dashboard') ||
     pathname.startsWith('/vendor/dashboard')
 
@@ -28,7 +28,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/admin/login', request.url))
   }
 
-  // Redirect root
+  // Root redirect
   if (pathname === '/') {
     return NextResponse.redirect(new URL('/admin/login', request.url))
   }
