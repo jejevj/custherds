@@ -1,9 +1,10 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { packagesBrowseService, PackageBrowse, DAY_OPTIONS, formatRupiah } from '@/services/packages-browse.service'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Clock, Package, TrendingUp, Search, SlidersHorizontal, X, Users, CalendarDays } from 'lucide-react'
+import { Clock, Package, TrendingUp, Search, SlidersHorizontal, Users } from 'lucide-react'
 
 const SORT_OPTIONS = [
   { value: 'newest',          label: 'Terbaru' },
@@ -13,13 +14,13 @@ const SORT_OPTIONS = [
 ]
 
 export default function GuidePackagesContent() {
+  const router = useRouter()
   const [packages,  setPackages]  = useState<PackageBrowse[]>([])
   const [loading,   setLoading]   = useState(true)
   const [search,    setSearch]    = useState('')
   const [sort,      setSort]      = useState('commission_desc')
   const [day,       setDay]       = useState('')
   const [error,     setError]     = useState('')
-  const [selected,  setSelected]  = useState<PackageBrowse | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -88,32 +89,39 @@ export default function GuidePackagesContent() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {packages.map(p => (
-            <PackageCard key={p.id} pkg={p} onSelect={() => setSelected(p)} />
+            <PackageCard
+              key={p.id}
+              pkg={p}
+              onClick={() => router.push(`/guide/packages/${p.id}`)}
+            />
           ))}
         </div>
-      )}
-
-      {/* Detail Modal */}
-      {selected && (
-        <PackageDetailModal pkg={selected} onClose={() => setSelected(null)} />
       )}
     </div>
   )
 }
 
-function PackageCard({ pkg: p, onSelect }: { pkg: PackageBrowse; onSelect: () => void }) {
+function PackageCard({ pkg: p, onClick }: { pkg: PackageBrowse; onClick: () => void }) {
   return (
     <button
-      onClick={onSelect}
-      className="text-left rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md overflow-hidden hover:border-emerald-500/50 hover:bg-white/8 transition-all group w-full"
+      onClick={onClick}
+      className="text-left rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md overflow-hidden hover:border-emerald-500/50 hover:bg-white/[0.08] transition-all w-full group"
     >
       {/* Photo */}
-      <div className="relative h-32 bg-white/5 flex items-center justify-center">
+      <div className="relative h-32 bg-white/5 flex items-center justify-center overflow-hidden">
         {p.photo_urls?.[0] ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={p.photo_urls[0]} alt={p.name} className="w-full h-full object-cover" />
+          <img
+            src={p.photo_urls[0]} alt={p.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
         ) : (
           <Package size={40} className="text-white/10" />
+        )}
+        {p.photo_urls?.length > 1 && (
+          <span className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded-full">
+            +{p.photo_urls.length - 1} foto
+          </span>
         )}
         {p.vendor_allow_direct_booking && (
           <span className="absolute top-2 right-2 bg-emerald-600/90 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full">
@@ -123,7 +131,7 @@ function PackageCard({ pkg: p, onSelect }: { pkg: PackageBrowse; onSelect: () =>
       </div>
 
       <div className="p-4 space-y-2">
-        <p className="text-[11px] text-muted-foreground">{p.vendor_name}</p>
+        <p className="text-[11px] text-muted-foreground truncate">{p.vendor_name}</p>
         <h3 className="font-semibold text-sm leading-tight line-clamp-2">{p.name}</h3>
 
         <div className="flex flex-wrap gap-x-3 gap-y-1">
@@ -138,7 +146,9 @@ function PackageCard({ pkg: p, onSelect }: { pkg: PackageBrowse; onSelect: () =>
         </div>
 
         <div className="flex items-center justify-between pt-1">
-          <span className="text-xs text-muted-foreground">{formatRupiah(p.price_per_pax)}<span className="text-[10px]">/pax</span></span>
+          <span className="text-xs text-muted-foreground">
+            {formatRupiah(p.price_per_pax)}<span className="text-[10px]">/pax</span>
+          </span>
           {p.commission_per_pax > 0 && (
             <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400">
               <TrendingUp size={11} /> +{formatRupiah(p.commission_per_pax)}/pax
@@ -147,85 +157,5 @@ function PackageCard({ pkg: p, onSelect }: { pkg: PackageBrowse; onSelect: () =>
         </div>
       </div>
     </button>
-  )
-}
-
-function PackageDetailModal({ pkg: p, onClose }: { pkg: PackageBrowse; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4" onClick={onClose}>
-      <div
-        className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-slate-900 shadow-2xl overflow-y-auto max-h-[90vh]"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header photo */}
-        {p.photo_urls?.[0] && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={p.photo_urls[0]} alt={p.name} className="w-full h-48 object-cover" />
-        )}
-
-        <button
-          onClick={onClose}
-          className="absolute top-3 right-3 bg-black/50 hover:bg-black/70 text-white rounded-full p-1 transition-colors"
-        >
-          <X size={16} />
-        </button>
-
-        <div className="p-6 space-y-4">
-          <div>
-            <p className="text-xs text-emerald-400 font-medium">{p.vendor_name}</p>
-            <h2 className="text-lg font-bold mt-0.5">{p.name}</h2>
-          </div>
-
-          {p.description && <p className="text-sm text-muted-foreground">{p.description}</p>}
-
-          <div className="grid grid-cols-2 gap-3">
-            <InfoBox label="Harga" value={`${formatRupiah(p.price_per_pax)} / pax`} />
-            <InfoBox label="Komisi Guide" value={`${formatRupiah(p.commission_per_pax)} / pax`} highlight />
-            <InfoBox label="Guide %" value={`${p.guide_percent}%`} />
-            <InfoBox label="Durasi" value={p.duration_minutes ? `${p.duration_minutes} menit` : '–'} />
-            <InfoBox label="Min Pax" value={String(p.min_pax)} />
-            <InfoBox label="Max Pax" value={p.max_pax ? String(p.max_pax) : '–'} />
-          </div>
-
-          {p.available_days?.length > 0 && (
-            <div>
-              <p className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1"><CalendarDays size={12} /> Hari Tersedia</p>
-              <div className="flex flex-wrap gap-1.5">
-                {p.available_days.map(d => (
-                  <span key={d} className="text-xs bg-white/10 px-2 py-0.5 rounded-full">{d}</span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {p.available_slots?.length > 0 && (
-            <div>
-              <p className="text-xs text-muted-foreground mb-1.5">Slot Waktu</p>
-              <div className="flex flex-wrap gap-1.5">
-                {p.available_slots.map(s => (
-                  <span key={s} className="text-xs bg-white/10 px-2 py-0.5 rounded-full">{s}</span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {p.terms && (
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Syarat & Ketentuan</p>
-              <p className="text-xs text-foreground/80 whitespace-pre-line">{p.terms}</p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function InfoBox({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
-  return (
-    <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-2">
-      <p className="text-[10px] text-muted-foreground">{label}</p>
-      <p className={`text-sm font-semibold mt-0.5 ${highlight ? 'text-emerald-400' : ''}`}>{value}</p>
-    </div>
   )
 }
