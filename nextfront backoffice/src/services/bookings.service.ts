@@ -12,6 +12,7 @@ export interface Booking {
   booking_date: string
   booking_time: string | null
   pax_count: number
+  total_price: number | null
   tourist_names: string | null
   tourist_nationality: string | null
   notes: string | null
@@ -38,7 +39,7 @@ export interface BookingCreate {
 }
 
 export const bookingsService = {
-  list:   ()          => api.get<Booking[]>('/bookings'),
+  list:   ()           => api.get<Booking[]>('/bookings'),
   get:    (id: string) => api.get<Booking>(`/bookings/${id}`),
   create: (payload: BookingCreate) => api.post<Booking>('/bookings', payload),
 
