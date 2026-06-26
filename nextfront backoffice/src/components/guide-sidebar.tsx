@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/sidebar"
 import {
   House, ClipboardList, WalletCards,
-  CircleUserRound, LifeBuoyIcon, SendIcon,
+  CircleUserRound, LifeBuoyIcon, SendIcon, Store,
 } from "lucide-react"
 import { ScrollArea } from "./ui/scroll-area"
 import Image from "next/image"
@@ -20,17 +20,20 @@ const navMain = [
   {
     title: "Bookings", url: "#", icon: <ClipboardList />,
     items: [
-      { title: "All Bookings",    url: "/guide/bookings" },
-      { title: "Create Booking",  url: "/guide/bookings/create" },
+      { title: "All Bookings",   url: "/guide/bookings" },
+      { title: "Create Booking", url: "/guide/bookings/create" },
     ],
   },
   {
     title: "Finance", url: "#", icon: <WalletCards />,
     items: [
-      { title: "Wallet",               url: "/guide/finance/wallet" },
-      { title: "Withdrawal",           url: "/guide/finance/withdrawal" },
-      { title: "Transaction History",  url: "/guide/finance/transactions" },
+      { title: "Wallet",              url: "/guide/finance/wallet" },
+      { title: "Withdrawal",          url: "/guide/finance/withdrawal" },
+      { title: "Transaction History", url: "/guide/finance/transactions" },
     ],
+  },
+  {
+    title: "Browse Vendors", url: "/guide/vendors", icon: <Store />,
   },
   { title: "Profile", url: "/guide/profile", icon: <CircleUserRound /> },
 ]

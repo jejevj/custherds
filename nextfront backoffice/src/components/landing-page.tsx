@@ -2,6 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
+import { Button } from "@/components/ui/button"
 import { Map, ShoppingBag } from "lucide-react"
 
 export default function LandingPage() {
@@ -33,10 +34,7 @@ export default function LandingPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
           {/* Guide Card */}
-          <Link
-            href="/guide/login"
-            className="group rounded-xl border bg-card shadow-sm hover:shadow-md hover:border-primary transition-all duration-200 p-6 flex flex-col items-center gap-3 text-center"
-          >
+          <div className="group rounded-xl border bg-card shadow-sm hover:shadow-md hover:border-primary transition-all duration-200 p-6 flex flex-col items-center gap-4 text-center">
             <div className="flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 group-hover:bg-primary/20 transition-colors">
               <Map className="w-6 h-6 text-primary" />
             </div>
@@ -46,16 +44,13 @@ export default function LandingPage() {
                 Manage your bookings, wallet, and guide profile
               </p>
             </div>
-            <span className="mt-1 text-xs font-medium text-primary group-hover:underline">
-              Sign in as Guide &rarr;
-            </span>
-          </Link>
+            <Button asChild className="w-full" size="sm">
+              <Link href="/guide/login">Sign in as Guide</Link>
+            </Button>
+          </div>
 
           {/* Vendor Card */}
-          <Link
-            href="/vendor/login"
-            className="group rounded-xl border bg-card shadow-sm hover:shadow-md hover:border-primary transition-all duration-200 p-6 flex flex-col items-center gap-3 text-center"
-          >
+          <div className="group rounded-xl border bg-card shadow-sm hover:shadow-md hover:border-primary transition-all duration-200 p-6 flex flex-col items-center gap-4 text-center">
             <div className="flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 group-hover:bg-primary/20 transition-colors">
               <ShoppingBag className="w-6 h-6 text-primary" />
             </div>
@@ -65,10 +60,10 @@ export default function LandingPage() {
                 Manage your bookings, deposit, and store profile
               </p>
             </div>
-            <span className="mt-1 text-xs font-medium text-primary group-hover:underline">
-              Sign in as Vendor &rarr;
-            </span>
-          </Link>
+            <Button asChild className="w-full" size="sm">
+              <Link href="/vendor/login">Sign in as Vendor</Link>
+            </Button>
+          </div>
 
         </div>
 
