@@ -63,7 +63,7 @@ export default function VendorLayout({
               <div className="relative hidden md:inline-flex">
                 <NotificationDropdown />
               </div>
-              <UserDropdown />
+              <UserDropdown loginPath="/vendor/login" />
             </div>
           </div>
         </header>

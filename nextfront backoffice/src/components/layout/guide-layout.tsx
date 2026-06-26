@@ -63,7 +63,7 @@ export default function GuideLayout({
               <div className="relative hidden md:inline-flex">
                 <NotificationDropdown />
               </div>
-              <UserDropdown />
+              <UserDropdown loginPath="/guide/login" />
             </div>
           </div>
         </header>
