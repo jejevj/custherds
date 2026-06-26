@@ -3,15 +3,18 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { LayoutDashboard, Package, ShoppingCart, BarChart2, User, ChevronLeft, ChevronRight } from 'lucide-react'
+import {
+  LayoutDashboard, BoxesIcon, ShoppingCart,
+  BarChart2, User, ChevronLeft, ChevronRight, CalendarDays
+} from 'lucide-react'
 import { useState } from 'react'
 
 const NAV_ITEMS = [
-  { href: '/vendor/dashboard',             label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/vendor/dashboard/products',    label: 'Produk',    icon: Package },
-  { href: '/vendor/dashboard/orders',      label: 'Pesanan',   icon: ShoppingCart },
-  { href: '/vendor/dashboard/analytics',   label: 'Analitik',  icon: BarChart2 },
-  { href: '/vendor/dashboard/profile',     label: 'Profil',    icon: User },
+  { href: '/vendor/dashboard',  label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/vendor/packages',   label: 'Package',   icon: BoxesIcon },
+  { href: '/vendor/bookings',   label: 'Bookings',  icon: CalendarDays },
+  { href: '/vendor/finance',    label: 'Keuangan',  icon: BarChart2 },
+  { href: '/vendor/profile',    label: 'Profil',    icon: User },
 ]
 
 export default function VendorSidebar() {
@@ -30,21 +33,30 @@ export default function VendorSidebar() {
             <p className="text-blue-400 text-xs">Vendor Portal</p>
           </div>
         )}
-        <button onClick={() => setCollapsed(!collapsed)}
-          className="ml-auto text-slate-400 hover:text-white transition-colors">
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="ml-auto text-slate-400 hover:text-white transition-colors"
+        >
           {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
         </button>
       </div>
       <nav className="flex-1 py-4 space-y-1 px-2 overflow-y-auto">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-          const active = href === '/vendor/dashboard' ? pathname === href : pathname.startsWith(href)
+          const active = href === '/vendor/dashboard'
+            ? pathname === href
+            : pathname.startsWith(href)
           return (
-            <Link key={href} href={href}
+            <Link
+              key={href}
+              href={href}
+              title={collapsed ? label : undefined}
               className={cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                active ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                active
+                  ? 'bg-blue-600 text-white'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
               )}
-              title={collapsed ? label : undefined}>
+            >
               <Icon size={18} className="shrink-0" />
               {!collapsed && <span>{label}</span>}
             </Link>
