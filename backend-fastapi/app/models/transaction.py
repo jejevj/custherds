@@ -8,9 +8,18 @@ from app.db.base_class import Base
 
 class Transaction(Base):
     """
-    Dibuat Vendor setelah layanan selesai + upload kuitansi.
-    Superadmin validasi → bagi hasil dihitung otomatis.
-    Status: pending_review → approved → settled / rejected
+    Model Invoice-Clearing / Reimbursement:
+
+    [1] Guide foto nota + input nominal  -> status: pending_vendor_approval
+    [2] Vendor verifikasi nota:
+        - Tolak            -> status: rejected
+        - Approve Metode A -> status: payment_pending (Xendit QRIS/VA)
+                          -> setelah bayar: paid -> settled
+        - Approve Metode B -> status: settled (potong deposit instan)
+    [3] Saat settled:
+        guide_commission  -> guides.wallet_balance (+)
+        platform_fee      -> akun master platform
+    [4] Guide tarik dana kapan saja -> GuideWithdrawal
     """
     __tablename__ = "transactions"
 
@@ -30,12 +39,14 @@ class Transaction(Base):
     vendor_amount               = Column(Numeric(15, 2), nullable=True)
     guide_commission            = Column(Numeric(15, 2), nullable=True)
     platform_fee                = Column(Numeric(15, 2), nullable=True)
-    status                      = Column(String(30), default="pending_review", nullable=False, index=True)
+    status                      = Column(String(30), default="pending_vendor_approval", nullable=False, index=True)
+    payment_method              = Column(String(30), nullable=True)  # deposit | pay_as_you_go
+    xendit_invoice_id           = Column(String(255), nullable=True)
+    xendit_payment_id           = Column(String(255), nullable=True)
+    paid_at                     = Column(DateTime(timezone=True), nullable=True)
     submitted_at                = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    reviewed_by                 = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    reviewed_at                 = Column(DateTime(timezone=True), nullable=True)
-    review_notes                = Column(Text, nullable=True)
-    rejection_reason            = Column(Text, nullable=True)
+    vendor_reviewed_at          = Column(DateTime(timezone=True), nullable=True)
+    vendor_rejection_reason     = Column(Text, nullable=True)
     settled_at                  = Column(DateTime(timezone=True), nullable=True)
     created_at                  = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at                  = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
@@ -44,5 +55,4 @@ class Transaction(Base):
     vendor                      = relationship("Vendor", back_populates="transactions")
     guide                       = relationship("Guide", back_populates="transactions")
     split_config                = relationship("RevenueSplitConfig", back_populates="transactions")
-    reviewer                    = relationship("User", foreign_keys=[reviewed_by], back_populates="reviewed_transactions")
     disbursement_items          = relationship("CommissionDisbursementItem", back_populates="transaction")

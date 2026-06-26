@@ -7,6 +7,10 @@ from app.db.base_class import Base
 
 
 class Guide(Base):
+    """
+    Profil tambahan untuk user_type=1.
+    wallet_balance: saldo dompet digital guide (komisi masuk, belum di-withdraw).
+    """
     __tablename__ = "guides"
 
     id                          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
@@ -19,6 +23,7 @@ class Guide(Base):
     rating                      = Column(Float, nullable=True)
     total_earnings              = Column(Numeric(15, 2), default=0, nullable=False)
     pending_earnings            = Column(Numeric(15, 2), default=0, nullable=False)
+    wallet_balance              = Column(Numeric(15, 2), default=0, nullable=False)
     bank_name                   = Column(String(100), nullable=True)
     bank_account_number         = Column(String(50), nullable=True)
     bank_account_name           = Column(String(255), nullable=True)
@@ -29,3 +34,4 @@ class Guide(Base):
     bookings                    = relationship("Booking", back_populates="guide")
     transactions                = relationship("Transaction", back_populates="guide")
     disbursements               = relationship("CommissionDisbursement", back_populates="guide")
+    withdrawals                 = relationship("GuideWithdrawal", back_populates="guide")

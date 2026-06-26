@@ -7,6 +7,10 @@ from app.db.base_class import Base
 
 
 class Vendor(Base):
+    """
+    Profil bisnis untuk user_type=2.
+    deposit_balance: saldo wallet deposit untuk Metode B (Deposit Wallet).
+    """
     __tablename__ = "vendors"
 
     id                          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
@@ -24,6 +28,8 @@ class Vendor(Base):
     vendor_know_from            = Column(Text, nullable=True)
     vendor_status               = Column(String(20), default="pending", nullable=False)
     approval_notes              = Column(Text, nullable=True)
+    deposit_balance             = Column(Numeric(15, 2), default=0, nullable=False)
+    deposit_minimum             = Column(Numeric(15, 2), nullable=True)
     created_at                  = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at                  = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -32,3 +38,4 @@ class Vendor(Base):
     bookings                    = relationship("Booking", back_populates="vendor")
     transactions                = relationship("Transaction", back_populates="vendor")
     destinations                = relationship("Destination", back_populates="vendor")
+    deposit_topups              = relationship("VendorDepositTopup", back_populates="vendor")
