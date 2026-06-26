@@ -8,12 +8,7 @@ export interface UploadResult {
 
 /**
  * Upload satu file ke backend.
- * Kembalikan URL relatif yang bisa langsung disimpan ke field profil.
- *
- * Contoh:
- *   const { url } = await uploadsService.upload(file)
- *   // url = "/api/v1/uploads/abc123.jpg"
- *   await guidesService.updateProfile({ guide_id_card_url: url })
+ * POST /uploads  (API_BASE_URL sudah include /api/v1)
  */
 export const uploadsService = {
   upload: async (file: File): Promise<UploadResult> => {
@@ -37,12 +32,17 @@ export const uploadsService = {
   },
 
   /**
-   * URL lengkap untuk ditampilkan di <img> atau dibuka di tab baru.
-   * Karena endpoint butuh auth, tidak bisa langsung pakai di src img —
-   * gunakan untuk admin panel yang sudah login.
+   * Kembalikan URL lengkap yang bisa dipakai untuk fetch dengan auth.
+   * relativeUrl bisa berupa:
+   *   - "/api/v1/uploads/xxx.jpg"  -> sudah absolute path, strip prefix dulu
+   *   - "/uploads/xxx.jpg"         -> langsung concat
+   *   - "https://..."              -> kembalikan apa adanya
    */
   getUrl: (relativeUrl: string): string => {
+    if (!relativeUrl) return ''
     if (relativeUrl.startsWith('http')) return relativeUrl
-    return `${API_BASE_URL}${relativeUrl}`
+    // Normalise: hapus /api/v1 di depan kalau ada (karena API_BASE_URL sudah include itu)
+    const normalised = relativeUrl.replace(/^\/api\/v1/, '')
+    return `${API_BASE_URL}${normalised}`
   },
 }
