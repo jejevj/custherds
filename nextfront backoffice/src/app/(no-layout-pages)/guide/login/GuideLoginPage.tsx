@@ -20,7 +20,6 @@ export default function GuideLoginPage() {
           </div>
           <LoginForm
             role="guide"
-            loginEndpoint="https://www.custherds.com/guide/login/doLogin"
             registerHref="https://custherds.ourtestcloud.my.id/register"
           />
         </div>

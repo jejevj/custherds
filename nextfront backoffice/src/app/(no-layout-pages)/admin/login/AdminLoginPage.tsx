@@ -20,7 +20,6 @@ export default function AdminLoginPage() {
           </div>
           <LoginForm
             role="admin"
-            loginEndpoint="https://www.custherds.com/admin/login/doLogin"
             registerHref="#"
           />
         </div>

@@ -20,7 +20,6 @@ export default function VendorLoginPage() {
           </div>
           <LoginForm
             role="vendor"
-            loginEndpoint="https://www.custherds.com/vendor/login/doLogin"
             registerHref="https://custherds.ourtestcloud.my.id/register"
           />
         </div>
