@@ -10,9 +10,8 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { MapPin, Clock, ShoppingBag, Search, X, Store } from "lucide-react"
-import { useAuthStore } from "@/store/auth.store"
+import { api } from "@/services/api"
 
-// Area code map — matches vendor_area integer in DB
 const AREA_MAP: Record<number, string> = {
   1:  "Kuta",
   2:  "Seminyak",
@@ -26,7 +25,6 @@ const AREA_MAP: Record<number, string> = {
   10: "Ubud Center",
 }
 
-// Category code map — matches vendor_category integer in DB
 const CATEGORY_MAP: Record<number, string> = {
   1:  "Restaurant",
   2:  "Cafe",
@@ -53,37 +51,30 @@ interface VendorPublic {
 }
 
 export default function BrowseVendorsPage() {
-  const accessToken = useAuthStore((s) => s.accessToken)
-  const [vendors, setVendors]     = useState<VendorPublic[]>([])
-  const [loading, setLoading]     = useState(false)
-  const [error, setError]         = useState<string | null>(null)
-  const [search, setSearch]       = useState("")
-  const [area, setArea]           = useState<string>("all")
-  const [category, setCategory]   = useState<string>("all")
+  const [vendors, setVendors]   = useState<VendorPublic[]>([])
+  const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState<string | null>(null)
+  const [search, setSearch]     = useState("")
+  const [area, setArea]         = useState<string>("all")
+  const [category, setCategory] = useState<string>("all")
 
   const fetchVendors = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const params = new URLSearchParams()
-      if (area !== "all")     params.set("area",     area)
-      if (category !== "all") params.set("category", category)
-      if (search.trim())      params.set("search",   search.trim())
-      params.set("limit", "100")
+      const params: Record<string, string | number | boolean | undefined> = { limit: 100 }
+      if (area !== "all")     params.area     = Number(area)
+      if (category !== "all") params.category = Number(category)
+      if (search.trim())      params.search   = search.trim()
 
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/vendors/browse?${params}`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      )
-      if (!res.ok) throw new Error("Failed to load vendors")
-      const data: VendorPublic[] = await res.json()
+      const data = await api.get<VendorPublic[]>("/vendors/browse", { params })
       setVendors(data)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Unknown error")
+      setError(e instanceof Error ? e.message : "Failed to load vendors")
     } finally {
       setLoading(false)
     }
-  }, [accessToken, area, category, search])
+  }, [area, category, search])
 
   useEffect(() => { fetchVendors() }, [fetchVendors])
 
@@ -97,7 +88,6 @@ export default function BrowseVendorsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Browse Vendors</h1>
         <p className="text-sm text-muted-foreground mt-1">
@@ -148,21 +138,18 @@ export default function BrowseVendorsPage() {
         )}
       </div>
 
-      {/* Results count */}
       {!loading && (
         <p className="text-sm text-muted-foreground">
           {vendors.length} vendor{vendors.length !== 1 ? "s" : ""} found
         </p>
       )}
 
-      {/* Error */}
       {error && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
           {error}
         </div>
       )}
 
-      {/* Loading skeleton */}
       {loading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -171,7 +158,6 @@ export default function BrowseVendorsPage() {
         </div>
       )}
 
-      {/* Cards */}
       {!loading && vendors.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {vendors.map((v) => (
@@ -188,16 +174,12 @@ export default function BrowseVendorsPage() {
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
                 {v.vendor_short_description && (
-                  <p className="text-muted-foreground line-clamp-2">
-                    {v.vendor_short_description}
-                  </p>
+                  <p className="text-muted-foreground line-clamp-2">{v.vendor_short_description}</p>
                 )}
                 <div className="flex items-center gap-1.5 text-muted-foreground">
                   <MapPin className="w-3.5 h-3.5 shrink-0" />
                   <span>{AREA_MAP[v.vendor_area] ?? `Area ${v.vendor_area}`}</span>
-                  {v.vendor_location && (
-                    <span className="truncate">— {v.vendor_location}</span>
-                  )}
+                  {v.vendor_location && <span className="truncate">— {v.vendor_location}</span>}
                 </div>
                 {v.vendor_opening_hours && (
                   <div className="flex items-center gap-1.5 text-muted-foreground">
@@ -213,12 +195,8 @@ export default function BrowseVendorsPage() {
                   </span>
                 </div>
                 {v.vendor_website && (
-                  <a
-                    href={v.vendor_website}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary underline underline-offset-2 text-xs"
-                  >
+                  <a href={v.vendor_website} target="_blank" rel="noopener noreferrer"
+                    className="text-primary underline underline-offset-2 text-xs">
                     Visit website
                   </a>
                 )}
@@ -228,7 +206,6 @@ export default function BrowseVendorsPage() {
         </div>
       )}
 
-      {/* Empty state */}
       {!loading && vendors.length === 0 && !error && (
         <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
           <Store className="w-10 h-10 text-muted-foreground" />
