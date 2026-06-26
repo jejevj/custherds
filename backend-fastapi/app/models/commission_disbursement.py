@@ -45,4 +45,5 @@ class CommissionDisbursementItem(Base):
     created_at          = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     disbursement        = relationship("CommissionDisbursement", back_populates="items")
-    transaction         = relationship("Transaction", back_populates="disbursement_items")
+    # back_populates dihapus — Transaction tidak punya disbursement_items relationship
+    transaction         = relationship("Transaction", foreign_keys=[transaction_id])
