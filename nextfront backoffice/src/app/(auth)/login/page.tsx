@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { login } from '@/services/authService'
 import { useAuthStore } from '@/store/auth.store'
@@ -21,10 +21,12 @@ export default function LoginPage() {
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState<string | null>(null)
 
-  if (isLoggedIn) {
-    router.replace('/dashboard')
-    return null
-  }
+  // ✅ Redirect setelah render selesai, bukan saat render
+  useEffect(() => {
+    if (isLoggedIn) {
+      router.replace('/dashboard')
+    }
+  }, [isLoggedIn, router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -40,6 +42,8 @@ export default function LoginPage() {
       setLoading(false)
     }
   }
+
+  if (isLoggedIn) return null
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 px-4">
