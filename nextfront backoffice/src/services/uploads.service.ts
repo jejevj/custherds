@@ -1,4 +1,5 @@
-import { apiBase } from './api'
+import { API_BASE_URL } from '@/lib/constants'
+import { getTokens } from './api'
 
 export interface UploadResult {
   url: string
@@ -16,22 +17,20 @@ export interface UploadResult {
  */
 export const uploadsService = {
   upload: async (file: File): Promise<UploadResult> => {
-    const token = typeof window !== 'undefined'
-      ? localStorage.getItem('access_token')
-      : null
+    const { access } = getTokens()
 
     const form = new FormData()
     form.append('file', file)
 
-    const res = await fetch(`${apiBase}/uploads`, {
+    const res = await fetch(`${API_BASE_URL}/uploads`, {
       method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: access ? { Authorization: `Bearer ${access}` } : {},
       body: form,
     })
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
-      throw new Error(err?.detail ?? 'Upload gagal')
+      throw new Error((err as { detail?: string })?.detail ?? 'Upload gagal')
     }
 
     return res.json() as Promise<UploadResult>
@@ -39,11 +38,11 @@ export const uploadsService = {
 
   /**
    * URL lengkap untuk ditampilkan di <img> atau dibuka di tab baru.
-   * Karena endpoint butuh auth, tidak bisa langsung pakai di src img — 
+   * Karena endpoint butuh auth, tidak bisa langsung pakai di src img —
    * gunakan untuk admin panel yang sudah login.
    */
   getUrl: (relativeUrl: string): string => {
     if (relativeUrl.startsWith('http')) return relativeUrl
-    return `${apiBase}${relativeUrl}`
+    return `${API_BASE_URL}${relativeUrl}`
   },
 }
