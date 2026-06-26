@@ -28,9 +28,12 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled:      "Dibatalkan",
 }
 
-function formatRupiah(n?: number | null) {
-  if (n == null) return "-"
-  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n)
+/** Format angka (number, string desimal, atau null) ke format Rupiah */
+function formatRupiah(n?: number | string | null) {
+  if (n == null || n === "") return "-"
+  const num = Number(n)
+  if (isNaN(num)) return "-"
+  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num)
 }
 
 export default function VendorBookingsContent() {
@@ -179,7 +182,7 @@ export default function VendorBookingsContent() {
                 <Row icon={<Users size={13}/>}       label="Jumlah Pax"    value={`${detailBook.pax_count} orang`} />
                 {detailBook.tourist_nationality && <Row label="Kewarganegaraan" value={detailBook.tourist_nationality} />}
                 {detailBook.booking_type === "package" && detailBook.package_price_snapshot && (
-                  <Row icon={<Package size={13}/>} label="Harga / Pax (snapshot)" value={formatRupiah(Number(detailBook.package_price_snapshot))} />
+                  <Row icon={<Package size={13}/>} label="Harga / Pax (snapshot)" value={formatRupiah(detailBook.package_price_snapshot)} />
                 )}
               </div>
 
