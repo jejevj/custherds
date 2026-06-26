@@ -1,22 +1,23 @@
 """
 File upload & serve endpoint.
 
-POST /api/v1/uploads              — upload single file, return URL
-POST /api/v1/uploads/multiple     — upload multiple files, return list of URLs
-GET  /api/v1/uploads/{filename}   — serve file (login required)
+POST /api/v1/uploads              — upload single file
+POST /api/v1/uploads/batch        — upload multiple files (terpisah prefix agar tidak
+                                    konflik dengan GET /{filename})
+GET  /api/v1/uploads/{filename}   — serve file
 
-File disimpan di: backend-fastapi/storage/uploads/
+Mengapa tidak /uploads/multiple?
+FastAPI mencocokkan GET /{filename} untuk SEMUA method pada path yang match,
+lalu membalas 405 jika method berbeda. Dengan prefix /batch yang tidak pernah
+bertabrakan dengan UUID filename, masalah ini hilang.
 """
-import os
 import uuid
 from pathlib import Path
 from typing import Any, List
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
 
-from app.db.session import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
 
@@ -30,90 +31,77 @@ ALLOWED_CONTENT_TYPES = {
     "application/pdf",
 }
 MAX_SIZE_BYTES = 5 * 1024 * 1024   # 5 MB per file
-MAX_FILES      = 10                 # max file per request
+MAX_FILES      = 10
 
 
 def _save_upload(content: bytes, original_filename: str) -> str:
-    """Simpan bytes ke disk, return filename yang tersimpan."""
     ext = Path(original_filename or "file").suffix.lower() or ".bin"
     filename = f"{uuid.uuid4().hex}{ext}"
-    with open(STORAGE_DIR / filename, "wb") as f:
-        f.write(content)
+    (STORAGE_DIR / filename).write_bytes(content)
     return filename
 
 
+# ---------------------------------------------------------------
+# POST  /api/v1/uploads          — single
+# ---------------------------------------------------------------
 @router.post("", summary="Upload single file (gambar / PDF)")
 async def upload_file(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
 ) -> Any:
     if file.content_type not in ALLOWED_CONTENT_TYPES:
-        raise HTTPException(
-            status_code=415,
-            detail=f"Tipe file tidak diizinkan. Gunakan: {', '.join(ALLOWED_CONTENT_TYPES)}"
-        )
+        raise HTTPException(415, f"Tipe file tidak diizinkan: {file.content_type}")
     content = await file.read()
     if len(content) > MAX_SIZE_BYTES:
-        raise HTTPException(status_code=413, detail="File terlalu besar. Maksimal 5MB.")
-
+        raise HTTPException(413, "File terlalu besar. Maksimal 5 MB.")
     filename = _save_upload(content, file.filename or "file")
     return {"url": f"/api/v1/uploads/{filename}", "filename": filename}
 
 
-@router.post("/multiple", summary="Upload multiple files sekaligus (maks 10 file, 5MB each)")
-async def upload_multiple(
+# ---------------------------------------------------------------
+# POST  /api/v1/uploads/batch    — multiple (pakai /batch bukan /multiple
+#                                   agar tidak ditangkap /{filename})
+# ---------------------------------------------------------------
+@router.post("/batch", summary="Upload multiple files sekaligus (maks 10 file, 5 MB each)")
+async def upload_batch(
     files: List[UploadFile] = File(...),
     current_user: User = Depends(get_current_user),
 ) -> Any:
     if len(files) > MAX_FILES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Maksimal {MAX_FILES} file per upload."
-        )
+        raise HTTPException(400, f"Maksimal {MAX_FILES} file per request.")
 
     results = []
-    for file in files:
-        if file.content_type not in ALLOWED_CONTENT_TYPES:
-            raise HTTPException(
-                status_code=415,
-                detail=f"File '{file.filename}' bertipe '{file.content_type}' tidak diizinkan."
-            )
-        content = await file.read()
+    for f in files:
+        if f.content_type not in ALLOWED_CONTENT_TYPES:
+            raise HTTPException(415, f"File '{f.filename}' bertipe '{f.content_type}' tidak diizinkan.")
+        content = await f.read()
         if len(content) > MAX_SIZE_BYTES:
-            raise HTTPException(
-                status_code=413,
-                detail=f"File '{file.filename}' terlalu besar. Maksimal 5MB per file."
-            )
-        filename = _save_upload(content, file.filename or "file")
+            raise HTTPException(413, f"File '{f.filename}' terlalu besar. Maksimal 5 MB.")
+        filename = _save_upload(content, f.filename or "file")
         results.append({"url": f"/api/v1/uploads/{filename}", "filename": filename})
 
     return {"uploaded": results, "count": len(results)}
 
 
-@router.get("/{filename}", summary="Serve uploaded file (login required)")
+# ---------------------------------------------------------------
+# GET   /api/v1/uploads/{filename}
+# ---------------------------------------------------------------
+@router.get("/{filename}", summary="Serve uploaded file")
 def serve_file(
     filename: str,
     current_user: User = Depends(get_current_user),
 ) -> FileResponse:
     if "/" in filename or ".." in filename:
-        raise HTTPException(status_code=400, detail="Nama file tidak valid")
-
+        raise HTTPException(400, "Nama file tidak valid.")
     filepath = STORAGE_DIR / filename
     if not filepath.exists():
-        raise HTTPException(status_code=404, detail="File tidak ditemukan")
-
-    return FileResponse(
-        path=str(filepath),
-        filename=filename,
-        media_type=_guess_media_type(filename),
-    )
+        raise HTTPException(404, "File tidak ditemukan.")
+    return FileResponse(str(filepath), filename=filename, media_type=_guess_media_type(filename))
 
 
 def _guess_media_type(filename: str) -> str:
     return {
-        ".jpg":  "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png":  "image/png",
-        ".webp": "image/webp",
-        ".pdf":  "application/pdf",
+        ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".png": "image/png",  ".webp": "image/webp",
+        ".pdf": "application/pdf",
     }.get(Path(filename).suffix.lower(), "application/octet-stream")

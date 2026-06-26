@@ -26,29 +26,26 @@ async function upload(file: File): Promise<UploadResult> {
   return res.json() as Promise<UploadResult>
 }
 
-/** Resolve relative URL (/api/v1/uploads/xxx) ke full URL jika perlu */
+/** Resolve relative URL (/api/v1/uploads/xxx) ke full URL */
 function getUrl(url: string): string {
   if (!url) return ''
   if (url.startsWith('http')) return url
   return `${API_BASE_URL.replace('/api/v1', '')}${url}`
 }
 
-/**
- * Backward-compat object — dipakai oleh GuideStatusGate, AdminGuidesContent,
- * AdminVendorsContent, dll.
- */
+/** Backward-compat object — dipakai GuideStatusGate, AdminGuides, AdminVendors */
 export const uploadsService = { upload, getUrl }
 
 /**
- * Upload multiple foto sekaligus ke POST /api/v1/uploads/multiple
- * Return array URL yang bisa langsung disimpan ke photo_urls
+ * Upload multiple foto sekaligus ke POST /api/v1/uploads/batch
+ * (path /batch menghindari konflik 405 dengan GET /{filename})
  */
 export async function uploadPhotos(files: File[]): Promise<string[]> {
   const { access } = getTokens()
   const form = new FormData()
   files.forEach(f => form.append('files', f))
 
-  const res = await fetch(`${API_BASE_URL}/uploads/multiple`, {
+  const res = await fetch(`${API_BASE_URL}/uploads/batch`, {
     method: 'POST',
     headers: access ? { Authorization: `Bearer ${access}` } : {},
     body: form,
