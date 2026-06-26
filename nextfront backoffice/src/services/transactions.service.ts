@@ -1,16 +1,19 @@
 import { api } from './api'
-import { Transaction } from '@/types/transaction.types'
 
-export const getTransactions = (status?: string): Promise<Transaction[]> =>
-  api.get('/admin/transactions', { params: status ? { status } : undefined })
+export interface Transaction {
+  id: string
+  booking_id: string
+  amount: string
+  platform_fee: string
+  vendor_share: string
+  guide_share: string
+  status: string
+  xendit_payment_id: string | null
+  created_at: string
+}
 
-export const getTransaction = (id: string): Promise<Transaction> =>
-  api.get(`/transactions/${id}`)
-
-export const approveTransaction = (
-  id: string,
-  payment_method: 'deposit' | 'pay_as_you_go'
-) => api.post(`/transactions/${id}/approve`, { payment_method })
-
-export const rejectTransaction = (id: string, reason: string) =>
-  api.post(`/transactions/${id}/reject`, { reason })
+export const transactionsService = {
+  list: (status?: string) =>
+    api.get<Transaction[]>('/transactions', { params: status ? { status } : {} }),
+  get: (id: string) => api.get<Transaction>(`/transactions/${id}`),
+}

@@ -5,120 +5,40 @@ import { NavMain } from "@/components/nav-main"
 import { NavSecondary } from "@/components/nav-secondary"
 import { NavUser } from "@/components/nav-user"
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
+  Sidebar, SidebarContent, SidebarFooter,
+  SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import {
-  House,
-  CalendarDays,
-  Map,
-  Users,
-  Star,
-  BarChart2,
-  CircleUserRound,
-  LifeBuoyIcon,
-  SendIcon,
-  MessageSquare,
-  WalletCards,
-  Route,
-  Settings,
+  House, ClipboardList, WalletCards,
+  CircleUserRound, LifeBuoyIcon, SendIcon,
 } from "lucide-react"
 import { ScrollArea } from "./ui/scroll-area"
 import Image from "next/image"
 
-const data = {
-  user: {
-    name: "Guide User",
-    email: "guide@custherds.com",
-    avatar: "",
+const navMain = [
+  { title: "Dashboard",  url: "/guide/dashboard", icon: <House />, isActive: true },
+  {
+    title: "Bookings", url: "#", icon: <ClipboardList />,
+    items: [
+      { title: "All Bookings",    url: "/guide/bookings" },
+      { title: "Create Booking",  url: "/guide/bookings/create" },
+    ],
   },
-  navMain: [
-    {
-      title: "Dashboard",
-      url: "/guide/dashboard",
-      icon: <House />,
-      isActive: true,
-    },
-    {
-      title: "Tour Schedule",
-      url: "#",
-      icon: <CalendarDays />,
-      items: [
-        { title: "Today's Schedule", url: "/guide/schedule/today" },
-        { title: "All Schedules", url: "/guide/schedule" },
-        { title: "Add Schedule", url: "/guide/schedule/add" },
-      ],
-    },
-    {
-      title: "Tour Packages",
-      url: "#",
-      icon: <Route />,
-      items: [
-        { title: "Package List", url: "/guide/packages" },
-        { title: "Create Package", url: "/guide/packages/create" },
-        { title: "Tour Routes", url: "/guide/packages/routes" },
-      ],
-    },
-    {
-      title: "Destinations",
-      url: "/guide/destinations",
-      icon: <Map />,
-    },
-    {
-      title: "Tourists",
-      url: "#",
-      icon: <Users />,
-      items: [
-        { title: "Tourist List", url: "/guide/tourists" },
-        { title: "Guide Requests", url: "/guide/tourists/requests" },
-      ],
-    },
-    {
-      title: "Messages & Chat",
-      url: "/guide/messages",
-      icon: <MessageSquare />,
-    },
-    {
-      title: "Reviews & Ratings",
-      url: "/guide/reviews",
-      icon: <Star />,
-    },
-    {
-      title: "Finance",
-      url: "#",
-      icon: <WalletCards />,
-      items: [
-        { title: "Revenue", url: "/guide/finance/revenue" },
-        { title: "Withdrawal", url: "/guide/finance/withdrawal" },
-        { title: "Transaction History", url: "/guide/finance/transactions" },
-      ],
-    },
-    {
-      title: "Reports",
-      url: "/guide/reports",
-      icon: <BarChart2 />,
-    },
-    {
-      title: "Guide Profile",
-      url: "/guide/profile",
-      icon: <CircleUserRound />,
-    },
-    {
-      title: "Settings",
-      url: "/guide/settings",
-      icon: <Settings />,
-    },
-  ],
-  navSecondary: [
-    { title: "Support", url: "#", icon: <LifeBuoyIcon /> },
-    { title: "Feedback", url: "#", icon: <SendIcon /> },
-  ],
-}
+  {
+    title: "Finance", url: "#", icon: <WalletCards />,
+    items: [
+      { title: "Wallet",               url: "/guide/finance/wallet" },
+      { title: "Withdrawal",           url: "/guide/finance/withdrawal" },
+      { title: "Transaction History",  url: "/guide/finance/transactions" },
+    ],
+  },
+  { title: "Profile", url: "/guide/profile", icon: <CircleUserRound /> },
+]
+
+const navSecondary = [
+  { title: "Support",  url: "#", icon: <LifeBuoyIcon /> },
+  { title: "Feedback", url: "#", icon: <SendIcon /> },
+]
 
 type GuideSidebarProps = React.ComponentProps<typeof Sidebar> & {
   onHoverChange?: (value: boolean) => void
@@ -151,13 +71,13 @@ export function GuideSidebar({ onHoverChange, ...props }: GuideSidebarProps) {
         <SidebarContent className="overflow-hidden">
           <ScrollArea className="h-full">
             <div className="flex min-h-full flex-col">
-              <NavMain items={data.navMain} />
-              <NavSecondary items={data.navSecondary} className="mt-auto px-3" />
+              <NavMain items={navMain} />
+              <NavSecondary items={navSecondary} className="mt-auto px-3" />
             </div>
           </ScrollArea>
         </SidebarContent>
         <SidebarFooter className="border-t justify-center px-3">
-          <NavUser user={data.user} />
+          <NavUser user={{ name: "", email: "", avatar: "" }} />
         </SidebarFooter>
       </Sidebar>
     </div>

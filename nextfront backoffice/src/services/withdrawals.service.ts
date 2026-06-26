@@ -1,19 +1,28 @@
 import { api } from './api'
-import { Withdrawal } from '@/types/withdrawal.types'
 
-export const getWithdrawals = (status?: string): Promise<Withdrawal[]> =>
-  api.get('/admin/withdrawals', { params: status ? { status } : undefined })
-
-export const disburseWithdrawal = (id: string): Promise<{
-  message: string
-  withdrawal_id: string
-  xendit_disbursement_id: string
-  status: string
+export interface Withdrawal {
+  id: string
+  guide_id: string
   amount: string
-}> => api.post(`/admin/withdrawals/${id}/disburse`, {})
+  bank_name: string
+  bank_account_number: string
+  bank_account_name: string
+  status: string
+  notes: string | null
+  xendit_disbursement_id: string | null
+  created_at: string
+}
 
-export const overrideWithdrawal = (
-  id: string,
-  payload: { status: string; notes?: string; xendit_disbursement_id?: string }
-): Promise<{ message: string }> =>
-  api.put(`/admin/withdrawals/${id}/process`, payload)
+export interface WithdrawalCreate {
+  amount: number
+  bank_name?: string
+  bank_account_number?: string
+  bank_account_name?: string
+  notes?: string
+}
+
+export const withdrawalsService = {
+  list: () => api.get<Withdrawal[]>('/withdrawals'),
+  get: (id: string) => api.get<Withdrawal>(`/withdrawals/${id}`),
+  create: (payload: WithdrawalCreate) => api.post<Withdrawal>('/withdrawals', payload),
+}

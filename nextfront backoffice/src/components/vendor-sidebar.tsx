@@ -5,115 +5,39 @@ import { NavMain } from "@/components/nav-main"
 import { NavSecondary } from "@/components/nav-secondary"
 import { NavUser } from "@/components/nav-user"
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
+  Sidebar, SidebarContent, SidebarFooter,
+  SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import {
-  House,
-  ShoppingBag,
-  ClipboardList,
-  Star,
-  BarChart2,
-  Settings,
-  CircleUserRound,
-  LifeBuoyIcon,
-  SendIcon,
-  Megaphone,
-  PackageSearch,
-  WalletCards,
+  House, ClipboardList, WalletCards,
+  CircleUserRound, LifeBuoyIcon, SendIcon,
 } from "lucide-react"
 import { ScrollArea } from "./ui/scroll-area"
 import Image from "next/image"
 
-const data = {
-  user: {
-    name: "Vendor User",
-    email: "vendor@custherds.com",
-    avatar: "",
+const navMain = [
+  { title: "Dashboard",  url: "/vendor/dashboard", icon: <House />, isActive: true },
+  {
+    title: "Bookings", url: "#", icon: <ClipboardList />,
+    items: [
+      { title: "All Bookings",      url: "/vendor/bookings" },
+      { title: "Pending Approval",  url: "/vendor/bookings?status=pending_vendor" },
+    ],
   },
-  navMain: [
-    {
-      title: "Dashboard",
-      url: "/vendor/dashboard",
-      icon: <House />,
-      isActive: true,
-    },
-    {
-      title: "Products & Services",
-      url: "#",
-      icon: <ShoppingBag />,
-      items: [
-        { title: "Product List", url: "/vendor/products" },
-        { title: "Add Product", url: "/vendor/products/add" },
-        { title: "Product Categories", url: "/vendor/products/categories" },
-        { title: "Stock & Inventory", url: "/vendor/products/inventory" },
-      ],
-    },
-    {
-      title: "Orders",
-      url: "#",
-      icon: <ClipboardList />,
-      items: [
-        { title: "All Orders", url: "/vendor/orders" },
-        { title: "New Orders", url: "/vendor/orders/new" },
-        { title: "Order History", url: "/vendor/orders/history" },
-      ],
-    },
-    {
-      title: "Tourist Search",
-      url: "/vendor/customers",
-      icon: <PackageSearch />,
-    },
-    {
-      title: "Reviews & Ratings",
-      url: "/vendor/reviews",
-      icon: <Star />,
-    },
-    {
-      title: "Promotions",
-      url: "#",
-      icon: <Megaphone />,
-      items: [
-        { title: "Promotion List", url: "/vendor/promotions" },
-        { title: "Create Promotion", url: "/vendor/promotions/create" },
-      ],
-    },
-    {
-      title: "Finance",
-      url: "#",
-      icon: <WalletCards />,
-      items: [
-        { title: "Revenue", url: "/vendor/finance/revenue" },
-        { title: "Withdrawal", url: "/vendor/finance/withdrawal" },
-        { title: "Transaction History", url: "/vendor/finance/transactions" },
-      ],
-    },
-    {
-      title: "Reports",
-      url: "/vendor/reports",
-      icon: <BarChart2 />,
-    },
-    {
-      title: "Store Profile",
-      url: "/vendor/profile",
-      icon: <CircleUserRound />,
-    },
-    {
-      title: "Settings",
-      url: "/vendor/settings",
-      icon: <Settings />,
-    },
-  ],
-  navSecondary: [
-    { title: "Support", url: "#", icon: <LifeBuoyIcon /> },
-    { title: "Feedback", url: "#", icon: <SendIcon /> },
-  ],
-}
+  {
+    title: "Finance", url: "#", icon: <WalletCards />,
+    items: [
+      { title: "Deposit Info",        url: "/vendor/finance/deposit" },
+      { title: "Transaction History", url: "/vendor/finance/transactions" },
+    ],
+  },
+  { title: "Profile", url: "/vendor/profile", icon: <CircleUserRound /> },
+]
+
+const navSecondary = [
+  { title: "Support",  url: "#", icon: <LifeBuoyIcon /> },
+  { title: "Feedback", url: "#", icon: <SendIcon /> },
+]
 
 type VendorSidebarProps = React.ComponentProps<typeof Sidebar> & {
   onHoverChange?: (value: boolean) => void
@@ -146,13 +70,13 @@ export function VendorSidebar({ onHoverChange, ...props }: VendorSidebarProps) {
         <SidebarContent className="overflow-hidden">
           <ScrollArea className="h-full">
             <div className="flex min-h-full flex-col">
-              <NavMain items={data.navMain} />
-              <NavSecondary items={data.navSecondary} className="mt-auto px-3" />
+              <NavMain items={navMain} />
+              <NavSecondary items={navSecondary} className="mt-auto px-3" />
             </div>
           </ScrollArea>
         </SidebarContent>
         <SidebarFooter className="border-t justify-center px-3">
-          <NavUser user={data.user} />
+          <NavUser user={{ name: "", email: "", avatar: "" }} />
         </SidebarFooter>
       </Sidebar>
     </div>
