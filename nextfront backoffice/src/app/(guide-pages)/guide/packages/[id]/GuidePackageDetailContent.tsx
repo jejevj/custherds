@@ -131,7 +131,8 @@ function BookingForm({ pkg }: { pkg: PackageBrowse }) {
     try {
       await bookingsService.create({
         vendor_id:           pkg.vendor_id,
-        product_id:          pkg.id,
+        booking_type:        'package',
+        package_id:          pkg.id,
         booking_date:        dateStr,
         booking_time:        time || undefined,
         pax_count:           pax,
@@ -214,7 +215,7 @@ function BookingForm({ pkg }: { pkg: PackageBrowse }) {
           </Popover>
         </div>
 
-        {/* Slot Waktu — hanya tampil jika package punya slots, TIDAK ada time picker bebas */}
+        {/* Slot Waktu — hanya tampil jika package punya slots */}
         {hasSlots && (
           <div className="grid gap-1.5">
             <Label className="text-xs">Slot Waktu *</Label>
@@ -329,7 +330,6 @@ export default function GuidePackageDetailContent({ packageId }: { packageId: st
             </div>
           )}
 
-          {/* Hari Tersedia */}
           {pkg.available_days?.length > 0 && (
             <div>
               <h3 className="font-semibold text-sm mb-2 flex items-center gap-1.5">
@@ -343,7 +343,6 @@ export default function GuidePackageDetailContent({ packageId }: { packageId: st
             </div>
           )}
 
-          {/* Slot Waktu — tampilkan di detail juga */}
           {pkg.available_slots?.length > 0 && (
             <div>
               <h3 className="font-semibold text-sm mb-2 flex items-center gap-1.5">
