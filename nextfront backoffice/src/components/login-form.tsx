@@ -38,8 +38,8 @@ const roleUserType: Record<string, number> = {
 const roleRedirects: Record<string, string> = {
   vendor:  "/vendor/dashboard",
   guide:   "/guide/dashboard",
-  admin:   "/dashboard",
-  default: "/dashboard",
+  admin:   "/admin/dashboard",
+  default: "/admin/dashboard",
 }
 
 export function LoginForm({
