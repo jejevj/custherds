@@ -8,6 +8,7 @@ Jalankan:
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
+from typing import Optional
 
 from app.db.session import SessionLocal
 from app.models.user import User
@@ -66,7 +67,7 @@ def seed_revenue_split_config(db, admin: User) -> RevenueSplitConfig:
     return config
 
 
-def seed_sample_guide(db) -> User | None:
+def seed_sample_guide(db) -> Optional[User]:
     existing = db.query(User).filter(User.user_email == "guide@custherds.dev").first()
     if existing:
         print("  [SKIP] Sample guide already exists")
@@ -104,7 +105,7 @@ def seed_sample_guide(db) -> User | None:
     return user
 
 
-def seed_sample_vendor(db) -> User | None:
+def seed_sample_vendor(db) -> Optional[User]:
     existing = db.query(User).filter(User.user_email == "vendor@custherds.dev").first()
     if existing:
         print("  [SKIP] Sample vendor already exists")
@@ -155,7 +156,7 @@ def seed_sample_vendor(db) -> User | None:
     return user
 
 
-def run_all_seeds(dev_mode: bool = False):
+def run_all_seeds(dev_mode: bool = False) -> None:
     db = SessionLocal()
     try:
         print("\n=== Custherds Database Seeder ===")
