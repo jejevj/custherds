@@ -35,6 +35,10 @@ const DAYS_ID: Record<string, string> = {
   Thu: 'Kamis', Fri: 'Jumat', Sat: 'Sabtu', Sun: 'Minggu',
 }
 
+const textareaClass =
+  "w-full border border-white/10 rounded-lg px-3 py-2 text-sm resize-none bg-white/5 backdrop-blur-sm " +
+  "text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+
 export default function PackageFormContent({ mode, packageId }: Props) {
   const router = useRouter()
   const [form,       setForm]       = useState<PackageCreate>(EMPTY_FORM)
@@ -140,11 +144,13 @@ export default function PackageFormContent({ mode, packageId }: Props) {
         </div>
       </div>
 
-      <div className="rounded-xl border bg-card p-6 shadow-sm max-w-lg space-y-4">
+      {/* Card — glassmorphism, full width */}
+      <div className="w-full rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md shadow-xl p-6 space-y-5">
         {error   && <p className="text-sm text-red-500">{error}</p>}
-        {success && <p className="text-sm text-green-600">Package berhasil disimpan.</p>}
+        {success && <p className="text-sm text-green-500">Package berhasil disimpan.</p>}
 
-        <div className="grid gap-1">
+        {/* Nama */}
+        <div className="grid gap-1.5">
           <Label>Nama Package</Label>
           <Input
             value={form.name}
@@ -153,10 +159,11 @@ export default function PackageFormContent({ mode, packageId }: Props) {
           />
         </div>
 
-        <div className="grid gap-1">
+        {/* Deskripsi */}
+        <div className="grid gap-1.5">
           <Label>Deskripsi</Label>
           <textarea
-            className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
+            className={textareaClass}
             rows={3}
             value={form.description}
             onChange={e => set('description', e.target.value)}
@@ -164,7 +171,8 @@ export default function PackageFormContent({ mode, packageId }: Props) {
           />
         </div>
 
-        <div className="grid gap-1">
+        {/* Harga */}
+        <div className="grid gap-1.5">
           <Label>Harga per Pax (Rp)</Label>
           <Input
             type="number" min={0}
@@ -174,8 +182,9 @@ export default function PackageFormContent({ mode, packageId }: Props) {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="grid gap-1">
+        {/* Min & Max Pax */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-1.5">
             <Label>Min Pax</Label>
             <Input
               type="number" min={1}
@@ -183,8 +192,11 @@ export default function PackageFormContent({ mode, packageId }: Props) {
               onChange={e => set('min_pax', Number(e.target.value))}
             />
           </div>
-          <div className="grid gap-1">
-            <Label>Max Pax <span className="text-xs text-muted-foreground">(kosong = tak terbatas)</span></Label>
+          <div className="grid gap-1.5">
+            <Label>
+              Max Pax
+              <span className="text-xs text-muted-foreground ml-1">(kosong = tak terbatas)</span>
+            </Label>
             <Input
               type="number" min={1}
               value={form.max_pax ?? ''}
@@ -194,9 +206,13 @@ export default function PackageFormContent({ mode, packageId }: Props) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="grid gap-1">
-            <Label>Durasi <span className="text-xs text-muted-foreground">(menit)</span></Label>
+        {/* Durasi & Quota */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-1.5">
+            <Label>
+              Durasi
+              <span className="text-xs text-muted-foreground ml-1">(menit)</span>
+            </Label>
             <Input
               type="number" min={1}
               value={form.duration_minutes ?? ''}
@@ -204,8 +220,11 @@ export default function PackageFormContent({ mode, packageId }: Props) {
               placeholder="cth: 90"
             />
           </div>
-          <div className="grid gap-1">
-            <Label>Quota per Slot <span className="text-xs text-muted-foreground">(max booking)</span></Label>
+          <div className="grid gap-1.5">
+            <Label>
+              Quota per Slot
+              <span className="text-xs text-muted-foreground ml-1">(max booking)</span>
+            </Label>
             <Input
               type="number" min={1}
               value={form.quota_per_slot}
@@ -214,27 +233,32 @@ export default function PackageFormContent({ mode, packageId }: Props) {
           </div>
         </div>
 
+        {/* Hari tersedia */}
         <div className="grid gap-2">
           <Label>Hari Tersedia</Label>
           <div className="flex flex-wrap gap-2">
-            {DAYS.map(day => (
-              <button
-                key={day}
-                type="button"
-                onClick={() => toggleDay(day)}
-                className={[
-                  'px-3 py-1 rounded-md border text-xs font-medium transition-colors',
-                  form.available_days.includes(day)
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-background border-input text-muted-foreground hover:bg-muted',
-                ].join(' ')}
-              >
-                {DAYS_ID[day]}
-              </button>
-            ))}
+            {DAYS.map(day => {
+              const active = form.available_days.includes(day)
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => toggleDay(day)}
+                  className={[
+                    'px-3 py-1.5 rounded-lg border text-xs font-medium transition-all',
+                    active
+                      ? 'bg-primary/90 text-primary-foreground border-primary shadow-sm'
+                      : 'bg-white/5 border-white/10 text-muted-foreground hover:bg-white/10 hover:border-white/20',
+                  ].join(' ')}
+                >
+                  {DAYS_ID[day]}
+                </button>
+              )
+            })}
           </div>
         </div>
 
+        {/* Slot jam */}
         <div className="grid gap-2">
           <Label>Slot Jam</Label>
           <div className="flex gap-2">
@@ -250,15 +274,23 @@ export default function PackageFormContent({ mode, packageId }: Props) {
           {form.available_slots.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {form.available_slots.map(slot => (
-                <span key={slot} className="flex items-center gap-1 border rounded-md px-2 py-0.5 text-xs text-muted-foreground">
+                <span
+                  key={slot}
+                  className="flex items-center gap-1 border border-white/10 bg-white/5 rounded-lg px-2.5 py-1 text-xs text-muted-foreground"
+                >
                   {slot}
-                  <button type="button" onClick={() => removeSlot(slot)} className="hover:text-destructive ml-0.5">×</button>
+                  <button
+                    type="button"
+                    onClick={() => removeSlot(slot)}
+                    className="hover:text-destructive ml-0.5"
+                  >×</button>
                 </span>
               ))}
             </div>
           )}
         </div>
 
+        {/* Foto URL */}
         <div className="grid gap-2">
           <Label>Foto Package <span className="text-xs text-muted-foreground">(URL)</span></Label>
           <div className="flex gap-2">
@@ -271,14 +303,17 @@ export default function PackageFormContent({ mode, packageId }: Props) {
             <Button type="button" variant="outline" size="sm" onClick={addPhoto}>Tambah</Button>
           </div>
           {form.photo_urls.length > 0 && (
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               {form.photo_urls.map(url => (
-                <div key={url} className="flex items-center justify-between border rounded-lg px-3 py-2">
-                  <span className="text-xs text-muted-foreground truncate max-w-[300px]">{url}</span>
+                <div
+                  key={url}
+                  className="flex items-center justify-between border border-white/10 bg-white/5 rounded-lg px-3 py-2"
+                >
+                  <span className="text-xs text-muted-foreground truncate">{url}</span>
                   <button
                     type="button"
                     onClick={() => removePhoto(url)}
-                    className="text-xs text-muted-foreground hover:text-destructive ml-2 shrink-0"
+                    className="text-xs text-muted-foreground hover:text-destructive ml-3 shrink-0"
                   >
                     Hapus
                   </button>
@@ -288,10 +323,11 @@ export default function PackageFormContent({ mode, packageId }: Props) {
           )}
         </div>
 
-        <div className="grid gap-1">
+        {/* Syarat */}
+        <div className="grid gap-1.5">
           <Label>Syarat & Ketentuan <span className="text-xs text-muted-foreground">(opsional)</span></Label>
           <textarea
-            className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
+            className={textareaClass}
             rows={3}
             value={form.terms}
             onChange={e => set('terms', e.target.value)}
@@ -299,10 +335,11 @@ export default function PackageFormContent({ mode, packageId }: Props) {
           />
         </div>
 
-        <div className="grid gap-1">
+        {/* Catatan internal */}
+        <div className="grid gap-1.5">
           <Label>Catatan Internal <span className="text-xs text-muted-foreground">(opsional)</span></Label>
           <textarea
-            className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
+            className={textareaClass}
             rows={2}
             value={form.notes}
             onChange={e => set('notes', e.target.value)}
