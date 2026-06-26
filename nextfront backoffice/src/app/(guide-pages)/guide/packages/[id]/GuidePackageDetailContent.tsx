@@ -12,6 +12,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
+const selectClass = 'h-9 w-full rounded-lg border border-white/10 bg-background px-3 text-sm text-foreground focus:outline-none'
+
 /* ─── Photo Gallery ─────────────────────────────────────── */
 function PhotoGallery({ urls }: { urls: string[] }) {
   const [active, setActive] = useState(0)
@@ -144,7 +146,7 @@ function BookingForm({ pkg }: { pkg: PackageBrowse }) {
             <select
               required
               value={time} onChange={e => setTime(e.target.value)}
-              className="h-9 w-full rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-foreground focus:outline-none"
+              className={selectClass}
             >
               <option value="">Pilih slot…</option>
               {pkg.available_slots.map(s => <option key={s} value={s}>{s}</option>)}
@@ -225,7 +227,7 @@ export default function GuidePackageDetailContent({ packageId }: { packageId: st
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 items-start">
 
-        {/* LEFT: Detail */}
+        {/* LEFT */}
         <div className="space-y-6">
           <PhotoGallery urls={pkg.photo_urls ?? []} />
 
@@ -280,7 +282,7 @@ export default function GuidePackageDetailContent({ packageId }: { packageId: st
           )}
         </div>
 
-        {/* RIGHT: Booking Form */}
+        {/* RIGHT */}
         <div>
           <BookingForm pkg={pkg} />
         </div>

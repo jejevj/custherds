@@ -13,6 +13,8 @@ const SORT_OPTIONS = [
   { value: 'price_desc',      label: 'Harga Termahal' },
 ]
 
+const selectClass = 'h-9 rounded-lg border border-white/10 bg-background px-3 text-sm text-foreground focus:outline-none'
+
 export default function GuidePackagesContent() {
   const router = useRouter()
   const [packages,  setPackages]  = useState<PackageBrowse[]>([])
@@ -59,14 +61,14 @@ export default function GuidePackagesContent() {
         <select
           value={sort}
           onChange={e => setSort(e.target.value)}
-          className="h-9 rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-foreground focus:outline-none"
+          className={selectClass}
         >
           {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
         <select
           value={day}
           onChange={e => setDay(e.target.value)}
-          className="h-9 rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-foreground focus:outline-none"
+          className={selectClass}
         >
           <option value="">Semua Hari</option>
           {DAY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -107,7 +109,6 @@ function PackageCard({ pkg: p, onClick }: { pkg: PackageBrowse; onClick: () => v
       onClick={onClick}
       className="text-left rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md overflow-hidden hover:border-emerald-500/50 hover:bg-white/[0.08] transition-all w-full group"
     >
-      {/* Photo */}
       <div className="relative h-32 bg-white/5 flex items-center justify-center overflow-hidden">
         {p.photo_urls?.[0] ? (
           // eslint-disable-next-line @next/next/no-img-element

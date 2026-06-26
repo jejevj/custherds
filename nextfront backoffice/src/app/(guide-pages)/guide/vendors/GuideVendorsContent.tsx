@@ -13,6 +13,8 @@ const SORT_OPTIONS = [
   { value: 'packages_desc',   label: 'Package Terbanyak' },
 ]
 
+const selectClass = 'h-9 rounded-lg border border-white/10 bg-background px-3 text-sm text-foreground focus:outline-none'
+
 export default function GuideVendorsContent() {
   const [vendors,    setVendors]    = useState<VendorPublic[]>([])
   const [loading,    setLoading]    = useState(true)
@@ -57,7 +59,7 @@ export default function GuideVendorsContent() {
         <select
           value={sort}
           onChange={e => setSort(e.target.value)}
-          className="h-9 rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-foreground focus:outline-none"
+          className={selectClass}
         >
           {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
