@@ -12,7 +12,13 @@ export interface Booking {
   booking_date: string
   booking_time: string | null
   pax_count: number
-  total_price: number | null
+  /**
+   * Computed field dari backend.
+   * - booking_type="package" : sama dengan subtotal_package (price_per_pax * pax_count)
+   * - booking_type="direct"  : null (diisi setelah guide submit transaksi)
+   * Dikirim sebagai Decimal string dari Python → gunakan Number() sebelum format.
+   */
+  total_price: string | null
   tourist_names: string | null
   tourist_nationality: string | null
   notes: string | null
