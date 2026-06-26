@@ -1,5 +1,5 @@
 import uuid
-from typing import Any, List, Optional
+from typing import Any, List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -12,38 +12,10 @@ from app.schemas.packages import PackageCreate, PackageUpdate, PackageResponse
 router = APIRouter()
 
 
-# ─────────────────────────── PUBLIC (Guide browse) ───────────────────────────
-
-@router.get("/vendors/{vendor_id}/packages", response_model=List[PackageResponse], summary="Browse packages milik vendor")
-def list_vendor_packages(
-    vendor_id: uuid.UUID,
-    active_only: bool = Query(True, description="Filter hanya package aktif"),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> Any:
-    q = db.query(Package).filter(Package.vendor_id == vendor_id)
-    if active_only:
-        q = q.filter(Package.is_active == True)  # noqa
-    return q.order_by(Package.created_at.desc()).all()
-
-
-@router.get("/vendors/{vendor_id}/packages/{package_id}", response_model=PackageResponse, summary="Detail package")
-def get_vendor_package(
-    vendor_id: uuid.UUID,
-    package_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> Any:
-    pkg = db.query(Package).filter(
-        Package.id == package_id,
-        Package.vendor_id == vendor_id,
-    ).first()
-    if not pkg:
-        raise HTTPException(404, "Package tidak ditemukan")
-    return pkg
-
-
-# ─────────────────────────── VENDOR CRUD ─────────────────────────────────────
+# ───────────────────────── VENDOR CRUD ──────────────────────────────
+# PENTING: route literal (/my-packages, /my-packages/{id}) HARUS didaftarkan
+# SEBELUM route dengan path parameter (/vendors/{vendor_id}/...) agar FastAPI
+# tidak menangkap string literal sebagai nilai path parameter.
 
 @router.get("/my-packages", response_model=List[PackageResponse], summary="[Vendor] List semua package saya")
 def list_my_packages(
@@ -103,7 +75,6 @@ def update_package(
     if not pkg:
         raise HTTPException(404, "Package tidak ditemukan")
     data = payload.model_dump(exclude_unset=True)
-    # Validasi max_pax >= min_pax
     new_min = data.get('min_pax', pkg.min_pax)
     new_max = data.get('max_pax', pkg.max_pax)
     if new_max is not None and new_max < new_min:
@@ -125,13 +96,44 @@ def delete_package(
     pkg = db.query(Package).filter(Package.id == package_id, Package.vendor_id == vendor.id).first()
     if not pkg:
         raise HTTPException(404, "Package tidak ditemukan")
-    # Soft delete: nonaktifkan saja jika ada booking aktif
     active_bookings = [
         b for b in pkg.bookings
         if b.status in ("pending_vendor", "confirmed")
     ]
     if active_bookings:
-        raise HTTPException(400, f"Package tidak dapat dihapus karena ada {len(active_bookings)} booking aktif. Nonaktifkan saja.")
+        raise HTTPException(400, f"Package tidak dapat dihapus karena ada {len(active_bookings)} booking aktif.")
     db.delete(pkg)
     db.commit()
     return {"message": "Package berhasil dihapus"}
+
+
+# ──────────────────────── PUBLIC (Guide browse) ─────────────────────
+# Path parameter routes di bawah agar tidak menangkap literal di atas.
+
+@router.get("/vendors/{vendor_id}/packages", response_model=List[PackageResponse], summary="Browse packages milik vendor")
+def list_vendor_packages(
+    vendor_id: uuid.UUID,
+    active_only: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    q = db.query(Package).filter(Package.vendor_id == vendor_id)
+    if active_only:
+        q = q.filter(Package.is_active == True)  # noqa
+    return q.order_by(Package.created_at.desc()).all()
+
+
+@router.get("/vendors/{vendor_id}/packages/{package_id}", response_model=PackageResponse, summary="Detail package")
+def get_vendor_package(
+    vendor_id: uuid.UUID,
+    package_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    pkg = db.query(Package).filter(
+        Package.id == package_id,
+        Package.vendor_id == vendor_id,
+    ).first()
+    if not pkg:
+        raise HTTPException(404, "Package tidak ditemukan")
+    return pkg
