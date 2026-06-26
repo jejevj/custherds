@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional, List
+from datetime import datetime
 import uuid
 
 
@@ -50,8 +51,8 @@ class PackageResponse(BaseModel):
     notes: Optional[str] = None
     photo_urls: Optional[List[str]] = None
     is_active: bool
-    created_at: str
-    updated_at: str
+    created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True
@@ -78,7 +79,7 @@ class PackageBrowse(BaseModel):
     terms: Optional[str] = None
     photo_urls: List[str] = []
     is_active: bool
-    created_at: str
+    created_at: datetime
 
     class Config:
         from_attributes = True
