@@ -52,9 +52,9 @@ def admin_toggle_user(
 
 # ─────────────────────────── GUIDES ───────────────────────────
 
-@router.get("/guides", summary="[Admin] List all guides with certificate status")
+@router.get("/guides", summary="[Admin] List all guides")
 def admin_list_guides(
-    certificate_status: Optional[str] = Query(None, description="Filter: pending, approved, rejected"),
+    guide_status: Optional[str] = Query(None, description="Filter: incomplete, pending, approved, rejected"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user_type(99)),
 ) -> Any:
@@ -63,8 +63,8 @@ def admin_list_guides(
         .options(joinedload(Guide.user))
         .join(User, Guide.user_id == User.id)
     )
-    if certificate_status:
-        q = q.filter(Guide.guide_certificate_status == certificate_status)
+    if guide_status:
+        q = q.filter(Guide.guide_status == guide_status)
     guides = q.order_by(Guide.created_at.desc()).all()
     return [{
         "guide_id": str(g.id),
@@ -74,8 +74,12 @@ def admin_list_guides(
         "user_phone": g.user.user_phone,
         "is_active": g.user.is_active,
         "guide_nationality": g.guide_nationality,
+        "guide_phone": g.guide_phone,
+        "guide_id_card_url": g.guide_id_card_url,
         "guide_certificate": g.guide_certificate,
         "guide_certificate_status": g.guide_certificate_status,
+        "guide_status": g.guide_status,
+        "rejection_notes": g.rejection_notes,
         "bio": g.bio,
         "languages": g.languages,
         "wallet_balance": str(g.wallet_balance),
@@ -83,7 +87,7 @@ def admin_list_guides(
     } for g in guides]
 
 
-@router.put("/guides/{guide_id}/approve", summary="[Admin] Approve or reject a guide certificate")
+@router.put("/guides/{guide_id}/approve", summary="[Admin] Approve or reject a guide")
 def admin_approve_guide(
     guide_id: uuid.UUID,
     action: str = Query(..., regex="^(approve|reject)$"),
@@ -94,15 +98,24 @@ def admin_approve_guide(
     guide = db.query(Guide).filter(Guide.id == guide_id).first()
     if not guide:
         raise HTTPException(404, "Guide not found")
-    guide.guide_certificate_status = "approved" if action == "approve" else "rejected"
+
     if action == "approve":
+        guide.guide_status = "approved"
+        guide.guide_certificate_status = "approved"
+        guide.rejection_notes = None
         user = db.query(User).filter(User.id == guide.user_id).first()
         if user:
             user.is_verified = True
+    else:
+        guide.guide_status = "rejected"
+        guide.guide_certificate_status = "rejected"
+        guide.rejection_notes = notes
+
     db.commit()
     return {
-        "message": f"Guide {guide.guide_certificate_status}",
+        "message": f"Guide {guide.guide_status}",
         "guide_id": str(guide.id),
+        "guide_status": guide.guide_status,
         "guide_certificate_status": guide.guide_certificate_status,
         "notes": notes,
     }
@@ -110,9 +123,9 @@ def admin_approve_guide(
 
 # ─────────────────────────── VENDORS ───────────────────────────
 
-@router.get("/vendors", summary="[Admin] List all vendors with vendor_status")
+@router.get("/vendors", summary="[Admin] List all vendors")
 def admin_list_vendors(
-    vendor_status: Optional[str] = Query(None, description="Filter: pending, approved, rejected"),
+    vendor_status: Optional[str] = Query(None, description="Filter: incomplete, pending, approved, rejected"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user_type(99)),
 ) -> Any:
@@ -154,12 +167,17 @@ def admin_approve_vendor(
     vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
     if not vendor:
         raise HTTPException(404, "Vendor not found")
-    vendor.vendor_status = "approved" if action == "approve" else "rejected"
-    vendor.approval_notes = notes
+
     if action == "approve":
+        vendor.vendor_status = "approved"
+        vendor.approval_notes = None
         user = db.query(User).filter(User.id == vendor.user_id).first()
         if user:
             user.is_verified = True
+    else:
+        vendor.vendor_status = "rejected"
+        vendor.approval_notes = notes
+
     db.commit()
     return {
         "message": f"Vendor {vendor.vendor_status}",
