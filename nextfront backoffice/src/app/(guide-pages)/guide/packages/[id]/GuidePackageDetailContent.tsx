@@ -6,15 +6,54 @@ import { bookingsService } from '@/services/bookings.service'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Calendar } from '@/components/ui/calendar'
 import {
-  ChevronLeft, Clock, Users, CalendarDays, TrendingUp, MapPin,
-  ChevronLeft as Prev, ChevronRight as Next,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  ChevronLeft,
+  Clock,
+  Users,
+  CalendarDays,
+  TrendingUp,
+  MapPin,
+  ChevronLeft as Prev,
+  ChevronRight as Next,
+  CalendarIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { format, isBefore, startOfToday } from 'date-fns'
+import { id as localeId } from 'date-fns/locale'
 
-const selectClass = 'h-9 w-full rounded-lg border border-white/10 bg-background px-3 text-sm text-foreground focus:outline-none'
+// Map available_days strings to date-fns day index (0=Sun)
+const DAY_NAME_TO_INDEX: Record<string, number> = {
+  Sun: 0, Sunday: 0,
+  Mon: 1, Monday: 1,
+  Tue: 2, Tuesday: 2,
+  Wed: 3, Wednesday: 3,
+  Thu: 4, Thursday: 4,
+  Fri: 5, Friday: 5,
+  Sat: 6, Saturday: 6,
+}
 
-/* ─── Photo Gallery ─────────────────────────────────────── */
+function buildDisabledFn(availableDays: string[]) {
+  if (!availableDays || availableDays.length === 0) {
+    // no restriction — only disable past dates
+    return (date: Date) => isBefore(date, startOfToday())
+  }
+  const allowed = new Set(availableDays.map(d => DAY_NAME_TO_INDEX[d]).filter(n => n !== undefined))
+  return (date: Date) => {
+    if (isBefore(date, startOfToday())) return true
+    return !allowed.has(date.getDay())
+  }
+}
+
+/* ─── Photo Gallery ───────────────────────────────────────── */
 function PhotoGallery({ urls }: { urls: string[] }) {
   const [active, setActive] = useState(0)
   if (!urls.length) {
@@ -66,11 +105,11 @@ function PhotoGallery({ urls }: { urls: string[] }) {
   )
 }
 
-/* ─── Booking Form ──────────────────────────────────────── */
+/* ─── Booking Form ────────────────────────────────────────── */
 function BookingForm({ pkg }: { pkg: PackageBrowse }) {
   const router = useRouter()
-  const today = new Date().toISOString().split('T')[0]
-  const [date,        setDate]        = useState('')
+  const [calOpen,     setCalOpen]     = useState(false)
+  const [selectedDay, setSelectedDay] = useState<Date | undefined>(undefined)
   const [time,        setTime]        = useState('')
   const [pax,         setPax]         = useState(pkg.min_pax)
   const [nationality, setNationality] = useState('')
@@ -79,17 +118,20 @@ function BookingForm({ pkg }: { pkg: PackageBrowse }) {
   const [error,       setError]       = useState('')
   const [success,     setSuccess]     = useState('')
 
+  const dateStr    = selectedDay ? format(selectedDay, 'yyyy-MM-dd') : ''
   const total      = pax * pkg.price_per_pax
   const commission = pax * pkg.commission_per_pax
+  const disabledFn = buildDisabledFn(pkg.available_days ?? [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!dateStr) { setError('Pilih tanggal booking terlebih dahulu.'); return }
     setLoading(true); setError(''); setSuccess('')
     try {
       await bookingsService.create({
         vendor_id:           pkg.vendor_id,
         product_id:          pkg.id,
-        booking_date:        date,
+        booking_date:        dateStr,
         booking_time:        time || undefined,
         pax_count:           pax,
         tourist_nationality: nationality || undefined,
@@ -112,6 +154,7 @@ function BookingForm({ pkg }: { pkg: PackageBrowse }) {
         <p className="text-xs text-muted-foreground mt-0.5">Isi detail booking untuk tourist kamu</p>
       </div>
 
+      {/* Price summary */}
       <div className="rounded-xl bg-white/5 border border-white/10 p-4 space-y-1.5">
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">Harga / pax</span>
@@ -135,22 +178,60 @@ function BookingForm({ pkg }: { pkg: PackageBrowse }) {
         {error   && <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>}
         {success && <p className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">{success}</p>}
 
+        {/* ── Tanggal Booking (custom calendar picker) ── */}
         <div className="grid gap-1.5">
-          <Label className="text-xs">Tanggal Booking *</Label>
-          <Input required type="date" min={today} value={date} onChange={e => setDate(e.target.value)} />
+          <Label className="text-xs">
+            Tanggal Booking *
+            {pkg.available_days?.length > 0 && (
+              <span className="ml-1 text-muted-foreground font-normal">
+                ({pkg.available_days.join(', ')})
+              </span>
+            )}
+          </Label>
+          <Popover open={calOpen} onOpenChange={setCalOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  'w-full flex items-center gap-2 h-9 rounded-lg border border-white/10 bg-white/5 px-3 text-sm transition-colors hover:bg-white/10',
+                  !selectedDay && 'text-muted-foreground'
+                )}
+              >
+                <CalendarIcon size={14} className="shrink-0" />
+                {selectedDay
+                  ? format(selectedDay, 'EEEE, dd MMMM yyyy', { locale: localeId })
+                  : 'Pilih tanggal…'}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              className="w-auto p-0 border border-white/10 bg-background shadow-xl"
+            >
+              <Calendar
+                mode="single"
+                selected={selectedDay}
+                onSelect={(d) => { setSelectedDay(d); setCalOpen(false) }}
+                disabled={disabledFn}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
         </div>
 
+        {/* ── Slot Waktu ── */}
         {pkg.available_slots?.length > 0 ? (
           <div className="grid gap-1.5">
             <Label className="text-xs">Slot Waktu *</Label>
-            <select
-              required
-              value={time} onChange={e => setTime(e.target.value)}
-              className={selectClass}
-            >
-              <option value="">Pilih slot…</option>
-              {pkg.available_slots.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <Select required value={time} onValueChange={setTime}>
+              <SelectTrigger className="border-white/10 bg-white/5">
+                <SelectValue placeholder="Pilih slot waktu…" />
+              </SelectTrigger>
+              <SelectContent className="bg-background border-white/10">
+                {pkg.available_slots.map(s => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         ) : (
           <div className="grid gap-1.5">
@@ -159,6 +240,7 @@ function BookingForm({ pkg }: { pkg: PackageBrowse }) {
           </div>
         )}
 
+        {/* ── Pax ── */}
         <div className="grid gap-1.5">
           <Label className="text-xs">
             Jumlah Pax * <span className="text-muted-foreground">(min {pkg.min_pax}{pkg.max_pax ? `, max ${pkg.max_pax}` : ''})</span>
@@ -180,7 +262,7 @@ function BookingForm({ pkg }: { pkg: PackageBrowse }) {
           <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Opsional" />
         </div>
 
-        <Button type="submit" className="w-full" disabled={loading || !!success}>
+        <Button type="submit" className="w-full" disabled={loading || !!success || !dateStr}>
           {loading ? 'Membuat booking…' : 'Buat Booking'}
         </Button>
       </form>
@@ -188,7 +270,7 @@ function BookingForm({ pkg }: { pkg: PackageBrowse }) {
   )
 }
 
-/* ─── Main Page ─────────────────────────────────────────── */
+/* ─── Main Page ─────────────────────────────────────────────── */
 export default function GuidePackageDetailContent({ packageId }: { packageId: string }) {
   const router = useRouter()
   const [pkg,     setPkg]     = useState<PackageBrowse | null>(null)
