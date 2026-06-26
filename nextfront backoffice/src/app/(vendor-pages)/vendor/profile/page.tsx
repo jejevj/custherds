@@ -28,6 +28,7 @@ export default function VendorProfilePage() {
         vendor_location:          profile.vendor_location,
         vendor_website:           profile.vendor_website,
         vendor_opening_hours:     profile.vendor_opening_hours,
+        allow_direct_booking:     profile.allow_direct_booking,
       })
       setProfile(updated); setSuccess(true)
     } catch { setError("Gagal menyimpan profil.") }
@@ -109,6 +110,34 @@ export default function VendorProfilePage() {
             onChange={e => setProfile(p => p ? { ...p, vendor_opening_hours: e.target.value } : p)}
             placeholder="Senin-Jumat 09.00-17.00"
           />
+        </div>
+
+        {/* ── Toggle Direct Booking ─────────────────────────────── */}
+        <div className="flex items-center justify-between rounded-lg border px-4 py-3 bg-muted/30">
+          <div>
+            <p className="text-sm font-medium">Izinkan Direct Booking</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Jika dimatikan, guide wajib memilih package yang tersedia saat booking.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={profile?.allow_direct_booking ?? true}
+            onClick={() => setProfile(p => p ? { ...p, allow_direct_booking: !p.allow_direct_booking } : p)}
+            className={[
+              "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent",
+              "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+              profile?.allow_direct_booking ? "bg-primary" : "bg-muted-foreground/30",
+            ].join(" ")}
+          >
+            <span
+              className={[
+                "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg transition-transform",
+                profile?.allow_direct_booking ? "translate-x-5" : "translate-x-0",
+              ].join(" ")}
+            />
+          </button>
         </div>
 
         <Button onClick={handleSave} disabled={saving} className="w-full">

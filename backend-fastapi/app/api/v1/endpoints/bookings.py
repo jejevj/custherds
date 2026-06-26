@@ -24,10 +24,17 @@ def _generate_booking_code(db: Session) -> str:
             return code
 
 
-def _check_quota(db: Session, package_id: uuid.UUID, booking_date, booking_time, quota_per_slot: int, exclude_booking_id: Optional[uuid.UUID] = None) -> None:
+def _check_quota(
+    db: Session,
+    package_id: uuid.UUID,
+    booking_date,
+    booking_time,
+    quota_per_slot: int,
+    exclude_booking_id: Optional[uuid.UUID] = None,
+) -> None:
     """
     Cek apakah slot (package + tanggal + jam) masih ada quota.
-    Quota dihitung dari jumlah booking berstatus pending_vendor atau confirmed.
+    Quota = max jumlah BOOKING (bukan pax) berstatus pending_vendor / confirmed.
     """
     q = db.query(Booking).filter(
         Booking.package_id == package_id,
@@ -37,15 +44,14 @@ def _check_quota(db: Session, package_id: uuid.UUID, booking_date, booking_time,
     )
     if exclude_booking_id:
         q = q.filter(Booking.id != exclude_booking_id)
-    active_count = q.count()
-    if active_count >= quota_per_slot:
+    if q.count() >= quota_per_slot:
         raise HTTPException(
             400,
             f"Slot ini sudah penuh. Quota {quota_per_slot} booking untuk jadwal ini sudah terpenuhi."
         )
 
 
-# ─────────────────────────── CREATE BOOKING ──────────────────────────────────
+# ─────────────────────────────── CREATE BOOKING ────────────────────────────────
 
 @router.post("", response_model=BookingResponse, status_code=201, summary="Guide buat booking (direct atau package)")
 def create_booking(
@@ -68,9 +74,17 @@ def create_booking(
     if payload.booking_type not in ("direct", "package"):
         raise HTTPException(400, "booking_type harus 'direct' atau 'package'")
 
+    # ── Validasi direct booking ──────────────────────────────────────────────
+    if payload.booking_type == "direct" and not vendor.allow_direct_booking:
+        raise HTTPException(
+            400,
+            "Vendor ini tidak menerima direct booking. Silakan pilih salah satu package yang tersedia."
+        )
+
     package_price_snapshot = None
     subtotal_package = None
 
+    # ── Validasi package booking ─────────────────────────────────────────────
     if payload.booking_type == "package":
         if not payload.package_id:
             raise HTTPException(400, "package_id wajib diisi untuk booking package")
@@ -83,16 +97,13 @@ def create_booking(
         if not pkg.is_active:
             raise HTTPException(400, "Package sudah tidak aktif")
 
-        # Validasi pax
         if payload.pax_count < pkg.min_pax:
             raise HTTPException(400, f"Minimum pax untuk package ini adalah {pkg.min_pax}")
         if pkg.max_pax and payload.pax_count > pkg.max_pax:
             raise HTTPException(400, f"Maksimum pax untuk package ini adalah {pkg.max_pax}")
 
-        # Validasi quota slot
         _check_quota(db, pkg.id, payload.booking_date, payload.booking_time, pkg.quota_per_slot)
 
-        # Hitung subtotal
         package_price_snapshot = pkg.price_per_pax
         subtotal_package = (pkg.price_per_pax * Decimal(str(payload.pax_count))).quantize(Decimal("0.01"))
 
@@ -118,7 +129,7 @@ def create_booking(
     return booking
 
 
-# ─────────────────────────── LIST & DETAIL ───────────────────────────────────
+# ─────────────────────────────── LIST & DETAIL ─────────────────────────────────
 
 @router.get("", response_model=List[BookingResponse], summary="List booking saya")
 def list_bookings(
@@ -151,7 +162,7 @@ def get_booking(
     return booking
 
 
-# ─────────────────────────── VENDOR APPROVE / REJECT ─────────────────────────
+# ─────────────────────────────── VENDOR APPROVE / REJECT ───────────────────────
 
 @router.post("/{booking_id}/approve", response_model=BookingResponse, summary="Vendor approve / reject booking")
 def vendor_action_booking(
@@ -168,7 +179,6 @@ def vendor_action_booking(
         raise HTTPException(400, f"Booking tidak bisa diproses, status saat ini: {booking.status}")
 
     if payload.action == "approve":
-        # Re-check quota saat approve (bisa saja ada race condition)
         if booking.booking_type == "package" and booking.package_id:
             pkg = db.query(Package).filter(Package.id == booking.package_id).first()
             if pkg:
@@ -186,7 +196,7 @@ def vendor_action_booking(
     return booking
 
 
-# ─────────────────────────── CANCEL ──────────────────────────────────────────
+# ─────────────────────────────── CANCEL ────────────────────────────────────────
 
 @router.post("/{booking_id}/cancel", response_model=BookingResponse, summary="Guide atau Vendor cancel booking")
 def cancel_booking(
@@ -201,7 +211,6 @@ def cancel_booking(
     if booking.status not in ("pending_vendor", "confirmed"):
         raise HTTPException(400, f"Booking tidak dapat dibatalkan, status saat ini: {booking.status}")
 
-    # Tentukan siapa yang cancel
     if current_user.user_type == 1:
         guide = db.query(Guide).filter(Guide.user_id == current_user.id).first()
         if not guide or booking.guide_id != guide.id:

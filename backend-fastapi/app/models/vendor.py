@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Integer, Float, Numeric, Text, DateTime, ForeignKey
+from sqlalchemy import Column, String, Integer, Float, Numeric, Text, DateTime, ForeignKey, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -17,6 +17,10 @@ class Vendor(Base):
       rejected    -> admin tolak, user harus perbaiki
 
     deposit_balance: saldo wallet deposit untuk Metode B (Deposit Wallet).
+
+    allow_direct_booking:
+      True  -> Guide boleh booking langsung tanpa memilih package (booking_type="direct")
+      False -> Guide WAJIB memilih package; direct booking ditolak oleh API
     """
     __tablename__ = "vendors"
 
@@ -50,6 +54,11 @@ class Vendor(Base):
     # --- Keuangan ---
     deposit_balance             = Column(Numeric(15, 2), default=0, nullable=False)
     deposit_minimum             = Column(Numeric(15, 2), nullable=True)
+
+    # --- Pengaturan booking ---
+    allow_direct_booking        = Column(Boolean, default=True, nullable=False)
+    # True  = guide boleh booking tanpa package (direct)
+    # False = guide wajib pilih package; direct booking ditolak
 
     created_at                  = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at                  = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

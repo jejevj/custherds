@@ -15,6 +15,7 @@ export interface VendorProfile {
   vendor_npwp: string | null
   vendor_nib: string | null
   vendor_owner_id_card_url: string | null
+  allow_direct_booking: boolean   // true = guide boleh direct booking tanpa package
   rating: number | null
   wallet_balance: string
   created_at: string
