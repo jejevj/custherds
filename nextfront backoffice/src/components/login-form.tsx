@@ -61,7 +61,7 @@ export function LoginForm({
     try {
       const result = await login({ user_email: email, user_password: password })
       const expectedType = roleUserType[role]
-      if (expectedType !== 0 && result.user?.user_type !== expectedType) {
+      if (expectedType !== 0 && result.user_type !== expectedType) {
         setError(`Akun ini bukan akun ${roleLabels[role]}. Gunakan halaman login yang sesuai.`)
         useAuthStore.getState().logout()
         return
