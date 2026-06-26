@@ -67,23 +67,23 @@ def admin_list_guides(
         q = q.filter(Guide.guide_status == guide_status)
     guides = q.order_by(Guide.created_at.desc()).all()
     return [{
-        "guide_id": str(g.id),
-        "user_id": str(g.user_id),
-        "user_name": g.user.user_name,
-        "user_email": g.user.user_email,
-        "user_phone": g.user.user_phone,
-        "is_active": g.user.is_active,
-        "guide_nationality": g.guide_nationality,
-        "guide_phone": g.guide_phone,
-        "guide_id_card_url": g.guide_id_card_url,
-        "guide_certificate": g.guide_certificate,
+        "guide_id":                 str(g.id),
+        "user_id":                  str(g.user_id),
+        "user_name":                g.user.user_name,
+        "user_email":               g.user.user_email,
+        "user_phone":               g.user.user_phone,
+        "is_active":                g.user.is_active,
+        "guide_nationality":        g.guide_nationality,
+        "guide_phone":              g.guide_phone,
+        "guide_id_card_url":        g.guide_id_card_url,
+        "guide_certificate":        g.guide_certificate,
         "guide_certificate_status": g.guide_certificate_status,
-        "guide_status": g.guide_status,
-        "rejection_notes": g.rejection_notes,
-        "bio": g.bio,
-        "languages": g.languages,
-        "wallet_balance": str(g.wallet_balance),
-        "created_at": g.created_at.isoformat(),
+        "guide_status":             g.guide_status,
+        "rejection_notes":          g.rejection_notes,
+        "bio":                      g.bio,
+        "languages":                g.languages,
+        "wallet_balance":           str(g.wallet_balance),
+        "created_at":               g.created_at.isoformat(),
     } for g in guides]
 
 
@@ -113,11 +113,11 @@ def admin_approve_guide(
 
     db.commit()
     return {
-        "message": f"Guide {guide.guide_status}",
-        "guide_id": str(guide.id),
-        "guide_status": guide.guide_status,
+        "message":                  f"Guide {guide.guide_status}",
+        "guide_id":                 str(guide.id),
+        "guide_status":             guide.guide_status,
         "guide_certificate_status": guide.guide_certificate_status,
-        "notes": notes,
+        "notes":                    notes,
     }
 
 
@@ -138,21 +138,30 @@ def admin_list_vendors(
         q = q.filter(Vendor.vendor_status == vendor_status)
     vendors = q.order_by(Vendor.created_at.desc()).all()
     return [{
-        "vendor_id": str(v.id),
-        "user_id": str(v.user_id),
-        "user_name": v.user.user_name,
-        "user_email": v.user.user_email,
-        "user_phone": v.user.user_phone,
-        "is_active": v.user.is_active,
-        "vendor_business_name": v.vendor_business_name,
-        "vendor_category": v.vendor_category,
-        "vendor_area": v.vendor_area,
-        "vendor_location": v.vendor_location,
+        "vendor_id":                str(v.id),
+        "user_id":                  str(v.user_id),
+        "user_name":                v.user.user_name,
+        "user_email":               v.user.user_email,
+        "user_phone":               v.user.user_phone,
+        "is_active":                v.user.is_active,
+        "vendor_business_name":     v.vendor_business_name,
+        "vendor_category":          v.vendor_category,
+        "vendor_area":              v.vendor_area,
+        "vendor_location":          v.vendor_location,
+        "vendor_contact_person":    v.vendor_contact_person,
+        "vendor_website":           v.vendor_website,
         "vendor_short_description": v.vendor_short_description,
-        "vendor_status": v.vendor_status,
-        "approval_notes": v.approval_notes,
-        "deposit_balance": str(v.deposit_balance),
-        "created_at": v.created_at.isoformat(),
+        "vendor_opening_hours":     v.vendor_opening_hours,
+        "vendor_npwp":              v.vendor_npwp,
+        "vendor_nib":               v.vendor_nib,
+        "vendor_owner_id_card_url": v.vendor_owner_id_card_url,
+        "vendor_min_spend":         str(v.vendor_min_spend) if v.vendor_min_spend else None,
+        "vendor_cashback_percent":  v.vendor_cashback_percent,
+        "vendor_know_from":         v.vendor_know_from,
+        "vendor_status":            v.vendor_status,
+        "approval_notes":           v.approval_notes,
+        "deposit_balance":          str(v.deposit_balance),
+        "created_at":               v.created_at.isoformat(),
     } for v in vendors]
 
 
@@ -180,10 +189,10 @@ def admin_approve_vendor(
 
     db.commit()
     return {
-        "message": f"Vendor {vendor.vendor_status}",
-        "vendor_id": str(vendor.id),
+        "message":       f"Vendor {vendor.vendor_status}",
+        "vendor_id":     str(vendor.id),
         "vendor_status": vendor.vendor_status,
-        "notes": notes,
+        "notes":         notes,
     }
 
 

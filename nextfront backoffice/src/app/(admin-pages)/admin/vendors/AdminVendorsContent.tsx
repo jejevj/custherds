@@ -3,7 +3,9 @@ import { useEffect, useState, useCallback } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { adminService, AdminVendor } from "@/services/admin.service"
 import { Button } from "@/components/ui/button"
-import { UserCheck, UserX, Eye, X } from "lucide-react"
+import { UserCheck, UserX, Eye, X, FileText } from "lucide-react"
+import { uploadsService } from "@/services/uploads.service"
+import { getTokens } from "@/services/api"
 
 const STATUS_TABS = [
   { label: "All",       value: undefined },
@@ -19,7 +21,36 @@ const STATUS_BADGE: Record<string, string> = {
   incomplete: "bg-gray-100 text-gray-500",
 }
 
+async function fetchProtectedFile(relUrl: string): Promise<string | null> {
+  if (!relUrl) return null
+  try {
+    const { access } = getTokens()
+    const url = uploadsService.getUrl(relUrl)
+    const res = await fetch(url, { headers: access ? { Authorization: `Bearer ${access}` } : {} })
+    if (!res.ok) return null
+    const blob = await res.blob()
+    return URL.createObjectURL(blob)
+  } catch {
+    return null
+  }
+}
+
 function VendorDetailModal({ vendor, onClose }: { vendor: AdminVendor; onClose: () => void }) {
+  const [idCardSrc,   setIdCardSrc]   = useState<string | null>(null)
+  const [loadingId,   setLoadingId]   = useState(false)
+
+  useEffect(() => {
+    if (vendor.vendor_owner_id_card_url) {
+      setLoadingId(true)
+      fetchProtectedFile(vendor.vendor_owner_id_card_url).then(src => { setIdCardSrc(src); setLoadingId(false) })
+    }
+    return () => { if (idCardSrc) URL.revokeObjectURL(idCardSrc) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vendor.vendor_id])
+
+  const isImage = (url: string) => /\.(jpg|jpeg|png|webp)$/i.test(url)
+  const isPdf   = (url: string) => /\.pdf$/i.test(url)
+
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-background rounded-2xl shadow-2xl w-full max-w-xl my-auto border">
@@ -36,11 +67,13 @@ function VendorDetailModal({ vendor, onClose }: { vendor: AdminVendor; onClose: 
 
         <div className="px-6 py-5 space-y-5">
           {/* Status */}
-          <span className={`text-xs px-2.5 py-1 rounded-full font-medium capitalize ${
-            STATUS_BADGE[vendor.vendor_status] ?? 'bg-muted text-muted-foreground'
-          }`}>
-            Status: {vendor.vendor_status}
-          </span>
+          <div className="flex gap-3 flex-wrap">
+            <span className={`text-xs px-2.5 py-1 rounded-full font-medium capitalize ${
+              STATUS_BADGE[vendor.vendor_status] ?? 'bg-muted text-muted-foreground'
+            }`}>
+              Status: {vendor.vendor_status}
+            </span>
+          </div>
 
           {/* Rejection notes */}
           {vendor.approval_notes && vendor.vendor_status === 'rejected' && (
@@ -53,24 +86,25 @@ function VendorDetailModal({ vendor, onClose }: { vendor: AdminVendor; onClose: 
           {/* Info grid */}
           <div className="grid grid-cols-2 gap-3 text-sm">
             {([
-              ["Nama Toko",        vendor.vendor_business_name],
-              ["Contact Person",   vendor.user_name],
-              ["Telepon",          vendor.user_phone],
-              ["Kategori",         vendor.vendor_category],
-              ["Area",             vendor.vendor_area],
-              ["Jam Operasional",  vendor.vendor_opening_hours],
-              ["NPWP",             vendor.vendor_npwp],
-              ["NIB",              vendor.vendor_nib],
-              ["Terdaftar",        new Date(vendor.created_at).toLocaleDateString('id-ID', { day:'2-digit', month:'long', year:'numeric' })],
+              ["Nama Toko",         vendor.vendor_business_name],
+              ["Contact Person",    vendor.vendor_contact_person ?? vendor.user_name],
+              ["Telepon",           vendor.user_phone],
+              ["Kategori",          vendor.vendor_category != null ? String(vendor.vendor_category) : null],
+              ["Area",              vendor.vendor_area != null ? String(vendor.vendor_area) : null],
+              ["Jam Operasional",   vendor.vendor_opening_hours],
+              ["NPWP",              vendor.vendor_npwp],
+              ["NIB",               vendor.vendor_nib],
+              ["Min. Spend",        vendor.vendor_min_spend ? `Rp ${Number(vendor.vendor_min_spend).toLocaleString('id-ID')}` : null],
+              ["Cashback",          vendor.vendor_cashback_percent != null ? `${vendor.vendor_cashback_percent}%` : null],
+              ["Terdaftar",         new Date(vendor.created_at).toLocaleDateString('id-ID', { day:'2-digit', month:'long', year:'numeric' })],
             ] as [string, string | null | undefined][]).map(([k, v]) => (
               <div key={k}>
                 <p className="text-xs text-muted-foreground">{k}</p>
-                <p className="font-medium">{v ?? '—'}</p>
+                <p className="font-medium">{v ?? '\u2014'}</p>
               </div>
             ))}
           </div>
 
-          {/* Alamat */}
           {vendor.vendor_location && (
             <div>
               <p className="text-xs font-semibold text-muted-foreground mb-1">Alamat / Lokasi</p>
@@ -78,7 +112,6 @@ function VendorDetailModal({ vendor, onClose }: { vendor: AdminVendor; onClose: 
             </div>
           )}
 
-          {/* Deskripsi */}
           {vendor.vendor_short_description && (
             <div>
               <p className="text-xs font-semibold text-muted-foreground mb-1">Deskripsi Singkat</p>
@@ -86,7 +119,6 @@ function VendorDetailModal({ vendor, onClose }: { vendor: AdminVendor; onClose: 
             </div>
           )}
 
-          {/* Website */}
           {vendor.vendor_website && (
             <div>
               <p className="text-xs font-semibold text-muted-foreground mb-1">Website</p>
@@ -96,6 +128,34 @@ function VendorDetailModal({ vendor, onClose }: { vendor: AdminVendor; onClose: 
               </a>
             </div>
           )}
+
+          {vendor.vendor_know_from && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-1">Mengetahui dari</p>
+              <p className="text-sm">{vendor.vendor_know_from}</p>
+            </div>
+          )}
+
+          {/* KTP Pemilik */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground mb-2">KTP Pemilik</p>
+            {!vendor.vendor_owner_id_card_url ? (
+              <p className="text-sm text-muted-foreground italic">Tidak diupload</p>
+            ) : loadingId ? (
+              <div className="h-40 rounded-lg bg-muted animate-pulse flex items-center justify-center text-xs text-muted-foreground">Memuat...</div>
+            ) : idCardSrc && isImage(vendor.vendor_owner_id_card_url) ? (
+              <a href={idCardSrc} target="_blank" rel="noopener noreferrer">
+                <img src={idCardSrc} alt="KTP Pemilik" className="rounded-lg border max-h-52 w-full object-contain bg-muted cursor-zoom-in" />
+              </a>
+            ) : idCardSrc && isPdf(vendor.vendor_owner_id_card_url) ? (
+              <a href={idCardSrc} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-2 text-sm text-blue-600 underline">
+                <FileText className="h-4 w-4" /> Buka PDF
+              </a>
+            ) : (
+              <p className="text-xs text-red-500">Gagal memuat file</p>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -198,10 +258,10 @@ export default function AdminVendorsContent() {
               <tr><td colSpan={7} className="text-center py-10 text-muted-foreground">No vendors found.</td></tr>
             ) : vendors.map(v => (
               <tr key={v.vendor_id} className="border-b last:border-0 hover:bg-muted/30">
-                <td className="px-4 py-3 font-medium">{v.vendor_business_name ?? '—'}</td>
+                <td className="px-4 py-3 font-medium">{v.vendor_business_name ?? '\u2014'}</td>
                 <td className="px-4 py-3 text-muted-foreground text-xs">{v.user_email}</td>
-                <td className="px-4 py-3 text-muted-foreground text-xs">{v.user_phone ?? '—'}</td>
-                <td className="px-4 py-3">{v.vendor_category ?? <span className="text-muted-foreground">—</span>}</td>
+                <td className="px-4 py-3 text-muted-foreground text-xs">{v.user_phone ?? '\u2014'}</td>
+                <td className="px-4 py-3">{v.vendor_category ?? <span className="text-muted-foreground">\u2014</span>}</td>
                 <td className="px-4 py-3">
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${
                     STATUS_BADGE[v.vendor_status] ?? 'bg-muted text-muted-foreground'
@@ -214,8 +274,7 @@ export default function AdminVendorsContent() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex gap-2 items-center">
-                    <Button size="sm" variant="outline"
-                      className="h-7 px-2.5 text-xs gap-1"
+                    <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs gap-1"
                       onClick={() => setDetail(v)}>
                       <Eye className="h-3.5 w-3.5" /> Detail
                     </Button>
@@ -244,10 +303,8 @@ export default function AdminVendorsContent() {
         </table>
       </div>
 
-      {/* Detail modal */}
       {detail && <VendorDetailModal vendor={detail} onClose={() => setDetail(null)} />}
 
-      {/* Reject modal */}
       {rejectId && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <div className="bg-background rounded-xl shadow-2xl p-6 w-full max-w-md space-y-4 border">
@@ -255,10 +312,8 @@ export default function AdminVendorsContent() {
             <p className="text-sm text-muted-foreground">Berikan alasan penolakan (opsional). Akan ditampilkan ke vendor.</p>
             <textarea
               className="w-full border rounded-lg p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
-              rows={3}
-              placeholder="Contoh: Dokumen NIB tidak valid"
-              value={rejectNote}
-              onChange={e => setRejectNote(e.target.value)}
+              rows={3} placeholder="Contoh: Dokumen NIB tidak valid"
+              value={rejectNote} onChange={e => setRejectNote(e.target.value)}
             />
             <div className="flex justify-end gap-3">
               <Button variant="outline" onClick={() => { setRejectId(null); setRejectNote("") }}>Cancel</Button>
