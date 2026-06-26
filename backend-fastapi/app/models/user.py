@@ -35,5 +35,4 @@ class User(Base):
     guide             = relationship("Guide", back_populates="user", uselist=False)
     vendor            = relationship("Vendor", back_populates="user", uselist=False)
     audit_logs        = relationship("AuditLog", foreign_keys="AuditLog.actor_id", back_populates="actor")
-    reviewed_transactions = relationship("Transaction", foreign_keys="Transaction.reviewed_by", back_populates="reviewer")
     split_configs     = relationship("RevenueSplitConfig", foreign_keys="RevenueSplitConfig.set_by", back_populates="set_by_user")
