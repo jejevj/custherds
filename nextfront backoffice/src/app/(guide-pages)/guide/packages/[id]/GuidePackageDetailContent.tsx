@@ -30,7 +30,6 @@ import { cn } from '@/lib/utils'
 import { format, isBefore, startOfToday } from 'date-fns'
 import { id as localeId } from 'date-fns/locale'
 
-// Map available_days strings to date-fns day index (0=Sun)
 const DAY_NAME_TO_INDEX: Record<string, number> = {
   Sun: 0, Sunday: 0,
   Mon: 1, Monday: 1,
@@ -43,7 +42,6 @@ const DAY_NAME_TO_INDEX: Record<string, number> = {
 
 function buildDisabledFn(availableDays: string[]) {
   if (!availableDays || availableDays.length === 0) {
-    // no restriction — only disable past dates
     return (date: Date) => isBefore(date, startOfToday())
   }
   const allowed = new Set(availableDays.map(d => DAY_NAME_TO_INDEX[d]).filter(n => n !== undefined))
@@ -70,12 +68,10 @@ function PhotoGallery({ urls }: { urls: string[] }) {
         <img src={urls[active]} alt="" className="w-full h-full object-cover" />
         {urls.length > 1 && (
           <>
-            <button
-              onClick={() => setActive(i => (i - 1 + urls.length) % urls.length)}
+            <button onClick={() => setActive(i => (i - 1 + urls.length) % urls.length)}
               className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1.5 transition-colors"
             ><Prev size={16} /></button>
-            <button
-              onClick={() => setActive(i => (i + 1) % urls.length)}
+            <button onClick={() => setActive(i => (i + 1) % urls.length)}
               className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1.5 transition-colors"
             ><Next size={16} /></button>
             <span className="absolute bottom-3 right-3 bg-black/50 text-white text-xs px-2 py-0.5 rounded-full">
@@ -87,9 +83,7 @@ function PhotoGallery({ urls }: { urls: string[] }) {
       {urls.length > 1 && (
         <div className="flex gap-2 overflow-x-auto pb-1">
           {urls.map((url, i) => (
-            <button
-              key={i}
-              onClick={() => setActive(i)}
+            <button key={i} onClick={() => setActive(i)}
               className={cn(
                 'shrink-0 w-16 h-12 rounded-lg overflow-hidden border-2 transition-all',
                 i === active ? 'border-emerald-500' : 'border-white/10 opacity-60 hover:opacity-100'
@@ -118,14 +112,21 @@ function BookingForm({ pkg }: { pkg: PackageBrowse }) {
   const [error,       setError]       = useState('')
   const [success,     setSuccess]     = useState('')
 
+  const hasSlots   = pkg.available_slots?.length > 0
   const dateStr    = selectedDay ? format(selectedDay, 'yyyy-MM-dd') : ''
   const total      = pax * pkg.price_per_pax
   const commission = pax * pkg.commission_per_pax
   const disabledFn = buildDisabledFn(pkg.available_days ?? [])
 
+  // reset time when slots change
+  useEffect(() => { if (!hasSlots) setTime('') }, [hasSlots])
+
+  const canSubmit = !!dateStr && (!hasSlots || !!time) && !loading && !success
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!dateStr) { setError('Pilih tanggal booking terlebih dahulu.'); return }
+    if (hasSlots && !time) { setError('Pilih slot waktu terlebih dahulu.'); return }
     setLoading(true); setError(''); setSuccess('')
     try {
       await bookingsService.create({
@@ -154,7 +155,6 @@ function BookingForm({ pkg }: { pkg: PackageBrowse }) {
         <p className="text-xs text-muted-foreground mt-0.5">Isi detail booking untuk tourist kamu</p>
       </div>
 
-      {/* Price summary */}
       <div className="rounded-xl bg-white/5 border border-white/10 p-4 space-y-1.5">
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">Harga / pax</span>
@@ -178,7 +178,7 @@ function BookingForm({ pkg }: { pkg: PackageBrowse }) {
         {error   && <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>}
         {success && <p className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">{success}</p>}
 
-        {/* ── Tanggal Booking (custom calendar picker) ── */}
+        {/* Tanggal */}
         <div className="grid gap-1.5">
           <Label className="text-xs">
             Tanggal Booking *
@@ -190,8 +190,7 @@ function BookingForm({ pkg }: { pkg: PackageBrowse }) {
           </Label>
           <Popover open={calOpen} onOpenChange={setCalOpen}>
             <PopoverTrigger asChild>
-              <button
-                type="button"
+              <button type="button"
                 className={cn(
                   'w-full flex items-center gap-2 h-9 rounded-lg border border-white/10 bg-white/5 px-3 text-sm transition-colors hover:bg-white/10',
                   !selectedDay && 'text-muted-foreground'
@@ -203,10 +202,7 @@ function BookingForm({ pkg }: { pkg: PackageBrowse }) {
                   : 'Pilih tanggal…'}
               </button>
             </PopoverTrigger>
-            <PopoverContent
-              align="start"
-              className="w-auto p-0 border border-white/10 bg-background shadow-xl"
-            >
+            <PopoverContent align="start" className="w-auto p-0 border border-white/10 bg-background shadow-xl">
               <Calendar
                 mode="single"
                 selected={selectedDay}
@@ -218,35 +214,33 @@ function BookingForm({ pkg }: { pkg: PackageBrowse }) {
           </Popover>
         </div>
 
-        {/* ── Slot Waktu ── */}
-        {pkg.available_slots?.length > 0 ? (
+        {/* Slot Waktu — hanya tampil jika package punya slots, TIDAK ada time picker bebas */}
+        {hasSlots && (
           <div className="grid gap-1.5">
             <Label className="text-xs">Slot Waktu *</Label>
-            <Select required value={time} onValueChange={setTime}>
+            <Select value={time} onValueChange={setTime}>
               <SelectTrigger className="border-white/10 bg-white/5">
                 <SelectValue placeholder="Pilih slot waktu…" />
               </SelectTrigger>
               <SelectContent className="bg-background border-white/10">
                 {pkg.available_slots.map(s => (
-                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                  <SelectItem key={s} value={s}>
+                    <span className="flex items-center gap-1.5">
+                      <Clock size={12} className="text-muted-foreground" />{s}
+                    </span>
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-        ) : (
-          <div className="grid gap-1.5">
-            <Label className="text-xs">Waktu (opsional)</Label>
-            <Input type="time" value={time} onChange={e => setTime(e.target.value)} />
-          </div>
         )}
 
-        {/* ── Pax ── */}
+        {/* Pax */}
         <div className="grid gap-1.5">
           <Label className="text-xs">
             Jumlah Pax * <span className="text-muted-foreground">(min {pkg.min_pax}{pkg.max_pax ? `, max ${pkg.max_pax}` : ''})</span>
           </Label>
-          <Input
-            required type="number"
+          <Input required type="number"
             min={pkg.min_pax} max={pkg.max_pax ?? undefined}
             value={pax} onChange={e => setPax(parseInt(e.target.value) || pkg.min_pax)}
           />
@@ -262,7 +256,7 @@ function BookingForm({ pkg }: { pkg: PackageBrowse }) {
           <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Opsional" />
         </div>
 
-        <Button type="submit" className="w-full" disabled={loading || !!success || !dateStr}>
+        <Button type="submit" className="w-full" disabled={!canSubmit}>
           {loading ? 'Membuat booking…' : 'Buat Booking'}
         </Button>
       </form>
@@ -300,8 +294,7 @@ export default function GuidePackageDetailContent({ packageId }: { packageId: st
 
   return (
     <div className="space-y-6">
-      <button
-        onClick={() => router.back()}
+      <button onClick={() => router.back()}
         className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ChevronLeft size={16} /> Kembali ke Packages
@@ -323,7 +316,9 @@ export default function GuidePackageDetailContent({ packageId }: { packageId: st
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <StatBox label="Harga" value={`${formatRupiah(pkg.price_per_pax)}/pax`} />
             <StatBox label="Komisi" value={`+${formatRupiah(pkg.commission_per_pax)}/pax`} highlight />
-            {pkg.duration_minutes != null && <StatBox label="Durasi" value={`${pkg.duration_minutes} menit`} icon={<Clock size={13} />} />}
+            {pkg.duration_minutes != null && (
+              <StatBox label="Durasi" value={`${pkg.duration_minutes} menit`} icon={<Clock size={13} />} />
+            )}
             <StatBox label="Pax" value={`${pkg.min_pax}${pkg.max_pax ? ` – ${pkg.max_pax}` : '+'} orang`} icon={<Users size={13} />} />
           </div>
 
@@ -334,9 +329,12 @@ export default function GuidePackageDetailContent({ packageId }: { packageId: st
             </div>
           )}
 
+          {/* Hari Tersedia */}
           {pkg.available_days?.length > 0 && (
             <div>
-              <h3 className="font-semibold text-sm mb-2 flex items-center gap-1.5"><CalendarDays size={14} /> Hari Tersedia</h3>
+              <h3 className="font-semibold text-sm mb-2 flex items-center gap-1.5">
+                <CalendarDays size={14} /> Hari Tersedia
+              </h3>
               <div className="flex flex-wrap gap-2">
                 {pkg.available_days.map(d => (
                   <span key={d} className="text-xs bg-white/10 border border-white/10 px-3 py-1 rounded-full">{d}</span>
@@ -345,12 +343,17 @@ export default function GuidePackageDetailContent({ packageId }: { packageId: st
             </div>
           )}
 
+          {/* Slot Waktu — tampilkan di detail juga */}
           {pkg.available_slots?.length > 0 && (
             <div>
-              <h3 className="font-semibold text-sm mb-2">Slot Waktu</h3>
+              <h3 className="font-semibold text-sm mb-2 flex items-center gap-1.5">
+                <Clock size={14} /> Slot Waktu Tersedia
+              </h3>
               <div className="flex flex-wrap gap-2">
                 {pkg.available_slots.map(s => (
-                  <span key={s} className="text-xs bg-white/10 border border-white/10 px-3 py-1 rounded-full">{s}</span>
+                  <span key={s} className="flex items-center gap-1 text-xs bg-white/10 border border-white/10 px-3 py-1 rounded-full">
+                    <Clock size={10} className="text-muted-foreground" />{s}
+                  </span>
                 ))}
               </div>
             </div>
