@@ -1,4 +1,6 @@
 import { Metadata } from "next"
+import { Suspense } from "react"
+import { UnauthorizedToast } from "@/components/unauthorized-toast"
 
 export const metadata: Metadata = {
   title: "Guide Dashboard | Custherds",
@@ -7,6 +9,10 @@ export const metadata: Metadata = {
 export default function GuideDashboardPage() {
   return (
     <div className="space-y-6">
+      <Suspense fallback={null}>
+        <UnauthorizedToast />
+      </Suspense>
+
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Guide Dashboard</h1>
         <p className="text-muted-foreground">

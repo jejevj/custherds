@@ -1,4 +1,5 @@
 import { Metadata } from "next"
+import { Suspense } from "react"
 import {
   Users,
   ShoppingBag,
@@ -6,6 +7,7 @@ import {
   TrendingUp,
 } from "lucide-react"
 import { AdminDashboardClient } from "./AdminDashboardClient"
+import { UnauthorizedToast } from "@/components/unauthorized-toast"
 
 export const metadata: Metadata = {
   title: "Admin Dashboard | Custherds",
@@ -36,6 +38,10 @@ const recentTransactions = [
 export default function AdminDashboardPage() {
   return (
     <div className="space-y-6">
+      <Suspense fallback={null}>
+        <UnauthorizedToast />
+      </Suspense>
+
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Admin Dashboard</h1>
@@ -43,11 +49,9 @@ export default function AdminDashboardPage() {
             Welcome to the Custherds admin portal. Monitor and manage the entire platform here.
           </p>
         </div>
-        {/* Client component handles the modal button */}
         <AdminDashboardClient />
       </div>
 
-      {/* Stats */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
           <div key={stat.label} className="rounded-xl border bg-card p-5 shadow-sm flex items-start gap-4">
@@ -64,7 +68,6 @@ export default function AdminDashboardPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* Recent Users */}
         <div className="rounded-xl border bg-card p-5 shadow-sm">
           <h2 className="font-semibold mb-4">Recent Registrations</h2>
           <table className="w-full text-sm">
@@ -97,7 +100,6 @@ export default function AdminDashboardPage() {
           </table>
         </div>
 
-        {/* Recent Transactions */}
         <div className="rounded-xl border bg-card p-5 shadow-sm">
           <h2 className="font-semibold mb-4">Recent Transactions</h2>
           <table className="w-full text-sm">
