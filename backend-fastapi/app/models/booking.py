@@ -12,15 +12,17 @@ class Booking(Base):
 
     booking_type:
     - "direct"  : Guide booking langsung ke vendor tanpa package.
-                  Nominal transaksi diinput guide setelah kunjungan selesai.
     - "package" : Guide memilih package vendor.
-                  subtotal_package = package_price_snapshot × pax_count (pre-filled).
-                  Guide tetap bisa menambahkan extra_amount saat submit transaksi.
 
     Status lifecycle:
-    pending_vendor → confirmed → completed
-                   ↓
-                rejected / cancelled
+    pending_vendor
+        → confirmed          (vendor approve)
+        → pending_receipt    (guide checkin hari-H)
+        → pending_completion (guide upload receipt/bukti kunjungan)
+        → completed          (vendor konfirmasi selesai)
+
+    Dari pending_vendor  : bisa → rejected
+    Dari confirmed/pending_receipt/pending_completion : bisa → cancelled
     """
     __tablename__ = "bookings"
 
@@ -32,8 +34,8 @@ class Booking(Base):
     # Tipe booking
     booking_type            = Column(String(10), default="direct", nullable=False)  # "direct" | "package"
     package_id              = Column(UUID(as_uuid=True), ForeignKey("packages.id", ondelete="SET NULL"), nullable=True, index=True)
-    package_price_snapshot  = Column(Numeric(15, 2), nullable=True)   # price_per_pax saat booking dibuat
-    subtotal_package        = Column(Numeric(15, 2), nullable=True)   # snapshot × pax_count
+    package_price_snapshot  = Column(Numeric(15, 2), nullable=True)
+    subtotal_package        = Column(Numeric(15, 2), nullable=True)
 
     # Jadwal & turis
     booking_date            = Column(Date, nullable=False)
@@ -47,9 +49,15 @@ class Booking(Base):
     status                  = Column(String(30), default="pending_vendor", nullable=False, index=True)
     vendor_approval_at      = Column(DateTime(timezone=True), nullable=True)
     vendor_rejection_reason = Column(Text, nullable=True)
-    cancelled_by            = Column(String(10), nullable=True)       # "guide" | "vendor"
+    cancelled_by            = Column(String(10), nullable=True)       # "guide" | "vendor" | "admin"
     cancelled_reason        = Column(Text, nullable=True)
     cancelled_at            = Column(DateTime(timezone=True), nullable=True)
+
+    # Checkin & Receipt (flow baru)
+    checkin_at              = Column(DateTime(timezone=True), nullable=True)   # saat guide checkin (confirmed → pending_receipt)
+    receipt_url             = Column(String(500), nullable=True)               # URL bukti kunjungan yang diupload guide
+    receipt_uploaded_at     = Column(DateTime(timezone=True), nullable=True)   # saat guide upload receipt (pending_receipt → pending_completion)
+    completed_at            = Column(DateTime(timezone=True), nullable=True)   # saat vendor mark completed (pending_completion → completed)
 
     created_at              = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at              = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

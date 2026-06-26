@@ -29,6 +29,16 @@ class BookingCancelRequest(BaseModel):
     reason: Optional[str] = None
 
 
+class BookingCheckinRequest(BaseModel):
+    """Guide checkin saat tiba di lokasi. confirmed → pending_receipt."""
+    notes: Optional[str] = None            # catatan opsional saat checkin
+
+
+class BookingReceiptUpload(BaseModel):
+    """Guide upload URL receipt/bukti kunjungan. pending_receipt → pending_completion."""
+    receipt_url: str                       # URL file yang sudah diupload via /uploads
+
+
 class BookingResponse(BaseModel):
     id: UUID4
     booking_code: str
@@ -50,6 +60,13 @@ class BookingResponse(BaseModel):
     cancelled_by: Optional[str]
     cancelled_reason: Optional[str]
     cancelled_at: Optional[datetime]
+
+    # Checkin & Receipt fields
+    checkin_at: Optional[datetime]
+    receipt_url: Optional[str]
+    receipt_uploaded_at: Optional[datetime]
+    completed_at: Optional[datetime]
+
     created_at: datetime
     updated_at: datetime
 

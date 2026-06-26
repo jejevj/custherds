@@ -28,6 +28,13 @@ export interface Booking {
   cancelled_by: string | null
   cancelled_reason: string | null
   cancelled_at: string | null
+
+  // Checkin & Receipt flow
+  checkin_at: string | null
+  receipt_url: string | null
+  receipt_uploaded_at: string | null
+  completed_at: string | null
+
   created_at: string
   updated_at: string
 }
@@ -54,4 +61,16 @@ export const bookingsService = {
 
   cancel: (id: string, reason: string) =>
     api.post<Booking>(`/bookings/${id}/cancel`, { reason }),
+
+  /** Guide checkin saat tiba di lokasi. confirmed → pending_receipt */
+  checkin: (id: string, notes?: string) =>
+    api.post<Booking>(`/bookings/${id}/checkin`, { notes }),
+
+  /** Guide upload receipt/bukti kunjungan. pending_receipt → pending_completion */
+  uploadReceipt: (id: string, receipt_url: string) =>
+    api.post<Booking>(`/bookings/${id}/upload-receipt`, { receipt_url }),
+
+  /** Vendor konfirmasi selesai setelah cek receipt. pending_completion → completed */
+  complete: (id: string) =>
+    api.post<Booking>(`/bookings/${id}/complete`, {}),
 }

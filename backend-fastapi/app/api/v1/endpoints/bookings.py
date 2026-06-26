@@ -10,7 +10,14 @@ from app.models.booking import Booking
 from app.models.guide import Guide
 from app.models.vendor import Vendor
 from app.models.package import Package
-from app.schemas.bookings import BookingCreate, BookingResponse, BookingVendorAction, BookingCancelRequest
+from app.schemas.bookings import (
+    BookingCreate,
+    BookingResponse,
+    BookingVendorAction,
+    BookingCancelRequest,
+    BookingCheckinRequest,
+    BookingReceiptUpload,
+)
 from datetime import datetime, timezone
 
 router = APIRouter()
@@ -34,13 +41,13 @@ def _check_quota(
 ) -> None:
     """
     Cek apakah slot (package + tanggal + jam) masih ada quota.
-    Quota = max jumlah BOOKING (bukan pax) berstatus pending_vendor / confirmed.
+    Quota = max jumlah BOOKING (bukan pax) berstatus pending_vendor / confirmed / pending_receipt / pending_completion.
     """
     q = db.query(Booking).filter(
         Booking.package_id == package_id,
         Booking.booking_date == booking_date,
         Booking.booking_time == booking_time,
-        Booking.status.in_(["pending_vendor", "confirmed"]),
+        Booking.status.in_(["pending_vendor", "confirmed", "pending_receipt", "pending_completion"]),
     )
     if exclude_booking_id:
         q = q.filter(Booking.id != exclude_booking_id)
@@ -74,7 +81,6 @@ def create_booking(
     if payload.booking_type not in ("direct", "package"):
         raise HTTPException(400, "booking_type harus 'direct' atau 'package'")
 
-    # ── Validasi direct booking ──────────────────────────────────────────────
     if payload.booking_type == "direct" and not vendor.allow_direct_booking:
         raise HTTPException(
             400,
@@ -84,7 +90,6 @@ def create_booking(
     package_price_snapshot = None
     subtotal_package = None
 
-    # ── Validasi package booking ─────────────────────────────────────────────
     if payload.booking_type == "package":
         if not payload.package_id:
             raise HTTPException(400, "package_id wajib diisi untuk booking package")
@@ -196,6 +201,110 @@ def vendor_action_booking(
     return booking
 
 
+# ─────────────────────────────── GUIDE CHECKIN ─────────────────────────────────
+
+@router.post("/{booking_id}/checkin", response_model=BookingResponse, summary="Guide checkin saat tiba di lokasi vendor")
+def guide_checkin(
+    booking_id: uuid.UUID,
+    payload: BookingCheckinRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_user_type(1)),
+) -> Any:
+    """
+    Guide menekan tombol checkin saat sudah tiba di lokasi vendor.
+    Status: confirmed → pending_receipt
+    Guide wajib upload receipt setelah checkin.
+    """
+    guide = db.query(Guide).filter(Guide.user_id == current_user.id).first()
+    if not guide:
+        raise HTTPException(404, "Profil guide tidak ditemukan")
+
+    booking = db.query(Booking).filter(
+        Booking.id == booking_id,
+        Booking.guide_id == guide.id,
+    ).first()
+    if not booking:
+        raise HTTPException(404, "Booking tidak ditemukan")
+    if booking.status != "confirmed":
+        raise HTTPException(400, f"Checkin hanya bisa dilakukan saat status 'confirmed'. Status saat ini: {booking.status}")
+
+    booking.status = "pending_receipt"
+    booking.checkin_at = datetime.now(timezone.utc)
+    if payload.notes:
+        booking.notes = (booking.notes or "") + f"\n[Checkin note] {payload.notes}"
+
+    db.commit()
+    db.refresh(booking)
+    return booking
+
+
+# ─────────────────────────────── GUIDE UPLOAD RECEIPT ──────────────────────────
+
+@router.post("/{booking_id}/upload-receipt", response_model=BookingResponse, summary="Guide upload bukti kunjungan (receipt)")
+def upload_receipt(
+    booking_id: uuid.UUID,
+    payload: BookingReceiptUpload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_user_type(1)),
+) -> Any:
+    """
+    Guide mengupload URL receipt/bukti kunjungan setelah checkin.
+    Status: pending_receipt → pending_completion
+    Vendor kemudian akan mengkonfirmasi dan mengubah status ke completed.
+    """
+    guide = db.query(Guide).filter(Guide.user_id == current_user.id).first()
+    if not guide:
+        raise HTTPException(404, "Profil guide tidak ditemukan")
+
+    booking = db.query(Booking).filter(
+        Booking.id == booking_id,
+        Booking.guide_id == guide.id,
+    ).first()
+    if not booking:
+        raise HTTPException(404, "Booking tidak ditemukan")
+    if booking.status != "pending_receipt":
+        raise HTTPException(400, f"Upload receipt hanya bisa dilakukan saat status 'pending_receipt'. Status saat ini: {booking.status}")
+
+    booking.status = "pending_completion"
+    booking.receipt_url = payload.receipt_url
+    booking.receipt_uploaded_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(booking)
+    return booking
+
+
+# ─────────────────────────────── VENDOR COMPLETE ───────────────────────────────
+
+@router.post("/{booking_id}/complete", response_model=BookingResponse, summary="Vendor konfirmasi booking selesai")
+def complete_booking(
+    booking_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_user_type(2)),
+) -> Any:
+    """
+    Vendor mengkonfirmasi bahwa kunjungan sudah selesai setelah melihat receipt.
+    Status: pending_completion → completed
+    Setelah completed, transaksi/komisi bisa diproses.
+    """
+    vendor = db.query(Vendor).filter(Vendor.user_id == current_user.id).first()
+    booking = db.query(Booking).filter(
+        Booking.id == booking_id,
+        Booking.vendor_id == vendor.id,
+    ).first()
+    if not booking:
+        raise HTTPException(404, "Booking tidak ditemukan")
+    if booking.status != "pending_completion":
+        raise HTTPException(400, f"Complete hanya bisa dilakukan saat status 'pending_completion'. Status saat ini: {booking.status}")
+
+    booking.status = "completed"
+    booking.completed_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(booking)
+    return booking
+
+
 # ─────────────────────────────── CANCEL ────────────────────────────────────────
 
 @router.post("/{booking_id}/cancel", response_model=BookingResponse, summary="Guide atau Vendor cancel booking")
@@ -208,7 +317,7 @@ def cancel_booking(
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(404, "Booking tidak ditemukan")
-    if booking.status not in ("pending_vendor", "confirmed"):
+    if booking.status not in ("pending_vendor", "confirmed", "pending_receipt", "pending_completion"):
         raise HTTPException(400, f"Booking tidak dapat dibatalkan, status saat ini: {booking.status}")
 
     if current_user.user_type == 1:
