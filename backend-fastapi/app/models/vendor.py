@@ -32,10 +32,10 @@ class Vendor(Base):
     vendor_category             = Column(Integer, nullable=False)
     vendor_area                 = Column(Integer, nullable=False)
 
-    # --- Dokumen legalitas (wajib untuk submit ke pending) ---
-    vendor_npwp                 = Column(String(30), nullable=True)     # Nomor NPWP
-    vendor_nib                  = Column(String(30), nullable=True)     # Nomor Induk Berusaha
-    vendor_owner_id_card_url    = Column(String(500), nullable=True)    # URL KTP pemilik
+    # --- Dokumen legalitas ---
+    vendor_npwp                 = Column(String(30), nullable=True)
+    vendor_nib                  = Column(String(30), nullable=True)
+    vendor_owner_id_card_url    = Column(String(500), nullable=True)
 
     # --- Info bisnis tambahan ---
     vendor_location             = Column(Text, nullable=True)
@@ -55,7 +55,7 @@ class Vendor(Base):
     updated_at                  = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     user                        = relationship("User", back_populates="vendor")
-    products                    = relationship("Product", back_populates="vendor")
+    packages                    = relationship("Package", back_populates="vendor")
     bookings                    = relationship("Booking", back_populates="vendor")
     transactions                = relationship("Transaction", back_populates="vendor")
     destinations                = relationship("Destination", back_populates="vendor")

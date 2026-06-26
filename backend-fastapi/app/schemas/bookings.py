@@ -1,12 +1,17 @@
-import uuid
-from typing import Optional
-from datetime import datetime, date, time
-from pydantic import BaseModel
+from typing import Optional, List
+from decimal import Decimal
+from datetime import date, time, datetime
+from pydantic import BaseModel, UUID4
 
 
 class BookingCreate(BaseModel):
-    vendor_id: uuid.UUID
-    product_id: Optional[uuid.UUID] = None
+    """
+    booking_type = "direct"  : isi vendor_id + jadwal, package_id = None
+    booking_type = "package" : isi vendor_id + package_id + jadwal
+    """
+    vendor_id: UUID4
+    booking_type: str = "direct"          # "direct" | "package"
+    package_id: Optional[UUID4] = None
     booking_date: date
     booking_time: Optional[time] = None
     pax_count: int = 1
@@ -15,12 +20,24 @@ class BookingCreate(BaseModel):
     notes: Optional[str] = None
 
 
+class BookingVendorAction(BaseModel):
+    action: str                            # "approve" | "reject"
+    rejection_reason: Optional[str] = None
+
+
+class BookingCancelRequest(BaseModel):
+    reason: Optional[str] = None
+
+
 class BookingResponse(BaseModel):
-    id: uuid.UUID
+    id: UUID4
     booking_code: str
-    guide_id: uuid.UUID
-    vendor_id: uuid.UUID
-    product_id: Optional[uuid.UUID]
+    guide_id: UUID4
+    vendor_id: UUID4
+    booking_type: str
+    package_id: Optional[UUID4]
+    package_price_snapshot: Optional[Decimal]
+    subtotal_package: Optional[Decimal]
     booking_date: date
     booking_time: Optional[time]
     pax_count: int
@@ -30,12 +47,11 @@ class BookingResponse(BaseModel):
     status: str
     vendor_approval_at: Optional[datetime]
     vendor_rejection_reason: Optional[str]
+    cancelled_by: Optional[str]
+    cancelled_reason: Optional[str]
+    cancelled_at: Optional[datetime]
     created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True
-
-
-class BookingVendorAction(BaseModel):
-    action: str  # "approve" | "reject"
-    rejection_reason: Optional[str] = None

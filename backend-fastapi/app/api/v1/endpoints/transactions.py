@@ -2,7 +2,7 @@ import uuid
 from typing import Any, List
 from datetime import datetime, timezone
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.core.deps import get_current_user, require_user_type
@@ -18,6 +18,7 @@ from app.schemas.transactions import (
     TransactionInvoiceResponse,
 )
 from app.services.xendit import create_invoice
+from typing import Optional
 
 router = APIRouter()
 
@@ -46,6 +47,7 @@ def create_transaction(
     guide = db.query(Guide).filter(Guide.user_id == current_user.id).first()
     if not guide:
         raise HTTPException(404, "Profil guide tidak ditemukan")
+
     booking = db.query(Booking).filter(Booking.id == payload.booking_id, Booking.guide_id == guide.id).first()
     if not booking:
         raise HTTPException(404, "Booking tidak ditemukan")
@@ -53,17 +55,32 @@ def create_transaction(
         raise HTTPException(400, f"Booking belum confirmed, status: {booking.status}")
     if db.query(Transaction).filter(Transaction.booking_id == booking.id).first():
         raise HTTPException(400, "Transaksi untuk booking ini sudah ada")
+
+    # Validasi gross_amount untuk package booking
+    if booking.booking_type == "package" and booking.subtotal_package:
+        extra = payload.extra_amount or Decimal("0")
+        expected_gross = booking.subtotal_package + extra
+        if payload.gross_amount != expected_gross:
+            raise HTTPException(
+                400,
+                f"gross_amount tidak sesuai. Subtotal package: {booking.subtotal_package}, "
+                f"extra: {extra}, total seharusnya: {expected_gross}"
+            )
+
     split = _get_active_split(db)
     gross = Decimal(str(payload.gross_amount))
     vendor_amount = (gross * Decimal(str(split.vendor_percent))   / 100).quantize(Decimal("0.01"))
     guide_comm    = (gross * Decimal(str(split.guide_percent))    / 100).quantize(Decimal("0.01"))
     platform_fee  = (gross * Decimal(str(split.platform_percent)) / 100).quantize(Decimal("0.01"))
+
     tx = Transaction(
         transaction_code=_generate_tx_code(db),
         booking_id=booking.id,
         vendor_id=booking.vendor_id,
         guide_id=guide.id,
         gross_amount=gross,
+        extra_amount=payload.extra_amount,
+        extra_notes=payload.extra_notes,
         receipt_image=payload.receipt_image,
         receipt_notes=payload.receipt_notes,
         split_config_id=split.id,
@@ -76,6 +93,8 @@ def create_transaction(
         status="pending_vendor_approval",
     )
     db.add(tx)
+    # Update booking status ke completed
+    booking.status = "completed"
     db.commit()
     db.refresh(tx)
     return tx
@@ -83,20 +102,29 @@ def create_transaction(
 
 @router.get("", response_model=List[TransactionResponse], summary="List transaksi saya")
 def list_transactions(
+    status: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Any:
     if current_user.user_type == 1:
         guide = db.query(Guide).filter(Guide.user_id == current_user.id).first()
-        return db.query(Transaction).filter(Transaction.guide_id == guide.id).order_by(Transaction.created_at.desc()).all() if guide else []
+        q = db.query(Transaction).filter(Transaction.guide_id == guide.id) if guide else db.query(Transaction).filter(False)
     elif current_user.user_type == 2:
         vendor = db.query(Vendor).filter(Vendor.user_id == current_user.id).first()
-        return db.query(Transaction).filter(Transaction.vendor_id == vendor.id).order_by(Transaction.created_at.desc()).all() if vendor else []
-    return db.query(Transaction).order_by(Transaction.created_at.desc()).all()
+        q = db.query(Transaction).filter(Transaction.vendor_id == vendor.id) if vendor else db.query(Transaction).filter(False)
+    else:
+        q = db.query(Transaction)
+    if status:
+        q = q.filter(Transaction.status == status)
+    return q.order_by(Transaction.created_at.desc()).all()
 
 
 @router.get("/{tx_id}", response_model=TransactionResponse, summary="Detail transaksi")
-def get_transaction(tx_id: uuid.UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> Any:
+def get_transaction(
+    tx_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Any:
     tx = db.query(Transaction).filter(Transaction.id == tx_id).first()
     if not tx:
         raise HTTPException(404, "Transaksi tidak ditemukan")
@@ -110,11 +138,6 @@ async def vendor_approve_transaction(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user_type(2)),
 ) -> Any:
-    """
-    Vendor approve transaksi dengan dua metode pembayaran:
-    - **deposit**: Potong saldo deposit vendor langsung → settled instan
-    - **pay_as_you_go**: Buat Xendit Invoice → vendor bayar via link pembayaran
-    """
     vendor = db.query(Vendor).filter(Vendor.user_id == current_user.id).first()
     tx = db.query(Transaction).filter(Transaction.id == tx_id, Transaction.vendor_id == vendor.id).first()
     if not tx:
@@ -124,7 +147,10 @@ async def vendor_approve_transaction(
 
     if payload.payment_method == "deposit":
         if vendor.deposit_balance < tx.vendor_amount:
-            raise HTTPException(400, f"Saldo deposit tidak cukup. Saldo: {vendor.deposit_balance}, Tagihan: {tx.vendor_amount}")
+            raise HTTPException(
+                400,
+                f"Saldo deposit tidak cukup. Saldo: {vendor.deposit_balance}, Tagihan: {tx.vendor_amount}"
+            )
         vendor.deposit_balance -= tx.vendor_amount
         tx.status = "settled"
         tx.payment_method = "deposit"
@@ -146,7 +172,6 @@ async def vendor_approve_transaction(
         )
 
     elif payload.payment_method == "pay_as_you_go":
-        # Buat Xendit Invoice sebesar vendor_amount
         vendor_user = db.query(User).filter(User.id == vendor.user_id).first()
         external_id = f"CUSTHERDS-TX-{tx.transaction_code}"
         description = f"Tagihan Custherds - Transaksi {tx.transaction_code} | Vendor: {vendor.vendor_business_name}"
@@ -159,7 +184,6 @@ async def vendor_approve_transaction(
             )
         except Exception as e:
             raise HTTPException(502, f"Gagal membuat invoice Xendit: {str(e)}")
-
         tx.status = "payment_pending"
         tx.payment_method = "pay_as_you_go"
         tx.xendit_invoice_id = xendit_response.get("id")
@@ -194,6 +218,10 @@ def vendor_reject_transaction(
     tx.status = "rejected"
     tx.vendor_rejection_reason = payload.reason
     tx.vendor_reviewed_at = datetime.now(timezone.utc)
+    # Kembalikan booking ke confirmed agar guide bisa resubmit
+    booking = db.query(Booking).filter(Booking.id == tx.booking_id).first()
+    if booking:
+        booking.status = "confirmed"
     db.commit()
     db.refresh(tx)
     return tx
@@ -205,12 +233,11 @@ def get_invoice_url(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user_type(2)),
 ) -> Any:
-    """Vendor ambil ulang link bayar jika halaman terputus."""
     vendor = db.query(Vendor).filter(Vendor.user_id == current_user.id).first()
     tx = db.query(Transaction).filter(Transaction.id == tx_id, Transaction.vendor_id == vendor.id).first()
     if not tx:
         raise HTTPException(404, "Transaksi tidak ditemukan")
-    if tx.status not in ("payment_pending",):
+    if tx.status != "payment_pending":
         raise HTTPException(400, f"Tidak ada invoice aktif untuk transaksi ini. Status: {tx.status}")
     return TransactionInvoiceResponse(
         transaction=tx,
