@@ -13,7 +13,7 @@ from app.schemas.packages import PackageCreate, PackageUpdate, PackageResponse, 
 router = APIRouter()
 
 
-# ─────────────────────── VENDOR CRUD ──────────────────────────
+# ─────────────────────── VENDOR CRUD ──────────────────────
 
 @router.get("/my-packages", response_model=List[PackageResponse], summary="[Vendor] List semua package saya")
 def list_my_packages(
@@ -117,7 +117,7 @@ def delete_package(
     return {"message": "Package berhasil dihapus"}
 
 
-# ─────────────────────── PUBLIC BROWSE (Guide) ────────────────────
+# ─────────────────────── PUBLIC BROWSE (Guide) ─────────────────
 
 @router.get("/browse", response_model=List[PackageBrowse], summary="[Guide] Browse semua package aktif")
 def browse_packages(
@@ -161,7 +161,6 @@ def browse_packages(
 
     packages = q.all()
 
-    # Filter available_day di Python (JSON array column)
     if available_day:
         packages = [p for p in packages if p.available_days and available_day in p.available_days]
 
@@ -191,20 +190,66 @@ def browse_packages(
             created_at=str(p.created_at),
         ))
 
-    # Sorting
     if sort == "commission_desc":
         result.sort(key=lambda x: x.commission_per_pax, reverse=True)
     elif sort == "price_asc":
         result.sort(key=lambda x: x.price_per_pax)
     elif sort == "price_desc":
         result.sort(key=lambda x: x.price_per_pax, reverse=True)
-    else:  # newest
+    else:
         result.sort(key=lambda x: x.created_at, reverse=True)
 
     return result[skip:skip + limit]
 
 
-# ─────────────────────── PUBLIC (Vendor packages by vendor) ─────────────
+@router.get("/browse/{package_id}", response_model=PackageBrowse, summary="[Guide] Detail satu package by ID")
+def browse_package_detail(
+    package_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    split = db.query(RevenueSplitConfig).filter(RevenueSplitConfig.is_active == True).first()  # noqa
+    guide_pct = float(split.guide_percent) if split else 0.0
+
+    p = (
+        db.query(Package)
+        .join(Vendor, Package.vendor_id == Vendor.id)
+        .filter(
+            Package.id == package_id,
+            Package.is_active == True,  # noqa
+            Vendor.vendor_status == "approved",
+        )
+        .first()
+    )
+    if not p:
+        raise HTTPException(404, "Package tidak ditemukan")
+
+    commission_per_pax = round(float(p.price_per_pax) * guide_pct / 100, 2)
+    return PackageBrowse(
+        id=p.id,
+        vendor_id=p.vendor_id,
+        vendor_name=p.vendor.vendor_business_name,
+        vendor_location=p.vendor.vendor_location,
+        vendor_allow_direct_booking=p.vendor.allow_direct_booking,
+        name=p.name,
+        description=p.description,
+        price_per_pax=float(p.price_per_pax),
+        commission_per_pax=commission_per_pax,
+        guide_percent=guide_pct,
+        min_pax=p.min_pax,
+        max_pax=p.max_pax,
+        duration_minutes=p.duration_minutes,
+        available_days=p.available_days or [],
+        available_slots=p.available_slots or [],
+        quota_per_slot=p.quota_per_slot,
+        terms=p.terms,
+        photo_urls=p.photo_urls or [],
+        is_active=p.is_active,
+        created_at=str(p.created_at),
+    )
+
+
+# ─────────────────────── PUBLIC (Vendor packages by vendor) ─────────
 
 @router.get("/vendors/{vendor_id}/packages", response_model=List[PackageResponse], summary="Browse packages milik vendor")
 def list_vendor_packages(

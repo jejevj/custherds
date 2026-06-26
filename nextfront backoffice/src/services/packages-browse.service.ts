@@ -45,18 +45,21 @@ export const DAY_OPTIONS = Object.entries(DAYS_ID).map(([v, l]) => ({ value: v, 
 export const packagesBrowseService = {
   browse: (params: PackageBrowseParams = {}) => {
     const q = new URLSearchParams()
-    if (params.search)          q.set('search', params.search)
-    if (params.vendor_id)       q.set('vendor_id', params.vendor_id)
-    if (params.available_day)   q.set('available_day', params.available_day)
-    if (params.min_price != null) q.set('min_price', String(params.min_price))
-    if (params.max_price != null) q.set('max_price', String(params.max_price))
+    if (params.search)               q.set('search', params.search)
+    if (params.vendor_id)            q.set('vendor_id', params.vendor_id)
+    if (params.available_day)        q.set('available_day', params.available_day)
+    if (params.min_price != null)    q.set('min_price', String(params.min_price))
+    if (params.max_price != null)    q.set('max_price', String(params.max_price))
     if (params.min_duration != null) q.set('min_duration', String(params.min_duration))
     if (params.max_duration != null) q.set('max_duration', String(params.max_duration))
-    if (params.sort)            q.set('sort', params.sort)
-    if (params.skip != null)    q.set('skip', String(params.skip))
-    if (params.limit != null)   q.set('limit', String(params.limit))
+    if (params.sort)                 q.set('sort', params.sort)
+    if (params.skip != null)         q.set('skip', String(params.skip))
+    if (params.limit != null)        q.set('limit', String(params.limit))
     return api.get<PackageBrowse[]>(`/packages/browse?${q.toString()}`)
   },
+
+  getById: (id: string) =>
+    api.get<PackageBrowse>(`/packages/browse/${id}`),
 }
 
 export function formatRupiah(n: number): string {

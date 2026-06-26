@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
-  ChevronLeft, Clock, Users, CalendarDays,
-  TrendingUp, MapPin, ChevronLeft as Prev, ChevronRight as Next,
+  ChevronLeft, Clock, Users, CalendarDays, TrendingUp, MapPin,
+  ChevronLeft as Prev, ChevronRight as Next,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -24,7 +24,6 @@ function PhotoGallery({ urls }: { urls: string[] }) {
   }
   return (
     <div className="space-y-3">
-      {/* Main image */}
       <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-white/5">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={urls[active]} alt="" className="w-full h-full object-cover" />
@@ -44,7 +43,6 @@ function PhotoGallery({ urls }: { urls: string[] }) {
           </>
         )}
       </div>
-      {/* Thumbnails */}
       {urls.length > 1 && (
         <div className="flex gap-2 overflow-x-auto pb-1">
           {urls.map((url, i) => (
@@ -79,7 +77,7 @@ function BookingForm({ pkg }: { pkg: PackageBrowse }) {
   const [error,       setError]       = useState('')
   const [success,     setSuccess]     = useState('')
 
-  const total = pax * pkg.price_per_pax
+  const total      = pax * pkg.price_per_pax
   const commission = pax * pkg.commission_per_pax
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -112,7 +110,6 @@ function BookingForm({ pkg }: { pkg: PackageBrowse }) {
         <p className="text-xs text-muted-foreground mt-0.5">Isi detail booking untuk tourist kamu</p>
       </div>
 
-      {/* Price summary */}
       <div className="rounded-xl bg-white/5 border border-white/10 p-4 space-y-1.5">
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">Harga / pax</span>
@@ -138,10 +135,7 @@ function BookingForm({ pkg }: { pkg: PackageBrowse }) {
 
         <div className="grid gap-1.5">
           <Label className="text-xs">Tanggal Booking *</Label>
-          <Input
-            required type="date" min={today}
-            value={date} onChange={e => setDate(e.target.value)}
-          />
+          <Input required type="date" min={today} value={date} onChange={e => setDate(e.target.value)} />
         </div>
 
         {pkg.available_slots?.length > 0 ? (
@@ -159,15 +153,14 @@ function BookingForm({ pkg }: { pkg: PackageBrowse }) {
         ) : (
           <div className="grid gap-1.5">
             <Label className="text-xs">Waktu (opsional)</Label>
-            <Input
-              type="time"
-              value={time} onChange={e => setTime(e.target.value)}
-            />
+            <Input type="time" value={time} onChange={e => setTime(e.target.value)} />
           </div>
         )}
 
         <div className="grid gap-1.5">
-          <Label className="text-xs">Jumlah Pax * <span className="text-muted-foreground">(min {pkg.min_pax}{pkg.max_pax ? `, max ${pkg.max_pax}` : ''})</span></Label>
+          <Label className="text-xs">
+            Jumlah Pax * <span className="text-muted-foreground">(min {pkg.min_pax}{pkg.max_pax ? `, max ${pkg.max_pax}` : ''})</span>
+          </Label>
           <Input
             required type="number"
             min={pkg.min_pax} max={pkg.max_pax ?? undefined}
@@ -177,18 +170,12 @@ function BookingForm({ pkg }: { pkg: PackageBrowse }) {
 
         <div className="grid gap-1.5">
           <Label className="text-xs">Kewarganegaraan Turis</Label>
-          <Input
-            value={nationality} onChange={e => setNationality(e.target.value)}
-            placeholder="WNA / WNI"
-          />
+          <Input value={nationality} onChange={e => setNationality(e.target.value)} placeholder="WNA / WNI" />
         </div>
 
         <div className="grid gap-1.5">
           <Label className="text-xs">Catatan</Label>
-          <Input
-            value={notes} onChange={e => setNotes(e.target.value)}
-            placeholder="Opsional"
-          />
+          <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Opsional" />
         </div>
 
         <Button type="submit" className="w-full" disabled={loading || !!success}>
@@ -207,13 +194,9 @@ export default function GuidePackageDetailContent({ packageId }: { packageId: st
   const [error,   setError]   = useState('')
 
   useEffect(() => {
-    packagesBrowseService.browse({ limit: 100 })
-      .then(list => {
-        const found = list.find(p => p.id === packageId)
-        if (found) setPkg(found)
-        else setError('Package tidak ditemukan.')
-      })
-      .catch(() => setError('Gagal memuat data package.'))
+    packagesBrowseService.getById(packageId)
+      .then(data => setPkg(data))
+      .catch(() => setError('Package tidak ditemukan atau sudah tidak aktif.'))
       .finally(() => setLoading(false))
   }, [packageId])
 
@@ -233,7 +216,6 @@ export default function GuidePackageDetailContent({ packageId }: { packageId: st
 
   return (
     <div className="space-y-6">
-      {/* Back button */}
       <button
         onClick={() => router.back()}
         className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -241,10 +223,9 @@ export default function GuidePackageDetailContent({ packageId }: { packageId: st
         <ChevronLeft size={16} /> Kembali ke Packages
       </button>
 
-      {/* 2-column layout: left=detail, right=booking */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 items-start">
 
-        {/* ── LEFT: Detail ── */}
+        {/* LEFT: Detail */}
         <div className="space-y-6">
           <PhotoGallery urls={pkg.photo_urls ?? []} />
 
@@ -255,12 +236,11 @@ export default function GuidePackageDetailContent({ packageId }: { packageId: st
             <h1 className="text-2xl font-bold mt-1">{pkg.name}</h1>
           </div>
 
-          {/* Quick stats */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <StatBox label="Harga" value={`${formatRupiah(pkg.price_per_pax)}/pax`} />
             <StatBox label="Komisi" value={`+${formatRupiah(pkg.commission_per_pax)}/pax`} highlight />
-            {pkg.duration_minutes && <StatBox label="Durasi" value={`${pkg.duration_minutes} menit`} icon={<Clock size={13} />} />}
-            <StatBox label="Min Pax" value={`${pkg.min_pax}${pkg.max_pax ? ` – ${pkg.max_pax}` : '+'} orang`} icon={<Users size={13} />} />
+            {pkg.duration_minutes != null && <StatBox label="Durasi" value={`${pkg.duration_minutes} menit`} icon={<Clock size={13} />} />}
+            <StatBox label="Pax" value={`${pkg.min_pax}${pkg.max_pax ? ` – ${pkg.max_pax}` : '+'} orang`} icon={<Users size={13} />} />
           </div>
 
           {pkg.description && (
@@ -300,7 +280,7 @@ export default function GuidePackageDetailContent({ packageId }: { packageId: st
           )}
         </div>
 
-        {/* ── RIGHT: Booking Form ── */}
+        {/* RIGHT: Booking Form */}
         <div>
           <BookingForm pkg={pkg} />
         </div>
