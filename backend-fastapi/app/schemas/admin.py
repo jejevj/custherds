@@ -27,8 +27,31 @@ class AdminTransactionList(BaseModel):
         from_attributes = True
 
 
+class AdminWithdrawalResponse(BaseModel):
+    id: uuid.UUID
+    guide_id: uuid.UUID
+    amount: Decimal
+    bank_name: str
+    bank_account_number: str
+    bank_account_name: str
+    status: str
+    xendit_disbursement_id: Optional[str]
+    processed_at: Optional[datetime]
+    notes: Optional[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class AdminWithdrawalProcess(BaseModel):
-    status: str  # processing | completed | failed
+    status: str
+    """
+    Status manual:
+    - **processing**: Sedang diproses
+    - **completed**: Selesai (manual override)
+    - **failed**: Gagal (manual override)
+    """
     notes: Optional[str] = None
     xendit_disbursement_id: Optional[str] = None
 

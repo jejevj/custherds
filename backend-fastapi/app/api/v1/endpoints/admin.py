@@ -13,7 +13,9 @@ from app.models.revenue_split_config import RevenueSplitConfig
 from app.schemas.admin import (
     AdminUserList, AdminTransactionList, AdminWithdrawalProcess,
     AdminSplitConfigCreate, AdminSplitConfigResponse,
+    AdminWithdrawalResponse,
 )
+from app.services.xendit_disbursement import create_disbursement
 from datetime import datetime, timezone
 
 router = APIRouter()
@@ -75,9 +77,9 @@ def admin_list_transactions(
     return q.order_by(Transaction.created_at.desc()).all()
 
 
-@router.get("/withdrawals", response_model=List[AdminTransactionList], summary="[Admin] List semua withdrawal guide")
+@router.get("/withdrawals", response_model=List[AdminWithdrawalResponse], summary="[Admin] List semua withdrawal guide")
 def admin_list_withdrawals(
-    status: Optional[str] = Query(None),
+    status: Optional[str] = Query(None, description="Filter: pending, processing, completed, failed"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user_type(99)),
 ) -> Any:
@@ -87,7 +89,67 @@ def admin_list_withdrawals(
     return q.order_by(GuideWithdrawal.created_at.desc()).all()
 
 
-@router.put("/withdrawals/{withdrawal_id}/process", summary="[Admin] Proses withdrawal guide")
+@router.post(
+    "/withdrawals/{withdrawal_id}/disburse",
+    summary="[Admin] Kirim dana guide via Xendit Disbursement",
+    description="""
+Admin memproses withdrawal guide dengan mengirim dana ke rekening bank via Xendit.
+
+**Flow:**
+1. Admin klik disburse
+2. Sistem panggil Xendit Disbursement API
+3. Status withdrawal berubah ke `processing`
+4. Xendit kirim callback ke `/payments/webhook/disbursement`
+5. Callback auto-update status ke `completed` atau `failed`
+
+**external_id format:** `CUSTHERDS-WD-{withdrawal_id}`
+    """,
+)
+async def admin_disburse_withdrawal(
+    withdrawal_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_user_type(99)),
+) -> Any:
+    w = db.query(GuideWithdrawal).filter(GuideWithdrawal.id == withdrawal_id).first()
+    if not w:
+        raise HTTPException(404, "Withdrawal tidak ditemukan")
+    if w.status != "pending":
+        raise HTTPException(400, f"Hanya withdrawal berstatus 'pending' yang bisa diproses. Status saat ini: {w.status}")
+
+    external_id = f"CUSTHERDS-WD-{w.id}"
+    description = f"Komisi guide Custherds - Withdrawal {w.id}"
+
+    try:
+        xendit_response = await create_disbursement(
+            external_id=external_id,
+            bank_code=w.bank_name,
+            account_holder_name=w.bank_account_name,
+            account_number=w.bank_account_number,
+            description=description,
+            amount=float(w.amount),
+        )
+    except Exception as e:
+        raise HTTPException(502, f"Gagal mengirim disbursement ke Xendit: {str(e)}")
+
+    w.status = "processing"
+    w.xendit_disbursement_id = xendit_response.get("id")
+    w.processed_by = current_user.id
+    w.processed_at = datetime.now(timezone.utc)
+    w.notes = (w.notes or "") + f" | Xendit disbursement_id: {w.xendit_disbursement_id}"
+    db.commit()
+
+    return {
+        "message": "Disbursement berhasil dikirim ke Xendit. Menunggu konfirmasi transfer.",
+        "withdrawal_id": str(w.id),
+        "xendit_disbursement_id": w.xendit_disbursement_id,
+        "status": w.status,
+        "amount": str(w.amount),
+        "bank_code": w.bank_name,
+        "account_number": w.bank_account_number,
+    }
+
+
+@router.put("/withdrawals/{withdrawal_id}/process", summary="[Admin] Update status withdrawal secara manual")
 def admin_process_withdrawal(
     withdrawal_id: uuid.UUID,
     payload: AdminWithdrawalProcess,
