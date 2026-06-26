@@ -30,16 +30,18 @@ const EMPTY_FORM: PackageCreate = {
 }
 
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
-const DAYS_ID: Record<string,string> = {
-  Mon:'Senin', Tue:'Selasa', Wed:'Rabu',
-  Thu:'Kamis', Fri:'Jumat', Sat:'Sabtu', Sun:'Minggu',
+const DAYS_ID: Record<string, string> = {
+  Mon: 'Senin', Tue: 'Selasa', Wed: 'Rabu',
+  Thu: 'Kamis', Fri: 'Jumat', Sat: 'Sabtu', Sun: 'Minggu',
 }
 
 export default function PackageFormContent({ mode, packageId }: Props) {
-  const router  = useRouter()
+  const router = useRouter()
   const [form,       setForm]       = useState<PackageCreate>(EMPTY_FORM)
   const [loading,    setLoading]    = useState(mode === 'edit')
   const [saving,     setSaving]     = useState(false)
+  const [error,      setError]      = useState('')
+  const [success,    setSuccess]    = useState(false)
   const [slotInput,  setSlotInput]  = useState('')
   const [photoInput, setPhotoInput] = useState('')
 
@@ -60,7 +62,7 @@ export default function PackageFormContent({ mode, packageId }: Props) {
           notes:            pkg.notes ?? '',
           photo_urls:       pkg.photo_urls ?? [],
         }))
-        .catch(() => toast.error('Gagal memuat data package.'))
+        .catch(() => setError('Gagal memuat data package.'))
         .finally(() => setLoading(false))
     }
   }, [mode, packageId])
@@ -96,10 +98,11 @@ export default function PackageFormContent({ mode, packageId }: Props) {
     set('photo_urls', form.photo_urls.filter(u => u !== url))
 
   const handleSubmit = async () => {
-    if (!form.name.trim())                            return toast.error('Nama package wajib diisi.')
-    if (!form.price_per_pax || form.price_per_pax <= 0) return toast.error('Harga per pax harus lebih dari 0.')
+    setError(''); setSuccess(false)
+    if (!form.name.trim())                              return setError('Nama package wajib diisi.')
+    if (!form.price_per_pax || form.price_per_pax <= 0) return setError('Harga per pax harus lebih dari 0.')
     if (form.max_pax !== null && form.max_pax < form.min_pax)
-      return toast.error('Max pax tidak boleh kurang dari min pax.')
+      return setError('Max pax tidak boleh kurang dari min pax.')
 
     setSaving(true)
     try {
@@ -113,34 +116,36 @@ export default function PackageFormContent({ mode, packageId }: Props) {
       router.push('/vendor/packages')
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Gagal menyimpan package.'
-      toast.error(msg)
+      setError(msg)
     } finally {
       setSaving(false)
     }
   }
 
-  if (loading) return <p className="text-muted-foreground p-6">Memuat...</p>
+  if (loading) return <p className="text-muted-foreground">Memuat...</p>
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6">
+
+      {/* Header */}
       <div className="flex items-center gap-3">
-        <Link href="/vendor/packages">
-          <button className="text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft size={20} />
-          </button>
+        <Link href="/vendor/packages" className="text-muted-foreground hover:text-foreground transition-colors">
+          <ArrowLeft size={20} />
         </Link>
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
             {mode === 'create' ? 'Buat Package Baru' : 'Edit Package'}
           </h1>
-          <p className="text-muted-foreground text-sm">Isi detail package yang ditawarkan ke guide.</p>
+          <p className="text-muted-foreground">Isi detail package yang ditawarkan ke guide.</p>
         </div>
       </div>
 
-      <div className="rounded-xl border bg-card p-6 shadow-sm space-y-5">
+      <div className="rounded-xl border bg-card p-6 shadow-sm max-w-lg space-y-4">
+        {error   && <p className="text-sm text-red-500">{error}</p>}
+        {success && <p className="text-sm text-green-600">Package berhasil disimpan.</p>}
 
         <div className="grid gap-1">
-          <Label>Nama Package <span className="text-red-500">*</span></Label>
+          <Label>Nama Package</Label>
           <Input
             value={form.name}
             onChange={e => set('name', e.target.value)}
@@ -151,7 +156,7 @@ export default function PackageFormContent({ mode, packageId }: Props) {
         <div className="grid gap-1">
           <Label>Deskripsi</Label>
           <textarea
-            className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50 bg-background"
+            className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
             rows={3}
             value={form.description}
             onChange={e => set('description', e.target.value)}
@@ -159,16 +164,17 @@ export default function PackageFormContent({ mode, packageId }: Props) {
           />
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
-          <div className="grid gap-1">
-            <Label>Harga / Pax (Rp) <span className="text-red-500">*</span></Label>
-            <Input
-              type="number" min={0}
-              value={form.price_per_pax || ''}
-              onChange={e => set('price_per_pax', Number(e.target.value))}
-              placeholder="150000"
-            />
-          </div>
+        <div className="grid gap-1">
+          <Label>Harga per Pax (Rp)</Label>
+          <Input
+            type="number" min={0}
+            value={form.price_per_pax || ''}
+            onChange={e => set('price_per_pax', Number(e.target.value))}
+            placeholder="150000"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
           <div className="grid gap-1">
             <Label>Min Pax</Label>
             <Input
@@ -190,7 +196,7 @@ export default function PackageFormContent({ mode, packageId }: Props) {
 
         <div className="grid grid-cols-2 gap-3">
           <div className="grid gap-1">
-            <Label>Durasi (menit) <span className="text-xs text-muted-foreground">(opsional)</span></Label>
+            <Label>Durasi <span className="text-xs text-muted-foreground">(menit)</span></Label>
             <Input
               type="number" min={1}
               value={form.duration_minutes ?? ''}
@@ -209,7 +215,7 @@ export default function PackageFormContent({ mode, packageId }: Props) {
         </div>
 
         <div className="grid gap-2">
-          <Label>Hari Tersedia <span className="text-xs text-muted-foreground">(panduan)</span></Label>
+          <Label>Hari Tersedia</Label>
           <div className="flex flex-wrap gap-2">
             {DAYS.map(day => (
               <button
@@ -217,10 +223,10 @@ export default function PackageFormContent({ mode, packageId }: Props) {
                 type="button"
                 onClick={() => toggleDay(day)}
                 className={[
-                  'px-3 py-1 rounded-full text-xs font-medium border transition-colors',
+                  'px-3 py-1 rounded-md border text-xs font-medium transition-colors',
                   form.available_days.includes(day)
                     ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-background border-border text-muted-foreground hover:border-primary',
+                    : 'bg-background border-input text-muted-foreground hover:bg-muted',
                 ].join(' ')}
               >
                 {DAYS_ID[day]}
@@ -230,25 +236,27 @@ export default function PackageFormContent({ mode, packageId }: Props) {
         </div>
 
         <div className="grid gap-2">
-          <Label>Slot Jam <span className="text-xs text-muted-foreground">(panduan)</span></Label>
+          <Label>Slot Jam</Label>
           <div className="flex gap-2">
             <Input
               value={slotInput}
               onChange={e => setSlotInput(e.target.value)}
               placeholder="cth: 09:00"
-              className="max-w-[120px]"
-              onKeyDown={e => e.key === 'Enter' && addSlot()}
+              className="max-w-[140px]"
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSlot() } }}
             />
             <Button type="button" variant="outline" size="sm" onClick={addSlot}>Tambah</Button>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {form.available_slots.map(slot => (
-              <span key={slot} className="flex items-center gap-1 bg-muted px-2 py-0.5 rounded-full text-xs">
-                {slot}
-                <button type="button" onClick={() => removeSlot(slot)} className="hover:text-destructive">×</button>
-              </span>
-            ))}
-          </div>
+          {form.available_slots.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {form.available_slots.map(slot => (
+                <span key={slot} className="flex items-center gap-1 border rounded-md px-2 py-0.5 text-xs text-muted-foreground">
+                  {slot}
+                  <button type="button" onClick={() => removeSlot(slot)} className="hover:text-destructive ml-0.5">×</button>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="grid gap-2">
@@ -258,39 +266,43 @@ export default function PackageFormContent({ mode, packageId }: Props) {
               value={photoInput}
               onChange={e => setPhotoInput(e.target.value)}
               placeholder="https://..."
-              onKeyDown={e => e.key === 'Enter' && addPhoto()}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addPhoto() } }}
             />
             <Button type="button" variant="outline" size="sm" onClick={addPhoto}>Tambah</Button>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {form.photo_urls.map(url => (
-              <div key={url} className="relative group">
-                <img src={url} alt="" className="h-16 w-24 object-cover rounded-lg border" />
-                <button
-                  type="button"
-                  onClick={() => removePhoto(url)}
-                  className="absolute -top-1.5 -right-1.5 bg-destructive text-white rounded-full w-4 h-4 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                >×</button>
-              </div>
-            ))}
-          </div>
+          {form.photo_urls.length > 0 && (
+            <div className="space-y-1">
+              {form.photo_urls.map(url => (
+                <div key={url} className="flex items-center justify-between border rounded-lg px-3 py-2">
+                  <span className="text-xs text-muted-foreground truncate max-w-[300px]">{url}</span>
+                  <button
+                    type="button"
+                    onClick={() => removePhoto(url)}
+                    className="text-xs text-muted-foreground hover:text-destructive ml-2 shrink-0"
+                  >
+                    Hapus
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="grid gap-1">
           <Label>Syarat & Ketentuan <span className="text-xs text-muted-foreground">(opsional)</span></Label>
           <textarea
-            className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50 bg-background"
+            className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
             rows={3}
             value={form.terms}
             onChange={e => set('terms', e.target.value)}
-            placeholder="cth: Minimal pemesanan H-1, tidak termasuk minuman, dll"
+            placeholder="cth: Minimal pemesanan H-1, tidak termasuk minuman"
           />
         </div>
 
         <div className="grid gap-1">
           <Label>Catatan Internal <span className="text-xs text-muted-foreground">(opsional)</span></Label>
           <textarea
-            className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50 bg-background"
+            className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
             rows={2}
             value={form.notes}
             onChange={e => set('notes', e.target.value)}
@@ -298,14 +310,9 @@ export default function PackageFormContent({ mode, packageId }: Props) {
           />
         </div>
 
-        <div className="flex gap-3 pt-2">
-          <Button onClick={handleSubmit} disabled={saving} className="flex-1">
-            {saving ? 'Menyimpan…' : mode === 'create' ? 'Buat Package' : 'Simpan Perubahan'}
-          </Button>
-          <Link href="/vendor/packages">
-            <Button variant="outline" type="button">Batal</Button>
-          </Link>
-        </div>
+        <Button onClick={handleSubmit} disabled={saving} className="w-full">
+          {saving ? 'Menyimpan…' : mode === 'create' ? 'Buat Package' : 'Simpan Perubahan'}
+        </Button>
       </div>
     </div>
   )
