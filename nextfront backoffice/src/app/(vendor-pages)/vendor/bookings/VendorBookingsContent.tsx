@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
+import { Eye, CheckCircle, XCircle, CalendarDays, Users, FileText, Package } from "lucide-react"
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
   confirmed:      "default",
@@ -20,16 +21,31 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = 
   rejected:       "destructive",
 }
 
+const STATUS_LABEL: Record<string, string> = {
+  pending_vendor: "Menunggu Approval",
+  confirmed:      "Dikonfirmasi",
+  rejected:       "Ditolak",
+  cancelled:      "Dibatalkan",
+}
+
+function formatRupiah(n?: number | null) {
+  if (n == null) return "-"
+  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n)
+}
+
 export default function VendorBookingsContent() {
   const params = useSearchParams()
   const status = params.get("status") ?? undefined
 
-  const [bookings, setBookings] = useState<Booking[]>([])
-  const [loading,  setLoading]  = useState(true)
-  const [error,    setError]    = useState("")
+  const [bookings,   setBookings]   = useState<Booking[]>([])
+  const [loading,    setLoading]    = useState(true)
+  const [error,      setError]      = useState("")
 
-  // reject dialog state
-  const [rejectTarget, setRejectTarget] = useState<string | null>(null)
+  // detail dialog
+  const [detailBook, setDetailBook] = useState<Booking | null>(null)
+
+  // reject state (inside detail dialog)
+  const [showReject,   setShowReject]   = useState(false)
   const [rejectReason, setRejectReason] = useState("")
   const [rejectError,  setRejectError]  = useState("")
   const [submitting,   setSubmitting]   = useState(false)
@@ -41,39 +57,52 @@ export default function VendorBookingsContent() {
       .finally(() => setLoading(false))
   }, [status])
 
-  const approve = async (id: string) => {
-    await bookingsService.approve(id, "approve")
-    setBookings(prev => prev.map(b => b.id === id ? { ...b, status: "confirmed" } : b))
-  }
-
-  const openRejectDialog = (id: string) => {
-    setRejectTarget(id)
+  const openDetail = (b: Booking) => {
+    setDetailBook(b)
+    setShowReject(false)
     setRejectReason("")
     setRejectError("")
   }
 
-  const submitReject = async () => {
-    if (!rejectTarget) return
-    if (!rejectReason.trim()) {
-      setRejectError("Alasan penolakan wajib diisi.")
-      return
-    }
+  const closeDetail = () => {
+    setDetailBook(null)
+    setShowReject(false)
+  }
+
+  const handleApprove = async () => {
+    if (!detailBook) return
     setSubmitting(true)
     try {
-      await bookingsService.approve(rejectTarget, "reject", rejectReason.trim())
-      setBookings(prev =>
-        prev.map(b => b.id === rejectTarget
+      await bookingsService.approve(detailBook.id, "approve")
+      setBookings(prev => prev.map(b => b.id === detailBook.id ? { ...b, status: "confirmed" } : b))
+      closeDetail()
+    } catch {
+      setRejectError("Gagal approve booking. Coba lagi.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleReject = async () => {
+    if (!detailBook) return
+    if (!rejectReason.trim()) { setRejectError("Alasan penolakan wajib diisi."); return }
+    setSubmitting(true)
+    try {
+      await bookingsService.approve(detailBook.id, "reject", rejectReason.trim())
+      setBookings(prev => prev.map(b =>
+        b.id === detailBook.id
           ? { ...b, status: "rejected", vendor_rejection_reason: rejectReason.trim() }
           : b
-        )
-      )
-      setRejectTarget(null)
+      ))
+      closeDetail()
     } catch {
       setRejectError("Gagal menolak booking. Coba lagi.")
     } finally {
       setSubmitting(false)
     }
   }
+
+  const isPending = detailBook?.status === "pending_vendor"
 
   return (
     <div className="space-y-6">
@@ -93,60 +122,157 @@ export default function VendorBookingsContent() {
               <th className="px-4 py-3 font-medium">Kode</th>
               <th className="px-4 py-3 font-medium">Tanggal</th>
               <th className="px-4 py-3 font-medium">Pax</th>
+              <th className="px-4 py-3 font-medium">Total</th>
               <th className="px-4 py-3 font-medium">Status</th>
-              {status === "pending_vendor" && <th className="px-4 py-3 font-medium">Aksi</th>}
+              <th className="px-4 py-3 font-medium">Detail</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} className="text-center py-10 text-muted-foreground">Memuat...</td></tr>
+              <tr><td colSpan={6} className="text-center py-10 text-muted-foreground">Memuat...</td></tr>
             ) : bookings.length === 0 ? (
-              <tr><td colSpan={5} className="text-center py-10 text-muted-foreground">Tidak ada data.</td></tr>
+              <tr><td colSpan={6} className="text-center py-10 text-muted-foreground">Tidak ada data.</td></tr>
             ) : bookings.map(b => (
               <tr key={b.id} className="border-b last:border-0 hover:bg-muted/30">
                 <td className="px-4 py-3 font-mono text-xs">{b.booking_code}</td>
                 <td className="px-4 py-3">{new Date(b.booking_date).toLocaleDateString("id-ID")}</td>
                 <td className="px-4 py-3">{b.pax_count}</td>
+                <td className="px-4 py-3 font-medium">{formatRupiah(b.total_price)}</td>
                 <td className="px-4 py-3">
-                  <Badge variant={STATUS_VARIANT[b.status] ?? "secondary"}>{b.status}</Badge>
+                  <Badge variant={STATUS_VARIANT[b.status] ?? "secondary"}>
+                    {STATUS_LABEL[b.status] ?? b.status}
+                  </Badge>
                 </td>
-                {status === "pending_vendor" && (
-                  <td className="px-4 py-3 flex gap-2">
-                    <Button size="sm" onClick={() => approve(b.id)}>Approve</Button>
-                    <Button size="sm" variant="destructive" onClick={() => openRejectDialog(b.id)}>Reject</Button>
-                  </td>
-                )}
+                <td className="px-4 py-3">
+                  <Button size="sm" variant="outline" onClick={() => openDetail(b)}>
+                    <Eye size={14} className="mr-1" /> Lihat Detail
+                  </Button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      {/* Reject Dialog */}
-      <Dialog open={!!rejectTarget} onOpenChange={open => { if (!open) setRejectTarget(null) }}>
-        <DialogContent>
+      {/* ── Detail Dialog ── */}
+      <Dialog open={!!detailBook} onOpenChange={open => { if (!open) closeDetail() }}>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Tolak Booking</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText size={18} />
+              Detail Booking
+              {detailBook && (
+                <Badge variant={STATUS_VARIANT[detailBook.status] ?? "secondary"} className="ml-auto">
+                  {STATUS_LABEL[detailBook.status] ?? detailBook.status}
+                </Badge>
+              )}
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 py-2">
-            <Label htmlFor="reject-reason">Alasan Penolakan <span className="text-red-500">*</span></Label>
-            <Textarea
-              id="reject-reason"
-              placeholder="Tuliskan alasan kenapa booking ini ditolak..."
-              value={rejectReason}
-              onChange={e => { setRejectReason(e.target.value); setRejectError("") }}
-              rows={4}
-            />
-            {rejectError && <p className="text-sm text-red-500">{rejectError}</p>}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRejectTarget(null)} disabled={submitting}>Batal</Button>
-            <Button variant="destructive" onClick={submitReject} disabled={submitting}>
-              {submitting ? "Menolak..." : "Tolak Booking"}
-            </Button>
+
+          {detailBook && (
+            <div className="space-y-4 py-1">
+              {/* Info rows */}
+              <div className="rounded-lg border bg-muted/20 divide-y text-sm">
+                <Row icon={<FileText size={13}/>}   label="Kode Booking"  value={detailBook.booking_code} mono />
+                <Row icon={<CalendarDays size={13}/>} label="Tanggal"      value={new Date(detailBook.booking_date).toLocaleDateString("id-ID", { weekday:"long", year:"numeric", month:"long", day:"numeric" })} />
+                {detailBook.booking_time && <Row label="Waktu" value={detailBook.booking_time} />}
+                <Row icon={<Users size={13}/>}       label="Jumlah Pax"    value={`${detailBook.pax_count} orang`} />
+                {detailBook.tourist_nationality && <Row label="Kewarganegaraan" value={detailBook.tourist_nationality} />}
+                {detailBook.booking_type === "package" && detailBook.package_price_snapshot && (
+                  <Row icon={<Package size={13}/>} label="Harga / Pax (snapshot)" value={formatRupiah(Number(detailBook.package_price_snapshot))} />
+                )}
+              </div>
+
+              {/* Total highlight */}
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 flex justify-between items-center">
+                <span className="text-sm font-medium">Total Pembayaran</span>
+                <span className="text-lg font-bold text-emerald-400">{formatRupiah(detailBook.total_price)}</span>
+              </div>
+
+              {detailBook.notes && (
+                <div className="text-sm">
+                  <p className="text-muted-foreground text-xs mb-1">Catatan dari Guide</p>
+                  <p className="bg-muted/30 rounded-lg px-3 py-2">{detailBook.notes}</p>
+                </div>
+              )}
+
+              {/* Rejection reason if already rejected */}
+              {detailBook.status === "rejected" && detailBook.vendor_rejection_reason && (
+                <div className="text-sm">
+                  <p className="text-muted-foreground text-xs mb-1">Alasan Penolakan</p>
+                  <p className="bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 text-red-400">{detailBook.vendor_rejection_reason}</p>
+                </div>
+              )}
+
+              {/* Cancellation reason */}
+              {detailBook.status === "cancelled" && detailBook.cancelled_reason && (
+                <div className="text-sm">
+                  <p className="text-muted-foreground text-xs mb-1">Alasan Pembatalan</p>
+                  <p className="bg-orange-500/10 border border-orange-500/20 rounded-lg px-3 py-2 text-orange-400">{detailBook.cancelled_reason}</p>
+                </div>
+              )}
+
+              {/* Reject form — hanya muncul jika tombol Tolak diklik */}
+              {isPending && showReject && (
+                <div className="space-y-2">
+                  <Label htmlFor="reject-reason" className="text-sm">
+                    Alasan Penolakan <span className="text-red-500">*</span>
+                  </Label>
+                  <Textarea
+                    id="reject-reason"
+                    placeholder="Tuliskan alasan kenapa booking ini ditolak..."
+                    value={rejectReason}
+                    onChange={e => { setRejectReason(e.target.value); setRejectError("") }}
+                    rows={3}
+                  />
+                  {rejectError && <p className="text-xs text-red-500">{rejectError}</p>}
+                </div>
+              )}
+
+              {rejectError && !showReject && <p className="text-xs text-red-500">{rejectError}</p>}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 flex-wrap">
+            <Button variant="outline" onClick={closeDetail} disabled={submitting}>Tutup</Button>
+
+            {isPending && !showReject && (
+              <>
+                <Button variant="destructive" onClick={() => setShowReject(true)}>
+                  <XCircle size={14} className="mr-1" /> Tolak
+                </Button>
+                <Button onClick={handleApprove} disabled={submitting}>
+                  <CheckCircle size={14} className="mr-1" />
+                  {submitting ? "Menyetujui..." : "Setujui"}
+                </Button>
+              </>
+            )}
+
+            {isPending && showReject && (
+              <>
+                <Button variant="outline" onClick={() => setShowReject(false)} disabled={submitting}>Kembali</Button>
+                <Button variant="destructive" onClick={handleReject} disabled={submitting}>
+                  {submitting ? "Menolak..." : "Konfirmasi Tolak"}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+function Row({ icon, label, value, mono }: {
+  icon?: React.ReactNode
+  label: string
+  value: string
+  mono?: boolean
+}) {
+  return (
+    <div className="flex justify-between items-center px-3 py-2 gap-4">
+      <span className="text-muted-foreground flex items-center gap-1.5 shrink-0">{icon}{label}</span>
+      <span className={mono ? "font-mono text-xs" : ""}>{value}</span>
     </div>
   )
 }
