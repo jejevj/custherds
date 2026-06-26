@@ -25,6 +25,24 @@ export interface AdminGuide {
   created_at: string
 }
 
+export interface AdminVendor {
+  vendor_id: string
+  user_id: string
+  user_name: string
+  user_email: string
+  user_phone: string | null
+  is_active: boolean
+  vendor_business_name: string | null
+  vendor_category: number | null
+  vendor_area: number | null
+  vendor_location: string | null
+  vendor_short_description: string | null
+  vendor_status: 'pending' | 'approved' | 'rejected'
+  approval_notes: string | null
+  deposit_balance: string
+  created_at: string
+}
+
 export interface AdminTransaction {
   id: string
   booking_id: string
@@ -79,10 +97,15 @@ export const adminService = {
     ),
 
   // Vendors
+  listVendors: (vendor_status?: string) =>
+    api.get<AdminVendor[]>('/admin/vendors', { params: vendor_status ? { vendor_status } : {} }),
+
   approveVendor: (vendor_id: string, action: 'approve' | 'reject', notes?: string) =>
-    api.put<{ message: string }>(`/admin/vendors/${vendor_id}/approve`, null, {
-      params: { action, ...(notes ? { notes } : {}) },
-    }),
+    api.put<{ message: string; vendor_status: string }>(
+      `/admin/vendors/${vendor_id}/approve`,
+      null,
+      { params: { action, ...(notes ? { notes } : {}) } },
+    ),
 
   // Transactions
   listTransactions: (status?: string) =>

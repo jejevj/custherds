@@ -1,14 +1,10 @@
 import { Metadata } from "next"
 import { Suspense } from "react"
-import {
-  Users,
-  ShoppingBag,
-  Map,
-  TrendingUp,
-} from "lucide-react"
+import { Users, ShoppingBag, Map, TrendingUp } from "lucide-react"
 import { AdminDashboardClient } from "./AdminDashboardClient"
 import { UnauthorizedToast } from "@/components/unauthorized-toast"
 import { PendingGuidesWidget } from "./PendingGuidesWidget"
+import { PendingVendorsWidget } from "./PendingVendorsWidget"
 
 export const metadata: Metadata = {
   title: "Admin Dashboard | Custherds",
@@ -22,10 +18,10 @@ const stats = [
 ]
 
 const recentTransactions = [
-  { id: "TRX-001", user: "Andi Prasetyo",  amount: "Rp 250,000", type: "Tour Package", status: "Completed" },
-  { id: "TRX-002", user: "Sari Dewi",      amount: "Rp 180,000", type: "Admission",    status: "Pending" },
-  { id: "TRX-003", user: "Budi Santoso",   amount: "Rp 500,000", type: "Tour Package", status: "Completed" },
-  { id: "TRX-004", user: "Maya Wulandari", amount: "Rp 320,000", type: "Admission",    status: "Failed" },
+  { id: "TRX-001", user: "Andi Prasetyo",  amount: "Rp 250,000", status: "Completed" },
+  { id: "TRX-002", user: "Sari Dewi",      amount: "Rp 180,000", status: "Pending" },
+  { id: "TRX-003", user: "Budi Santoso",   amount: "Rp 500,000", status: "Completed" },
+  { id: "TRX-004", user: "Maya Wulandari", amount: "Rp 320,000", status: "Failed" },
 ]
 
 export default function AdminDashboardPage() {
@@ -61,8 +57,11 @@ export default function AdminDashboardPage() {
         ))}
       </div>
 
-      {/* Pending Guides widget — live from API */}
-      <PendingGuidesWidget />
+      {/* Pending approvals widgets — live from API */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <PendingGuidesWidget />
+        <PendingVendorsWidget />
+      </div>
 
       {/* Recent Transactions */}
       <div className="rounded-xl border bg-card p-5 shadow-sm">
@@ -84,11 +83,9 @@ export default function AdminDashboardPage() {
                 <td className="py-2.5 font-medium">{t.amount}</td>
                 <td className="py-2.5">
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    t.status === "Completed"
-                      ? "bg-green-100 text-green-700"
-                      : t.status === "Pending"
-                      ? "bg-amber-100 text-amber-700"
-                      : "bg-red-100 text-red-700"
+                    t.status === "Completed" ? "bg-green-100 text-green-700"
+                    : t.status === "Pending"  ? "bg-amber-100 text-amber-700"
+                    : "bg-red-100 text-red-700"
                   }`}>{t.status}</span>
                 </td>
               </tr>

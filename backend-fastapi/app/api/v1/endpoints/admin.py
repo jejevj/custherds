@@ -58,7 +58,6 @@ def admin_list_guides(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user_type(99)),
 ) -> Any:
-    """Return guides joined with their user data, optionally filtered by certificate_status."""
     q = (
         db.query(Guide)
         .options(joinedload(Guide.user))
@@ -67,31 +66,28 @@ def admin_list_guides(
     if certificate_status:
         q = q.filter(Guide.guide_certificate_status == certificate_status)
     guides = q.order_by(Guide.created_at.desc()).all()
-    result = []
-    for g in guides:
-        result.append({
-            "guide_id": str(g.id),
-            "user_id": str(g.user_id),
-            "user_name": g.user.user_name,
-            "user_email": g.user.user_email,
-            "user_phone": g.user.user_phone,
-            "is_active": g.user.is_active,
-            "guide_nationality": g.guide_nationality,
-            "guide_certificate": g.guide_certificate,
-            "guide_certificate_status": g.guide_certificate_status,
-            "bio": g.bio,
-            "languages": g.languages,
-            "wallet_balance": str(g.wallet_balance),
-            "created_at": g.created_at.isoformat(),
-        })
-    return result
+    return [{
+        "guide_id": str(g.id),
+        "user_id": str(g.user_id),
+        "user_name": g.user.user_name,
+        "user_email": g.user.user_email,
+        "user_phone": g.user.user_phone,
+        "is_active": g.user.is_active,
+        "guide_nationality": g.guide_nationality,
+        "guide_certificate": g.guide_certificate,
+        "guide_certificate_status": g.guide_certificate_status,
+        "bio": g.bio,
+        "languages": g.languages,
+        "wallet_balance": str(g.wallet_balance),
+        "created_at": g.created_at.isoformat(),
+    } for g in guides]
 
 
 @router.put("/guides/{guide_id}/approve", summary="[Admin] Approve or reject a guide certificate")
 def admin_approve_guide(
     guide_id: uuid.UUID,
     action: str = Query(..., regex="^(approve|reject)$"),
-    notes: Optional[str] = Query(None, description="Optional notes for rejection reason"),
+    notes: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user_type(99)),
 ) -> Any:
@@ -99,7 +95,6 @@ def admin_approve_guide(
     if not guide:
         raise HTTPException(404, "Guide not found")
     guide.guide_certificate_status = "approved" if action == "approve" else "rejected"
-    # Mark the user as verified when approved
     if action == "approve":
         user = db.query(User).filter(User.id == guide.user_id).first()
         if user:
@@ -114,6 +109,39 @@ def admin_approve_guide(
 
 
 # ─────────────────────────── VENDORS ───────────────────────────
+
+@router.get("/vendors", summary="[Admin] List all vendors with vendor_status")
+def admin_list_vendors(
+    vendor_status: Optional[str] = Query(None, description="Filter: pending, approved, rejected"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_user_type(99)),
+) -> Any:
+    q = (
+        db.query(Vendor)
+        .options(joinedload(Vendor.user))
+        .join(User, Vendor.user_id == User.id)
+    )
+    if vendor_status:
+        q = q.filter(Vendor.vendor_status == vendor_status)
+    vendors = q.order_by(Vendor.created_at.desc()).all()
+    return [{
+        "vendor_id": str(v.id),
+        "user_id": str(v.user_id),
+        "user_name": v.user.user_name,
+        "user_email": v.user.user_email,
+        "user_phone": v.user.user_phone,
+        "is_active": v.user.is_active,
+        "vendor_business_name": v.vendor_business_name,
+        "vendor_category": v.vendor_category,
+        "vendor_area": v.vendor_area,
+        "vendor_location": v.vendor_location,
+        "vendor_short_description": v.vendor_short_description,
+        "vendor_status": v.vendor_status,
+        "approval_notes": v.approval_notes,
+        "deposit_balance": str(v.deposit_balance),
+        "created_at": v.created_at.isoformat(),
+    } for v in vendors]
+
 
 @router.put("/vendors/{vendor_id}/approve", summary="[Admin] Approve / reject vendor")
 def admin_approve_vendor(
@@ -133,7 +161,12 @@ def admin_approve_vendor(
         if user:
             user.is_verified = True
     db.commit()
-    return {"message": f"Vendor {vendor.vendor_status}"}
+    return {
+        "message": f"Vendor {vendor.vendor_status}",
+        "vendor_id": str(vendor.id),
+        "vendor_status": vendor.vendor_status,
+        "notes": notes,
+    }
 
 
 # ─────────────────────────── TRANSACTIONS ───────────────────────────
@@ -154,7 +187,7 @@ def admin_list_transactions(
 
 @router.get("/withdrawals", response_model=List[AdminWithdrawalResponse], summary="[Admin] List all guide withdrawals")
 def admin_list_withdrawals(
-    status: Optional[str] = Query(None, description="Filter: pending, processing, completed, failed"),
+    status: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user_type(99)),
 ) -> Any:
@@ -164,10 +197,7 @@ def admin_list_withdrawals(
     return q.order_by(GuideWithdrawal.created_at.desc()).all()
 
 
-@router.post(
-    "/withdrawals/{withdrawal_id}/disburse",
-    summary="[Admin] Send guide funds via Xendit Disbursement",
-)
+@router.post("/withdrawals/{withdrawal_id}/disburse", summary="[Admin] Send guide funds via Xendit Disbursement")
 async def admin_disburse_withdrawal(
     withdrawal_id: uuid.UUID,
     db: Session = Depends(get_db),
@@ -177,39 +207,26 @@ async def admin_disburse_withdrawal(
     if not w:
         raise HTTPException(404, "Withdrawal not found")
     if w.status != "pending":
-        raise HTTPException(400, f"Only 'pending' withdrawals can be processed. Current status: {w.status}")
-
+        raise HTTPException(400, f"Only 'pending' withdrawals can be processed. Current: {w.status}")
     external_id = f"CUSTHERDS-WD-{w.id}"
-    description = f"Guide commission Custherds - Withdrawal {w.id}"
-
     try:
         xendit_response = await create_disbursement(
             external_id=external_id,
             bank_code=w.bank_name,
             account_holder_name=w.bank_account_name,
             account_number=w.bank_account_number,
-            description=description,
+            description=f"Guide commission - Withdrawal {w.id}",
             amount=float(w.amount),
         )
     except Exception as e:
-        raise HTTPException(502, f"Failed to send disbursement to Xendit: {str(e)}")
-
+        raise HTTPException(502, f"Xendit error: {str(e)}")
     w.status = "processing"
     w.xendit_disbursement_id = xendit_response.get("id")
     w.processed_by = current_user.id
     w.processed_at = datetime.now(timezone.utc)
-    w.notes = (w.notes or "") + f" | Xendit disbursement_id: {w.xendit_disbursement_id}"
+    w.notes = (w.notes or "") + f" | Xendit: {w.xendit_disbursement_id}"
     db.commit()
-
-    return {
-        "message": "Disbursement sent to Xendit. Awaiting transfer confirmation.",
-        "withdrawal_id": str(w.id),
-        "xendit_disbursement_id": w.xendit_disbursement_id,
-        "status": w.status,
-        "amount": str(w.amount),
-        "bank_code": w.bank_name,
-        "account_number": w.bank_account_number,
-    }
+    return {"message": "Disbursement sent.", "xendit_disbursement_id": w.xendit_disbursement_id, "status": w.status}
 
 
 @router.put("/withdrawals/{withdrawal_id}/process", summary="[Admin] Manually update withdrawal status")
@@ -223,7 +240,7 @@ def admin_process_withdrawal(
     if not w:
         raise HTTPException(404, "Withdrawal not found")
     if w.status not in ("pending", "processing"):
-        raise HTTPException(400, f"Cannot process withdrawal with status: {w.status}")
+        raise HTTPException(400, f"Cannot process withdrawal: {w.status}")
     w.status = payload.status
     w.processed_by = current_user.id
     w.processed_at = datetime.now(timezone.utc)
@@ -231,7 +248,7 @@ def admin_process_withdrawal(
     if payload.xendit_disbursement_id:
         w.xendit_disbursement_id = payload.xendit_disbursement_id
     db.commit()
-    return {"message": f"Withdrawal updated to status: {payload.status}"}
+    return {"message": f"Withdrawal updated to: {payload.status}"}
 
 
 # ─────────────────────────── SPLIT CONFIG ───────────────────────────
