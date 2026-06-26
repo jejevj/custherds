@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/sidebar"
 import {
   House, ClipboardList, WalletCards,
-  CircleUserRound, LifeBuoyIcon, SendIcon, Store,
+  CircleUserRound, LifeBuoyIcon, SendIcon, Store, Package,
 } from "lucide-react"
 import { ScrollArea } from "./ui/scroll-area"
 import Image from "next/image"
@@ -34,6 +34,9 @@ const navMain = [
   },
   {
     title: "Browse Vendors", url: "/guide/vendors", icon: <Store />,
+  },
+  {
+    title: "Browse Packages", url: "/guide/packages", icon: <Package />,
   },
   { title: "Profile", url: "/guide/profile", icon: <CircleUserRound /> },
 ]
