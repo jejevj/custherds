@@ -10,13 +10,20 @@ import {
 } from "@/components/ui/sidebar"
 import {
   House, ClipboardList, WalletCards,
-  CircleUserRound, LifeBuoyIcon, SendIcon,
+  CircleUserRound, LifeBuoyIcon, SendIcon, BoxesIcon,
 } from "lucide-react"
 import { ScrollArea } from "./ui/scroll-area"
 import Image from "next/image"
 
 const navMain = [
   { title: "Dashboard",  url: "/vendor/dashboard", icon: <House />, isActive: true },
+  {
+    title: "Package", url: "/vendor/packages", icon: <BoxesIcon />,
+    items: [
+      { title: "Semua Package",  url: "/vendor/packages" },
+      { title: "Buat Package",   url: "/vendor/packages/new" },
+    ],
+  },
   {
     title: "Bookings", url: "#", icon: <ClipboardList />,
     items: [
