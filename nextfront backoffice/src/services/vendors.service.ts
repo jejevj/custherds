@@ -1,6 +1,21 @@
 import { api } from './api'
 import { resolveUploadUrl } from './uploads.service'
 
+// ── Vendor self-service types (vendor portal) ─────────────────────────
+
+export interface VendorDepositInfo {
+  id: string
+  vendor_business_name: string
+  deposit_balance: string
+  deposit_minimum: string | null
+}
+
+export const vendorsService = {
+  getDeposit: () => api.get<VendorDepositInfo>('/vendors/me/deposit'),
+}
+
+// ── Public browse types (guide portal) ──────────────────────────────
+
 export interface VendorPublic {
   id: string
   vendor_business_name: string
@@ -28,16 +43,16 @@ export interface VendorBrowseParams {
   limit?: number
 }
 
-export const vendorsService = {
+export const vendorsBrowseService = {
   browse: (params: VendorBrowseParams = {}) => {
     const q = new URLSearchParams()
-    if (params.search)        q.set('search', params.search)
-    if (params.area != null)  q.set('area', String(params.area))
-    if (params.category != null) q.set('category', String(params.category))
+    if (params.search)               q.set('search', params.search)
+    if (params.area != null)         q.set('area', String(params.area))
+    if (params.category != null)     q.set('category', String(params.category))
     if (params.allow_direct != null) q.set('allow_direct', String(params.allow_direct))
-    if (params.sort)          q.set('sort', params.sort)
-    if (params.skip != null)  q.set('skip', String(params.skip))
-    if (params.limit != null) q.set('limit', String(params.limit))
+    if (params.sort)                 q.set('sort', params.sort)
+    if (params.skip != null)         q.set('skip', String(params.skip))
+    if (params.limit != null)        q.set('limit', String(params.limit))
     return api.get<VendorPublic[]>(`/vendors/browse?${q.toString()}`)
   },
 }
