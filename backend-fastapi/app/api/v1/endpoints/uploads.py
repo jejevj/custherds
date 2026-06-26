@@ -1,15 +1,13 @@
 """
 File upload & serve endpoint.
 
-POST /api/v1/uploads              — upload single file
-POST /api/v1/uploads/batch        — upload multiple files (terpisah prefix agar tidak
-                                    konflik dengan GET /{filename})
-GET  /api/v1/uploads/{filename}   — serve file
+POST /api/v1/uploads            — upload single file   (auth required)
+POST /api/v1/uploads/batch      — upload multiple      (auth required)
+GET  /api/v1/uploads/{filename} — serve file           (PUBLIC — filename is UUID-random)
 
-Mengapa tidak /uploads/multiple?
-FastAPI mencocokkan GET /{filename} untuk SEMUA method pada path yang match,
-lalu membalas 405 jika method berbeda. Dengan prefix /batch yang tidak pernah
-bertabrakan dengan UUID filename, masalah ini hilang.
+GET sengaja tidak butuh auth agar <img src> / Next.js <Image> bisa
+load langsung dari browser tanpa Authorization header.
+Keamanan cukup dari UUID filename yang tidak bisa ditebak.
 """
 import uuid
 from pathlib import Path
@@ -30,7 +28,7 @@ ALLOWED_CONTENT_TYPES = {
     "image/jpeg", "image/png", "image/webp",
     "application/pdf",
 }
-MAX_SIZE_BYTES = 5 * 1024 * 1024   # 5 MB per file
+MAX_SIZE_BYTES = 5 * 1024 * 1024
 MAX_FILES      = 10
 
 
@@ -41,10 +39,7 @@ def _save_upload(content: bytes, original_filename: str) -> str:
     return filename
 
 
-# ---------------------------------------------------------------
-# POST  /api/v1/uploads          — single
-# ---------------------------------------------------------------
-@router.post("", summary="Upload single file (gambar / PDF)")
+@router.post("", summary="Upload single file (auth required)")
 async def upload_file(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
@@ -58,18 +53,13 @@ async def upload_file(
     return {"url": f"/api/v1/uploads/{filename}", "filename": filename}
 
 
-# ---------------------------------------------------------------
-# POST  /api/v1/uploads/batch    — multiple (pakai /batch bukan /multiple
-#                                   agar tidak ditangkap /{filename})
-# ---------------------------------------------------------------
-@router.post("/batch", summary="Upload multiple files sekaligus (maks 10 file, 5 MB each)")
+@router.post("/batch", summary="Upload multiple files sekaligus (auth required)")
 async def upload_batch(
     files: List[UploadFile] = File(...),
     current_user: User = Depends(get_current_user),
 ) -> Any:
     if len(files) > MAX_FILES:
         raise HTTPException(400, f"Maksimal {MAX_FILES} file per request.")
-
     results = []
     for f in files:
         if f.content_type not in ALLOWED_CONTENT_TYPES:
@@ -79,18 +69,12 @@ async def upload_batch(
             raise HTTPException(413, f"File '{f.filename}' terlalu besar. Maksimal 5 MB.")
         filename = _save_upload(content, f.filename or "file")
         results.append({"url": f"/api/v1/uploads/{filename}", "filename": filename})
-
     return {"uploaded": results, "count": len(results)}
 
 
-# ---------------------------------------------------------------
-# GET   /api/v1/uploads/{filename}
-# ---------------------------------------------------------------
-@router.get("/{filename}", summary="Serve uploaded file")
-def serve_file(
-    filename: str,
-    current_user: User = Depends(get_current_user),
-) -> FileResponse:
+@router.get("/{filename}", summary="Serve uploaded file (public)")
+def serve_file(filename: str) -> FileResponse:
+    """Public endpoint — no auth needed, filename is UUID-random."""
     if "/" in filename or ".." in filename:
         raise HTTPException(400, "Nama file tidak valid.")
     filepath = STORAGE_DIR / filename
