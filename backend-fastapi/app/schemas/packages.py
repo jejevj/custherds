@@ -1,49 +1,27 @@
-from typing import List, Optional
-from decimal import Decimal
-from datetime import datetime
-from pydantic import BaseModel, UUID4, field_validator
+from pydantic import BaseModel
+from typing import Optional, List
+import uuid
 
 
 class PackageCreate(BaseModel):
     name: str
     description: Optional[str] = None
-    price_per_pax: Decimal
+    price_per_pax: float
     min_pax: int = 1
     max_pax: Optional[int] = None
     duration_minutes: Optional[int] = None
-    available_days: Optional[List[str]] = None    # ["Mon","Tue"]
-    available_slots: Optional[List[str]] = None   # ["09:00","14:00"]
+    available_days: List[str] = []
+    available_slots: List[str] = []
     quota_per_slot: int = 1
     terms: Optional[str] = None
     notes: Optional[str] = None
-    photo_urls: Optional[List[str]] = None
-
-    @field_validator('price_per_pax')
-    @classmethod
-    def price_must_be_positive(cls, v):
-        if v <= 0:
-            raise ValueError('price_per_pax harus lebih dari 0')
-        return v
-
-    @field_validator('min_pax')
-    @classmethod
-    def min_pax_positive(cls, v):
-        if v < 1:
-            raise ValueError('min_pax minimal 1')
-        return v
-
-    @field_validator('quota_per_slot')
-    @classmethod
-    def quota_positive(cls, v):
-        if v < 1:
-            raise ValueError('quota_per_slot minimal 1')
-        return v
+    photo_urls: List[str] = []
 
 
 class PackageUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    price_per_pax: Optional[Decimal] = None
+    price_per_pax: Optional[float] = None
     min_pax: Optional[int] = None
     max_pax: Optional[int] = None
     duration_minutes: Optional[int] = None
@@ -57,23 +35,50 @@ class PackageUpdate(BaseModel):
 
 
 class PackageResponse(BaseModel):
-    id: UUID4
-    vendor_id: UUID4
+    id: uuid.UUID
+    vendor_id: uuid.UUID
     name: str
-    description: Optional[str]
-    price_per_pax: Decimal
+    description: Optional[str] = None
+    price_per_pax: float
     min_pax: int
-    max_pax: Optional[int]
-    duration_minutes: Optional[int]
-    available_days: Optional[List[str]]
-    available_slots: Optional[List[str]]
+    max_pax: Optional[int] = None
+    duration_minutes: Optional[int] = None
+    available_days: Optional[List[str]] = None
+    available_slots: Optional[List[str]] = None
     quota_per_slot: int
-    terms: Optional[str]
-    notes: Optional[str]
-    photo_urls: Optional[List[str]]
+    terms: Optional[str] = None
+    notes: Optional[str] = None
+    photo_urls: Optional[List[str]] = None
     is_active: bool
-    created_at: datetime
-    updated_at: datetime
+    created_at: str
+    updated_at: str
+
+    class Config:
+        from_attributes = True
+
+
+class PackageBrowse(BaseModel):
+    """Package data enriched with commission info for guide browse."""
+    id: uuid.UUID
+    vendor_id: uuid.UUID
+    vendor_name: str
+    vendor_location: Optional[str] = None
+    vendor_allow_direct_booking: bool = True
+    name: str
+    description: Optional[str] = None
+    price_per_pax: float
+    commission_per_pax: float
+    guide_percent: float
+    min_pax: int
+    max_pax: Optional[int] = None
+    duration_minutes: Optional[int] = None
+    available_days: List[str] = []
+    available_slots: List[str] = []
+    quota_per_slot: int
+    terms: Optional[str] = None
+    photo_urls: List[str] = []
+    is_active: bool
+    created_at: str
 
     class Config:
         from_attributes = True

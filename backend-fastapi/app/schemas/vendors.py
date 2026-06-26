@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from decimal import Decimal
 import uuid
 
@@ -41,15 +41,12 @@ class VendorUpdateRequest(BaseModel):
 
 
 class VendorSubmitRequest(BaseModel):
-    """Called when vendor clicks 'Submit for Review'.
-    All required fields must be filled.
-    """
     vendor_business_name: str
     vendor_location: str
     vendor_contact_person: str
     vendor_npwp: str
     vendor_nib: str
-    vendor_owner_id_card_url: str   # URL KTP pemilik sudah diupload
+    vendor_owner_id_card_url: str
     vendor_short_description: str
 
 
@@ -75,6 +72,11 @@ class VendorPublic(BaseModel):
     vendor_min_spend: Optional[Decimal] = None
     vendor_cashback_percent: float
     vendor_website: Optional[str] = None
+    allow_direct_booking: bool = True
+    # computed fields
+    package_count: int = 0
+    max_commission_per_pax: Optional[float] = None
+    cover_photo: Optional[str] = None
 
     class Config:
         from_attributes = True
