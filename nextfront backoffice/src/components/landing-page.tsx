@@ -25,7 +25,7 @@ export default function LandingPage() {
         <div className="text-center space-y-1">
           <h1 className="text-2xl font-bold tracking-tight">Partner Portal</h1>
           <p className="text-sm text-muted-foreground">
-            Masuk sebagai Guide atau Vendor untuk mengelola aktivitas Anda.
+            Sign in as a Guide or Vendor to manage your activities.
           </p>
         </div>
 
@@ -43,11 +43,11 @@ export default function LandingPage() {
             <div>
               <p className="font-semibold">Guide</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Kelola booking, wallet, dan profil guide kamu
+                Manage your bookings, wallet, and guide profile
               </p>
             </div>
             <span className="mt-1 text-xs font-medium text-primary group-hover:underline">
-              Login sebagai Guide →
+              Sign in as Guide &rarr;
             </span>
           </Link>
 
@@ -62,11 +62,11 @@ export default function LandingPage() {
             <div>
               <p className="font-semibold">Vendor</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Kelola booking, deposit, dan profil toko kamu
+                Manage your bookings, deposit, and store profile
               </p>
             </div>
             <span className="mt-1 text-xs font-medium text-primary group-hover:underline">
-              Login sebagai Vendor →
+              Sign in as Vendor &rarr;
             </span>
           </Link>
 
@@ -76,7 +76,7 @@ export default function LandingPage() {
         <p className="text-center text-xs text-muted-foreground">
           Administrator?{" "}
           <Link href="/admin/login" className="underline underline-offset-4 hover:text-foreground transition-colors">
-            Login di sini
+            Sign in here
           </Link>
         </p>
 
