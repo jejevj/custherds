@@ -21,7 +21,6 @@ export default function LoginPage() {
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState<string | null>(null)
 
-  // Jika sudah login, redirect
   if (isLoggedIn) {
     router.replace('/dashboard')
     return null
@@ -32,12 +31,7 @@ export default function LoginPage() {
     setError(null)
     setLoading(true)
     try {
-      const data = await login({ user_email: email, user_password: password })
-      if (data.user_type !== 99) {
-        setError('Akses hanya untuk Admin. Silakan gunakan akun admin.')
-        useAuthStore.getState().logout()
-        return
-      }
+      await login({ user_email: email, user_password: password })
       router.replace('/dashboard')
     } catch (err: unknown) {
       const e = err as { detail?: string }
@@ -50,17 +44,16 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 px-4">
       <div className="w-full max-w-md">
-        {/* Logo */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-white tracking-tight">Custherds</h1>
-          <p className="text-slate-400 text-sm mt-1">Backoffice Admin Panel</p>
+          <p className="text-slate-400 text-sm mt-1">Backoffice Panel</p>
         </div>
 
         <Card className="border-slate-700 bg-slate-800/50 backdrop-blur">
           <CardHeader className="pb-4">
             <CardTitle className="text-white text-xl">Masuk</CardTitle>
             <CardDescription className="text-slate-400">
-              Login dengan akun admin Anda
+              Login dengan akun Anda
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -76,7 +69,7 @@ export default function LoginPage() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="admin@custherds.com"
+                  placeholder="email@custherds.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
