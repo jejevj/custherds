@@ -18,12 +18,7 @@ import Image from "next/image"
 const navMain = [
   { title: "Dashboard",    url: "/admin/dashboard", icon: <House />, isActive: true },
   {
-    title: "Users", url: "#", icon: <Users />,
-    items: [
-      { title: "All Users",   url: "/admin/users" },
-      { title: "Vendors",     url: "/admin/users?type=2" },
-      { title: "Guides",      url: "/admin/users?type=1" },
-    ],
+    title: "Internal Users", url: "/admin/users", icon: <Users />,
   },
   {
     title: "Guides", url: "#", icon: <Map />,
@@ -39,6 +34,8 @@ const navMain = [
     items: [
       { title: "All Vendors",      url: "/admin/vendors" },
       { title: "Pending Approval", url: "/admin/vendors?status=pending" },
+      { title: "Approved",         url: "/admin/vendors?status=approved" },
+      { title: "Rejected",         url: "/admin/vendors?status=rejected" },
     ],
   },
   {
