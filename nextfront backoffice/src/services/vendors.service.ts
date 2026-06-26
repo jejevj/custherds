@@ -20,8 +20,13 @@ export interface VendorProfile {
   created_at: string
 }
 
+export interface VendorDepositInfo {
+  deposit_balance: string
+}
+
 export const vendorsService = {
   getProfile:    ()                                => api.get<VendorProfile>('/vendors/me'),
   updateProfile: (payload: Partial<VendorProfile>) => api.put<VendorProfile>('/vendors/me', payload),
   submitReview:  (payload: Partial<VendorProfile>) => api.post<VendorProfile>('/vendors/me/submit', payload),
+  getDeposit:    ()                                => api.get<VendorDepositInfo>('/vendors/me/deposit'),
 }
