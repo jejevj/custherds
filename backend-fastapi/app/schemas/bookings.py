@@ -1,7 +1,7 @@
-from typing import Optional, List
+from typing import Optional
 from decimal import Decimal
 from datetime import date, time, datetime
-from pydantic import BaseModel, UUID4
+from pydantic import BaseModel, UUID4, computed_field
 
 
 class BookingCreate(BaseModel):
@@ -52,6 +52,18 @@ class BookingResponse(BaseModel):
     cancelled_at: Optional[datetime]
     created_at: datetime
     updated_at: datetime
+
+    @computed_field
+    @property
+    def total_price(self) -> Optional[Decimal]:
+        """
+        Computed total price:
+        - booking_type = "package" : subtotal_package (price_per_pax * pax_count)
+        - booking_type = "direct"  : None, diisi saat guide submit transaksi
+        """
+        if self.subtotal_package is not None:
+            return self.subtotal_package
+        return None
 
     class Config:
         from_attributes = True
