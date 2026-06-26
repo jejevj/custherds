@@ -17,8 +17,12 @@ export interface AdminGuide {
   user_phone: string | null
   is_active: boolean
   guide_nationality: string | null
+  guide_phone: string | null
+  guide_id_card_url: string | null
   guide_certificate: string | null
-  guide_certificate_status: 'pending' | 'approved' | 'rejected'
+  guide_certificate_status: string
+  guide_status: string
+  rejection_notes: string | null
   bio: string | null
   languages: string | null
   wallet_balance: string
@@ -33,11 +37,15 @@ export interface AdminVendor {
   user_phone: string | null
   is_active: boolean
   vendor_business_name: string | null
-  vendor_category: number | null
-  vendor_area: number | null
+  vendor_category: string | null
+  vendor_area: string | null
   vendor_location: string | null
   vendor_short_description: string | null
-  vendor_status: 'pending' | 'approved' | 'rejected'
+  vendor_opening_hours: string | null
+  vendor_website: string | null
+  vendor_npwp: string | null
+  vendor_nib: string | null
+  vendor_status: string
   approval_notes: string | null
   deposit_balance: string
   created_at: string
@@ -86,11 +94,11 @@ export const adminService = {
     api.put<{ message: string }>(`/admin/users/${user_id}/activate`, null, { params: { is_active } }),
 
   // Guides
-  listGuides: (certificate_status?: string) =>
-    api.get<AdminGuide[]>('/admin/guides', { params: certificate_status ? { certificate_status } : {} }),
+  listGuides: (guide_status?: string) =>
+    api.get<AdminGuide[]>('/admin/guides', { params: guide_status ? { guide_status } : {} }),
 
   approveGuide: (guide_id: string, action: 'approve' | 'reject', notes?: string) =>
-    api.put<{ message: string; guide_certificate_status: string }>(
+    api.put<{ message: string; guide_status: string; guide_certificate_status: string }>(
       `/admin/guides/${guide_id}/approve`,
       null,
       { params: { action, ...(notes ? { notes } : {}) } },
