@@ -1,58 +1,59 @@
 import uuid
-from sqlalchemy import Column, String, Float, Numeric, Text, DateTime, ForeignKey
+from datetime import datetime, timezone
+from decimal import Decimal
+from sqlalchemy import Column, String, Numeric, DateTime, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
-from app.db.base_class import Base
+from app.db.base import Base
 
 
 class Transaction(Base):
-    """
-    Model Invoice-Clearing / Reimbursement:
-
-    [1] Guide foto nota + input nominal  -> status: pending_vendor_approval
-    [2] Vendor verifikasi nota:
-        - Tolak            -> status: rejected
-        - Approve Metode A -> status: payment_pending (Xendit QRIS/VA)
-                          -> setelah bayar: paid -> settled
-        - Approve Metode B -> status: settled (potong deposit instan)
-    [3] Saat settled:
-        guide_commission  -> guides.wallet_balance (+)
-        platform_fee      -> akun master platform
-    [4] Guide tarik dana kapan saja -> GuideWithdrawal
-    """
     __tablename__ = "transactions"
 
-    id                          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    transaction_code            = Column(String(30), unique=True, nullable=False, index=True)
-    booking_id                  = Column(UUID(as_uuid=True), ForeignKey("bookings.id", ondelete="RESTRICT"), unique=True, nullable=False)
-    vendor_id                   = Column(UUID(as_uuid=True), ForeignKey("vendors.id", ondelete="RESTRICT"), nullable=False, index=True)
-    guide_id                    = Column(UUID(as_uuid=True), ForeignKey("guides.id", ondelete="RESTRICT"), nullable=False, index=True)
-    gross_amount                = Column(Numeric(15, 2), nullable=False)
-    currency                    = Column(String(10), default="IDR", nullable=False)
-    receipt_image               = Column(String(500), nullable=False)
-    receipt_notes               = Column(Text, nullable=True)
-    split_config_id             = Column(UUID(as_uuid=True), ForeignKey("revenue_split_configs.id", ondelete="RESTRICT"), nullable=False)
-    vendor_percent_snapshot     = Column(Float, nullable=False)
-    guide_percent_snapshot      = Column(Float, nullable=False)
-    platform_percent_snapshot   = Column(Float, nullable=False)
-    vendor_amount               = Column(Numeric(15, 2), nullable=True)
-    guide_commission            = Column(Numeric(15, 2), nullable=True)
-    platform_fee                = Column(Numeric(15, 2), nullable=True)
-    status                      = Column(String(30), default="pending_vendor_approval", nullable=False, index=True)
-    payment_method              = Column(String(30), nullable=True)  # deposit | pay_as_you_go
-    xendit_invoice_id           = Column(String(255), nullable=True)
-    xendit_payment_id           = Column(String(255), nullable=True)
-    paid_at                     = Column(DateTime(timezone=True), nullable=True)
-    submitted_at                = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    vendor_reviewed_at          = Column(DateTime(timezone=True), nullable=True)
-    vendor_rejection_reason     = Column(Text, nullable=True)
-    settled_at                  = Column(DateTime(timezone=True), nullable=True)
-    created_at                  = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at                  = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    transaction_code = Column(String(20), unique=True, nullable=False, index=True)
 
-    booking                     = relationship("Booking", back_populates="transaction")
-    vendor                      = relationship("Vendor", back_populates="transactions")
-    guide                       = relationship("Guide", back_populates="transactions")
-    split_config                = relationship("RevenueSplitConfig", back_populates="transactions")
-    disbursement_items          = relationship("CommissionDisbursementItem", back_populates="transaction")
+    booking_id = Column(UUID(as_uuid=True), ForeignKey("bookings.id"), nullable=False)
+    vendor_id  = Column(UUID(as_uuid=True), ForeignKey("vendors.id"), nullable=False)
+    guide_id   = Column(UUID(as_uuid=True), ForeignKey("guides.id"),  nullable=False)
+
+    gross_amount = Column(Numeric(14, 2), nullable=False)
+    currency     = Column(String(3), default="IDR", nullable=False)
+
+    # Receipt dari guide
+    receipt_image = Column(Text, nullable=False)
+    receipt_notes = Column(Text)
+
+    # Snapshot split config
+    split_config_id              = Column(UUID(as_uuid=True), ForeignKey("revenue_split_configs.id"))
+    vendor_percent_snapshot      = Column(Numeric(5, 2), nullable=False)
+    guide_percent_snapshot       = Column(Numeric(5, 2), nullable=False)
+    platform_percent_snapshot    = Column(Numeric(5, 2), nullable=False)
+
+    # Hasil kalkulasi
+    vendor_amount    = Column(Numeric(14, 2))
+    guide_commission = Column(Numeric(14, 2))
+    platform_fee     = Column(Numeric(14, 2))
+
+    # Status & pembayaran
+    status         = Column(String(30), nullable=False, default="pending_vendor_approval", index=True)
+    payment_method = Column(String(20))  # deposit | pay_as_you_go
+
+    # Xendit Invoice (untuk pay_as_you_go)
+    xendit_invoice_id  = Column(String(100), index=True)
+    xendit_invoice_url = Column(Text)
+
+    # Timestamps
+    submitted_at          = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    vendor_reviewed_at    = Column(DateTime(timezone=True))
+    vendor_rejection_reason = Column(Text)
+    paid_at               = Column(DateTime(timezone=True))
+    settled_at            = Column(DateTime(timezone=True))
+    created_at            = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at            = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    booking      = relationship("Booking",             back_populates="transaction",  foreign_keys=[booking_id])
+    vendor       = relationship("Vendor",              back_populates="transactions", foreign_keys=[vendor_id])
+    guide        = relationship("Guide",               back_populates="transactions", foreign_keys=[guide_id])
+    split_config = relationship("RevenueSplitConfig",  back_populates="transactions", foreign_keys=[split_config_id])
