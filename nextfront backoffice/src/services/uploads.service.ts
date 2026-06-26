@@ -7,42 +7,25 @@ export interface UploadResult {
 }
 
 /**
- * Upload satu file ke backend.
- * POST /uploads  (API_BASE_URL sudah include /api/v1)
+ * Upload multiple foto sekaligus ke POST /api/v1/uploads/multiple
+ * Return array URL yang bisa langsung disimpan ke photo_urls
  */
-export const uploadsService = {
-  upload: async (file: File): Promise<UploadResult> => {
-    const { access } = getTokens()
+export async function uploadPhotos(files: File[]): Promise<string[]> {
+  const { access } = getTokens()
+  const form = new FormData()
+  files.forEach(f => form.append('files', f))
 
-    const form = new FormData()
-    form.append('file', file)
+  const res = await fetch(`${API_BASE_URL}/uploads/multiple`, {
+    method: 'POST',
+    headers: access ? { Authorization: `Bearer ${access}` } : {},
+    body: form,
+  })
 
-    const res = await fetch(`${API_BASE_URL}/uploads`, {
-      method: 'POST',
-      headers: access ? { Authorization: `Bearer ${access}` } : {},
-      body: form,
-    })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Upload gagal' }))
+    throw new Error(err.detail ?? 'Upload gagal')
+  }
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error((err as { detail?: string })?.detail ?? 'Upload gagal')
-    }
-
-    return res.json() as Promise<UploadResult>
-  },
-
-  /**
-   * Kembalikan URL lengkap yang bisa dipakai untuk fetch dengan auth.
-   * relativeUrl bisa berupa:
-   *   - "/api/v1/uploads/xxx.jpg"  -> sudah absolute path, strip prefix dulu
-   *   - "/uploads/xxx.jpg"         -> langsung concat
-   *   - "https://..."              -> kembalikan apa adanya
-   */
-  getUrl: (relativeUrl: string): string => {
-    if (!relativeUrl) return ''
-    if (relativeUrl.startsWith('http')) return relativeUrl
-    // Normalise: hapus /api/v1 di depan kalau ada (karena API_BASE_URL sudah include itu)
-    const normalised = relativeUrl.replace(/^\/api\/v1/, '')
-    return `${API_BASE_URL}${normalised}`
-  },
+  const data = await res.json() as { uploaded: UploadResult[]; count: number }
+  return data.uploaded.map(u => u.url)
 }

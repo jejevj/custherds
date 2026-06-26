@@ -1,13 +1,15 @@
 "use client"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { packagesService, PackageCreate } from "@/services/packages.service"
+import { uploadPhotos } from "@/services/uploads.service"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, ImagePlus, X, Loader2 } from "lucide-react"
 import Link from "next/link"
+import Image from "next/image"
 
 type Props = {
   mode: 'create' | 'edit'
@@ -35,7 +37,6 @@ const DAYS_ID: Record<string, string> = {
   Thu: 'Kamis', Fri: 'Jumat', Sat: 'Sabtu', Sun: 'Minggu',
 }
 
-// Generate all 24-hour slots in 30-min increments: 00:00 – 23:30
 const ALL_SLOTS: string[] = Array.from({ length: 48 }, (_, i) => {
   const h = String(Math.floor(i / 2)).padStart(2, '0')
   const m = i % 2 === 0 ? '00' : '30'
@@ -47,14 +48,19 @@ const textareaClass =
   'text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50'
 
 export default function PackageFormContent({ mode, packageId }: Props) {
-  const router = useRouter()
+  const router    = useRouter()
+  const fileRef   = useRef<HTMLInputElement>(null)
+
   const [form,        setForm]        = useState<PackageCreate>(EMPTY_FORM)
   const [loading,     setLoading]     = useState(mode === 'edit')
   const [saving,      setSaving]      = useState(false)
+  const [uploading,   setUploading]   = useState(false)
   const [error,       setError]       = useState('')
   const [success,     setSuccess]     = useState(false)
   const [showPicker,  setShowPicker]  = useState(false)
-  const [photoInput,  setPhotoInput]  = useState('')
+
+  // local preview blobs sebelum upload
+  const [previews, setPreviews] = useState<{ file: File; preview: string }[]>([])
 
   useEffect(() => {
     if (mode === 'edit' && packageId) {
@@ -78,6 +84,9 @@ export default function PackageFormContent({ mode, packageId }: Props) {
     }
   }, [mode, packageId])
 
+  // revoke object URLs on unmount
+  useEffect(() => () => { previews.forEach(p => URL.revokeObjectURL(p.preview)) }, [])
+
   const set = <K extends keyof PackageCreate>(key: K, value: PackageCreate[K]) =>
     setForm(prev => ({ ...prev, [key]: value }))
 
@@ -91,21 +100,48 @@ export default function PackageFormContent({ mode, packageId }: Props) {
     set('available_slots', slots.includes(slot) ? slots.filter(s => s !== slot) : [...slots, slot].sort())
   }
 
-  const addPhoto = () => {
-    const val = photoInput.trim()
-    if (!val) return
-    if (!form.photo_urls.includes(val))
-      set('photo_urls', [...form.photo_urls, val])
-    setPhotoInput('')
+  // Pilih file → simpan di previews, belum upload
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files ?? [])
+    if (!selected.length) return
+    const newPreviews = selected.map(f => ({ file: f, preview: URL.createObjectURL(f) }))
+    setPreviews(prev => [...prev, ...newPreviews])
+    e.target.value = '' // reset input agar bisa pilih file sama lagi
   }
 
-  const removePhoto = (url: string) =>
+  const removePreview = (idx: number) => {
+    URL.revokeObjectURL(previews[idx].preview)
+    setPreviews(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  const removeUploaded = (url: string) =>
     set('photo_urls', form.photo_urls.filter(u => u !== url))
+
+  // Upload semua file di previews
+  const handleUploadPreviews = async () => {
+    if (!previews.length) return
+    setUploading(true)
+    try {
+      const urls = await uploadPhotos(previews.map(p => p.file))
+      set('photo_urls', [...form.photo_urls, ...urls])
+      previews.forEach(p => URL.revokeObjectURL(p.preview))
+      setPreviews([])
+      toast.success(`${urls.length} foto berhasil diupload.`)
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Upload foto gagal.')
+    } finally {
+      setUploading(false)
+    }
+  }
 
   const handleSubmit = async () => {
     setError(''); setSuccess(false)
-    if (!form.name.trim())                              return setError('Nama package wajib diisi.')
-    if (!form.price_per_pax || form.price_per_pax <= 0) return setError('Harga per pax harus lebih dari 0.')
+    if (previews.length > 0)
+      return setError('Upload foto yang belum diupload terlebih dahulu.')
+    if (!form.name.trim())
+      return setError('Nama package wajib diisi.')
+    if (!form.price_per_pax || form.price_per_pax <= 0)
+      return setError('Harga per pax harus lebih dari 0.')
     if (form.max_pax !== null && form.max_pax < form.min_pax)
       return setError('Max pax tidak boleh kurang dari min pax.')
 
@@ -153,34 +189,23 @@ export default function PackageFormContent({ mode, packageId }: Props) {
         {/* Nama */}
         <div className="grid gap-1.5">
           <Label>Nama Package</Label>
-          <Input
-            value={form.name}
-            onChange={e => set('name', e.target.value)}
-            placeholder="cth: Makan Siang Paket Wisata Bali"
-          />
+          <Input value={form.name} onChange={e => set('name', e.target.value)}
+            placeholder="cth: Makan Siang Paket Wisata Bali" />
         </div>
 
         {/* Deskripsi */}
         <div className="grid gap-1.5">
           <Label>Deskripsi</Label>
-          <textarea
-            className={textareaClass}
-            rows={3}
-            value={form.description}
-            onChange={e => set('description', e.target.value)}
-            placeholder="Apa yang didapat tamu dalam package ini?"
-          />
+          <textarea className={textareaClass} rows={3}
+            value={form.description} onChange={e => set('description', e.target.value)}
+            placeholder="Apa yang didapat tamu dalam package ini?" />
         </div>
 
         {/* Harga */}
         <div className="grid gap-1.5">
           <Label>Harga per Pax (Rp)</Label>
-          <Input
-            type="number" min={0}
-            value={form.price_per_pax || ''}
-            onChange={e => set('price_per_pax', Number(e.target.value))}
-            placeholder="150000"
-          />
+          <Input type="number" min={0} value={form.price_per_pax || ''}
+            onChange={e => set('price_per_pax', Number(e.target.value))} placeholder="150000" />
         </div>
 
         {/* Min & Max Pax */}
@@ -225,61 +250,45 @@ export default function PackageFormContent({ mode, packageId }: Props) {
                       ? 'bg-primary/90 text-primary-foreground border-primary shadow-sm'
                       : 'bg-white/5 border-white/10 text-muted-foreground hover:bg-white/10 hover:border-white/20',
                   ].join(' ')}
-                >
-                  {DAYS_ID[day]}
-                </button>
+                >{DAYS_ID[day]}</button>
               )
             })}
           </div>
         </div>
 
-        {/* Slot jam — picker 24 jam */}
+        {/* Slot jam */}
         <div className="grid gap-2">
           <div className="flex items-center justify-between">
             <Label>Slot Jam</Label>
-            <button
-              type="button"
-              onClick={() => setShowPicker(p => !p)}
-              className="text-xs text-primary hover:underline"
-            >
+            <button type="button" onClick={() => setShowPicker(p => !p)}
+              className="text-xs text-primary hover:underline">
               {showPicker ? 'Tutup picker' : 'Pilih dari daftar jam'}
             </button>
           </div>
-
-          {/* Grid picker 24 jam */}
           {showPicker && (
             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
               <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-8">
                 {ALL_SLOTS.map(slot => {
                   const active = form.available_slots.includes(slot)
                   return (
-                    <button
-                      key={slot}
-                      type="button"
-                      onClick={() => toggleSlot(slot)}
+                    <button key={slot} type="button" onClick={() => toggleSlot(slot)}
                       className={[
                         'py-1 rounded-md text-xs font-medium border transition-all',
                         active
                           ? 'bg-primary text-primary-foreground border-primary'
                           : 'bg-white/5 border-white/10 text-muted-foreground hover:bg-white/10',
                       ].join(' ')}
-                    >
-                      {slot}
-                    </button>
+                    >{slot}</button>
                   )
                 })}
               </div>
             </div>
           )}
-
-          {/* Tampilkan slot yang sudah dipilih */}
           {form.available_slots.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {form.available_slots.map(slot => (
-                <span
-                  key={slot}
-                  className="flex items-center gap-1 border border-white/10 bg-white/5 rounded-lg px-2.5 py-1 text-xs text-muted-foreground"
-                >
+                <span key={slot}
+                  className="flex items-center gap-1 border border-white/10 bg-white/5 rounded-lg px-2.5 py-1 text-xs text-muted-foreground">
                   {slot}
                   <button type="button" onClick={() => toggleSlot(slot)}
                     className="hover:text-destructive ml-0.5">×</button>
@@ -289,28 +298,79 @@ export default function PackageFormContent({ mode, packageId }: Props) {
           )}
         </div>
 
-        {/* Foto URL */}
+        {/* ── Foto Package ────────────────────────────────────── */}
         <div className="grid gap-2">
-          <Label>Foto Package <span className="text-xs text-muted-foreground">(URL)</span></Label>
-          <div className="flex gap-2">
-            <Input
-              value={photoInput}
-              onChange={e => setPhotoInput(e.target.value)}
-              placeholder="https://..."
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addPhoto() } }}
-            />
-            <Button type="button" size="sm" onClick={addPhoto}>Tambah</Button>
-          </div>
+          <Label>Foto Package</Label>
+
+          {/* Hidden file input */}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            className="hidden"
+            onChange={handleFileChange}
+          />
+
+          {/* Tombol pilih file */}
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="flex items-center gap-2 w-full justify-center rounded-xl border-2 border-dashed border-white/20 bg-white/5 hover:bg-white/10 transition-colors px-4 py-6 text-sm text-muted-foreground"
+          >
+            <ImagePlus size={18} />
+            Klik untuk pilih foto (JPG, PNG, WebP · maks 5MB/foto)
+          </button>
+
+          {/* Preview foto yang belum diupload */}
+          {previews.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">{previews.length} foto dipilih, belum diupload</p>
+              <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+                {previews.map((p, i) => (
+                  <div key={i} className="relative group aspect-square">
+                    <Image
+                      src={p.preview} alt=""
+                      fill className="object-cover rounded-lg"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removePreview(i)}
+                      className="absolute -top-1.5 -right-1.5 bg-destructive text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    ><X size={10} /></button>
+                  </div>
+                ))}
+              </div>
+              <Button
+                type="button"
+                onClick={handleUploadPreviews}
+                disabled={uploading}
+                size="sm"
+                className="w-full"
+              >
+                {uploading
+                  ? <><Loader2 size={14} className="animate-spin mr-1.5" />Mengupload...</>
+                  : `Upload ${previews.length} foto`
+                }
+              </Button>
+            </div>
+          )}
+
+          {/* Foto yang sudah terupload */}
           {form.photo_urls.length > 0 && (
-            <div className="space-y-1.5">
+            <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
               {form.photo_urls.map(url => (
-                <div key={url}
-                  className="flex items-center justify-between border border-white/10 bg-white/5 rounded-lg px-3 py-2"
-                >
-                  <span className="text-xs text-muted-foreground truncate">{url}</span>
-                  <button type="button" onClick={() => removePhoto(url)}
-                    className="text-xs text-muted-foreground hover:text-destructive ml-3 shrink-0"
-                  >Hapus</button>
+                <div key={url} className="relative group aspect-square">
+                  <Image
+                    src={url} alt=""
+                    fill className="object-cover rounded-lg"
+                    unoptimized
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeUploaded(url)}
+                    className="absolute -top-1.5 -right-1.5 bg-destructive text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                  ><X size={10} /></button>
                 </div>
               ))}
             </div>
@@ -333,7 +393,7 @@ export default function PackageFormContent({ mode, packageId }: Props) {
             placeholder="Catatan internal untuk tim kamu" />
         </div>
 
-        <Button onClick={handleSubmit} disabled={saving} className="w-full">
+        <Button onClick={handleSubmit} disabled={saving || uploading} className="w-full">
           {saving ? 'Menyimpan…' : mode === 'create' ? 'Buat Package' : 'Simpan Perubahan'}
         </Button>
       </div>

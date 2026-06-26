@@ -1,15 +1,16 @@
 """
 File upload & serve endpoint.
 
-POST /api/v1/uploads            — upload file, return URL
-GET  /api/v1/uploads/{filename} — serve file (login required)
+POST /api/v1/uploads              — upload single file, return URL
+POST /api/v1/uploads/multiple     — upload multiple files, return list of URLs
+GET  /api/v1/uploads/{filename}   — serve file (login required)
 
 File disimpan di: backend-fastapi/storage/uploads/
 """
 import os
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, List
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
@@ -28,10 +29,20 @@ ALLOWED_CONTENT_TYPES = {
     "image/jpeg", "image/png", "image/webp",
     "application/pdf",
 }
-MAX_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
+MAX_SIZE_BYTES = 5 * 1024 * 1024   # 5 MB per file
+MAX_FILES      = 10                 # max file per request
 
 
-@router.post("", summary="Upload file (gambar / PDF)", tags=["Uploads"])
+def _save_upload(content: bytes, original_filename: str) -> str:
+    """Simpan bytes ke disk, return filename yang tersimpan."""
+    ext = Path(original_filename or "file").suffix.lower() or ".bin"
+    filename = f"{uuid.uuid4().hex}{ext}"
+    with open(STORAGE_DIR / filename, "wb") as f:
+        f.write(content)
+    return filename
+
+
+@router.post("", summary="Upload single file (gambar / PDF)")
 async def upload_file(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
@@ -41,20 +52,45 @@ async def upload_file(
             status_code=415,
             detail=f"Tipe file tidak diizinkan. Gunakan: {', '.join(ALLOWED_CONTENT_TYPES)}"
         )
-
     content = await file.read()
     if len(content) > MAX_SIZE_BYTES:
         raise HTTPException(status_code=413, detail="File terlalu besar. Maksimal 5MB.")
 
-    ext = Path(file.filename or "file").suffix.lower() or ".bin"
-    filename = f"{uuid.uuid4().hex}{ext}"
-    with open(STORAGE_DIR / filename, "wb") as f:
-        f.write(content)
-
+    filename = _save_upload(content, file.filename or "file")
     return {"url": f"/api/v1/uploads/{filename}", "filename": filename}
 
 
-@router.get("/{filename}", summary="Serve uploaded file (login required)", tags=["Uploads"])
+@router.post("/multiple", summary="Upload multiple files sekaligus (maks 10 file, 5MB each)")
+async def upload_multiple(
+    files: List[UploadFile] = File(...),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    if len(files) > MAX_FILES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Maksimal {MAX_FILES} file per upload."
+        )
+
+    results = []
+    for file in files:
+        if file.content_type not in ALLOWED_CONTENT_TYPES:
+            raise HTTPException(
+                status_code=415,
+                detail=f"File '{file.filename}' bertipe '{file.content_type}' tidak diizinkan."
+            )
+        content = await file.read()
+        if len(content) > MAX_SIZE_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File '{file.filename}' terlalu besar. Maksimal 5MB per file."
+            )
+        filename = _save_upload(content, file.filename or "file")
+        results.append({"url": f"/api/v1/uploads/{filename}", "filename": filename})
+
+    return {"uploaded": results, "count": len(results)}
+
+
+@router.get("/{filename}", summary="Serve uploaded file (login required)")
 def serve_file(
     filename: str,
     current_user: User = Depends(get_current_user),
@@ -75,9 +111,9 @@ def serve_file(
 
 def _guess_media_type(filename: str) -> str:
     return {
-        ".jpg": "image/jpeg",
+        ".jpg":  "image/jpeg",
         ".jpeg": "image/jpeg",
-        ".png": "image/png",
+        ".png":  "image/png",
         ".webp": "image/webp",
-        ".pdf": "application/pdf",
+        ".pdf":  "application/pdf",
     }.get(Path(filename).suffix.lower(), "application/octet-stream")
