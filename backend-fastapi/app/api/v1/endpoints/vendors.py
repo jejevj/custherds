@@ -8,6 +8,7 @@ from app.models.vendor import Vendor
 from app.schemas.vendors import (
     VendorProfile,
     VendorUpdateRequest,
+    VendorSubmitRequest,
     VendorDepositInfo,
     VendorPublic,
 )
@@ -17,12 +18,7 @@ router = APIRouter()
 
 # ─── Vendor self-service ────────────────────────────────────────────────────
 
-@router.get(
-    "/me",
-    response_model=VendorProfile,
-    summary="Get logged-in vendor profile",
-    tags=["Vendors"],
-)
+@router.get("/me", response_model=VendorProfile, tags=["Vendors"])
 def get_vendor_profile(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user_type(2)),
@@ -33,12 +29,7 @@ def get_vendor_profile(
     return vendor
 
 
-@router.put(
-    "/me",
-    response_model=VendorProfile,
-    summary="Update vendor profile",
-    tags=["Vendors"],
-)
+@router.put("/me", response_model=VendorProfile, summary="Update vendor profile (save draft)", tags=["Vendors"])
 def update_vendor_profile(
     payload: VendorUpdateRequest,
     db: Session = Depends(get_db),
@@ -47,6 +38,11 @@ def update_vendor_profile(
     vendor = db.query(Vendor).filter(Vendor.user_id == current_user.id).first()
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor profile not found")
+    if vendor.vendor_status not in ("incomplete", "rejected"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Profile cannot be edited when status is '{vendor.vendor_status}'"
+        )
     for field, value in payload.dict(exclude_unset=True).items():
         setattr(vendor, field, value)
     db.commit()
@@ -54,12 +50,35 @@ def update_vendor_profile(
     return vendor
 
 
-@router.get(
-    "/me/deposit",
-    response_model=VendorDepositInfo,
-    summary="Get vendor deposit balance",
-    tags=["Vendors"],
-)
+@router.post("/me/submit", response_model=VendorProfile, summary="Submit dokumen untuk direview admin", tags=["Vendors"])
+def submit_vendor_for_review(
+    payload: VendorSubmitRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_user_type(2)),
+) -> Any:
+    """
+    Vendor mengisi semua data wajib dan submit.
+    Status berubah: incomplete/rejected -> pending.
+    """
+    vendor = db.query(Vendor).filter(Vendor.user_id == current_user.id).first()
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor profile not found")
+    if vendor.vendor_status == "approved":
+        raise HTTPException(status_code=400, detail="Vendor already approved")
+    if vendor.vendor_status == "pending":
+        raise HTTPException(status_code=400, detail="Already under review")
+
+    for field, value in payload.dict().items():
+        setattr(vendor, field, value)
+
+    vendor.vendor_status = "pending"
+    vendor.approval_notes = None  # Clear catatan penolakan sebelumnya
+    db.commit()
+    db.refresh(vendor)
+    return vendor
+
+
+@router.get("/me/deposit", response_model=VendorDepositInfo, tags=["Vendors"])
 def get_vendor_deposit(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user_type(2)),
@@ -76,19 +95,14 @@ def get_vendor_deposit(
     "/browse",
     response_model=List[VendorPublic],
     summary="Browse approved vendors (Guide access)",
-    description=(
-        "Returns all **approved** vendors visible to guides. "
-        "Optionally filter by `area` (integer area code) and/or `category`. "
-        "Requires a valid JWT token — accessible by any authenticated user."
-    ),
     tags=["Vendors – Browse"],
 )
 def browse_vendors(
-    area: Optional[int] = Query(None, description="Filter by vendor area code"),
-    category: Optional[int] = Query(None, description="Filter by vendor category code"),
-    search: Optional[str] = Query(None, description="Search by business name (case-insensitive)"),
-    skip: int = Query(0, ge=0, description="Pagination offset"),
-    limit: int = Query(20, ge=1, le=100, description="Pagination limit (max 100)"),
+    area: Optional[int] = Query(None),
+    category: Optional[int] = Query(None),
+    search: Optional[str] = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Any:
@@ -99,5 +113,4 @@ def browse_vendors(
         q = q.filter(Vendor.vendor_category == category)
     if search:
         q = q.filter(Vendor.vendor_business_name.ilike(f"%{search}%"))
-    vendors = q.order_by(Vendor.vendor_business_name).offset(skip).limit(limit).all()
-    return vendors
+    return q.order_by(Vendor.vendor_business_name).offset(skip).limit(limit).all()

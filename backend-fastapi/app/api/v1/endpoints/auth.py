@@ -32,7 +32,6 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         subject=str(user.id),
         expires_delta=timedelta(days=7),
     )
-
     return {
         "access_token":  access_token,
         "refresh_token": refresh_token,
@@ -46,15 +45,15 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 
 @router.post("/register", response_model=RegisterResponse, status_code=201, summary="Register new user (Guide or Vendor)")
 def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> Any:
-    """Register a new Guide (user_type=1) or Vendor (user_type=2).
+    """
+    Register a new Guide (user_type=1) or Vendor (user_type=2).
 
-    - Guide: creates User + Guide record. Status starts as pending (guide_certificate_status).
-    - Vendor: creates User + Vendor record. vendor_status is always 'pending' until admin approves.
-    - Both can login immediately after registration.
+    Both start with status 'incomplete'.
+    After login they are shown an onboarding form to complete required documents.
+    Once submitted -> status becomes 'pending' and admin reviews.
     """
     if db.query(User).filter(User.user_email == payload.user_email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
-
     if payload.user_type not in (1, 2):
         raise HTTPException(status_code=400, detail="user_type must be 1 (Guide) or 2 (Vendor)")
 
@@ -74,13 +73,17 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> Any:
     if payload.user_type == 1:  # Guide
         db.add(Guide(
             user_id=user.id,
-            guide_certificate_status="pending",  # always pending until admin approves
+            guide_status="incomplete",
+            guide_certificate_status="incomplete",
         ))
 
     elif payload.user_type == 2:  # Vendor
         if not payload.vendor_business_name or payload.vendor_category is None \
                 or payload.vendor_area is None or payload.vendor_cashback_percent is None:
-            raise HTTPException(status_code=400, detail="Incomplete vendor data: vendor_business_name, vendor_category, vendor_area, and vendor_cashback_percent are required")
+            raise HTTPException(
+                status_code=400,
+                detail="Incomplete vendor data: vendor_business_name, vendor_category, vendor_area, and vendor_cashback_percent are required"
+            )
         db.add(Vendor(
             user_id=user.id,
             vendor_business_name=payload.vendor_business_name,
@@ -94,7 +97,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> Any:
             vendor_opening_hours=payload.vendor_opening_hours,
             vendor_min_spend=payload.vendor_min_spend,
             vendor_know_from=payload.vendor_know_from,
-            vendor_status="pending",  # always pending — admin must approve
+            vendor_status="incomplete",  # start incomplete, complete docs then submit
         ))
 
     db.commit()
@@ -103,5 +106,5 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> Any:
         "id": str(user.id),
         "user_email": user.user_email,
         "user_type": user.user_type,
-        "message": "Registration successful. Your account is pending admin approval.",
+        "message": "Registration successful. Please complete your profile and documents to submit for review.",
     }

@@ -6,9 +6,14 @@ import uuid
 
 class VendorProfile(BaseModel):
     id: uuid.UUID
+    vendor_status: str
+    approval_notes: Optional[str] = None
     vendor_business_name: str
     vendor_category: int
     vendor_area: int
+    vendor_npwp: Optional[str] = None
+    vendor_nib: Optional[str] = None
+    vendor_owner_id_card_url: Optional[str] = None
     vendor_location: Optional[str] = None
     vendor_contact_person: Optional[str] = None
     vendor_website: Optional[str] = None
@@ -16,7 +21,6 @@ class VendorProfile(BaseModel):
     vendor_opening_hours: Optional[str] = None
     vendor_min_spend: Optional[Decimal] = None
     vendor_cashback_percent: float
-    vendor_status: str
     deposit_balance: Decimal
 
     class Config:
@@ -31,6 +35,22 @@ class VendorUpdateRequest(BaseModel):
     vendor_short_description: Optional[str] = None
     vendor_opening_hours: Optional[str] = None
     vendor_min_spend: Optional[Decimal] = None
+    vendor_npwp: Optional[str] = None
+    vendor_nib: Optional[str] = None
+    vendor_owner_id_card_url: Optional[str] = None
+
+
+class VendorSubmitRequest(BaseModel):
+    """Called when vendor clicks 'Submit for Review'.
+    All required fields must be filled.
+    """
+    vendor_business_name: str
+    vendor_location: str
+    vendor_contact_person: str
+    vendor_npwp: str
+    vendor_nib: str
+    vendor_owner_id_card_url: str   # URL KTP pemilik sudah diupload
+    vendor_short_description: str
 
 
 class VendorDepositInfo(BaseModel):
@@ -44,7 +64,7 @@ class VendorDepositInfo(BaseModel):
 
 
 class VendorPublic(BaseModel):
-    """Public vendor info visible to guides — no deposit/financial data."""
+    """Public vendor info visible to guides."""
     id: uuid.UUID
     vendor_business_name: str
     vendor_category: int

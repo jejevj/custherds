@@ -9,15 +9,35 @@ from app.db.base_class import Base
 class Vendor(Base):
     """
     Profil bisnis untuk user_type=2.
+
+    vendor_status lifecycle:
+      incomplete  -> user baru register, belum melengkapi dokumen wajib
+      pending     -> dokumen lengkap, menunggu review admin
+      approved    -> admin approve, is_verified=True di User
+      rejected    -> admin tolak, user harus perbaiki
+
     deposit_balance: saldo wallet deposit untuk Metode B (Deposit Wallet).
     """
     __tablename__ = "vendors"
 
     id                          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     user_id                     = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
+
+    # --- Status onboarding & verifikasi ---
+    vendor_status               = Column(String(20), default="incomplete", nullable=False)
+    approval_notes              = Column(Text, nullable=True)
+
+    # --- Data bisnis wajib ---
     vendor_business_name        = Column(String(255), nullable=False)
     vendor_category             = Column(Integer, nullable=False)
     vendor_area                 = Column(Integer, nullable=False)
+
+    # --- Dokumen legalitas (wajib untuk submit ke pending) ---
+    vendor_npwp                 = Column(String(30), nullable=True)     # Nomor NPWP
+    vendor_nib                  = Column(String(30), nullable=True)     # Nomor Induk Berusaha
+    vendor_owner_id_card_url    = Column(String(500), nullable=True)    # URL KTP pemilik
+
+    # --- Info bisnis tambahan ---
     vendor_location             = Column(Text, nullable=True)
     vendor_contact_person       = Column(String(255), nullable=True)
     vendor_website              = Column(String(255), nullable=True)
@@ -26,10 +46,11 @@ class Vendor(Base):
     vendor_min_spend            = Column(Numeric(15, 2), nullable=True)
     vendor_cashback_percent     = Column(Float, nullable=False)
     vendor_know_from            = Column(Text, nullable=True)
-    vendor_status               = Column(String(20), default="pending", nullable=False)
-    approval_notes              = Column(Text, nullable=True)
+
+    # --- Keuangan ---
     deposit_balance             = Column(Numeric(15, 2), default=0, nullable=False)
     deposit_minimum             = Column(Numeric(15, 2), nullable=True)
+
     created_at                  = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at                  = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
