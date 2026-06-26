@@ -31,11 +31,15 @@ function getTokens() {
 function saveTokens(access: string, refresh?: string) {
   localStorage.setItem('access_token', access)
   if (refresh) localStorage.setItem('refresh_token', refresh)
+  // Set cookie supaya middleware (SSR) bisa baca token
+  document.cookie = `access_token=${access}; path=/; SameSite=Lax`
 }
 
 function clearTokens() {
   localStorage.removeItem('access_token')
   localStorage.removeItem('refresh_token')
+  // Hapus cookie juga
+  document.cookie = 'access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
 }
 
 async function refreshAccessToken(): Promise<string | null> {
@@ -75,7 +79,7 @@ async function request<T>(path: string, options: RequestOptions = {}, retry = tr
   if (res.status === 401 && retry) {
     const newAccess = await refreshAccessToken()
     if (newAccess) {
-      return request<T>(path, options, false) // retry dengan token baru
+      return request<T>(path, options, false)
     } else {
       clearTokens()
       if (typeof window !== 'undefined') window.location.href = '/login'
@@ -88,7 +92,6 @@ async function request<T>(path: string, options: RequestOptions = {}, retry = tr
     throw errBody
   }
 
-  // 204 No Content
   if (res.status === 204) return undefined as T
 
   return res.json() as Promise<T>
