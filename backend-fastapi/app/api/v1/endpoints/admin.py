@@ -1,7 +1,7 @@
 import uuid
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.db.session import get_db
 from app.core.deps import require_user_type
 from app.models.user import User
@@ -21,7 +21,9 @@ from datetime import datetime, timezone
 router = APIRouter()
 
 
-@router.get("/users", response_model=List[AdminUserList], summary="[Admin] List semua user")
+# ─────────────────────────── USERS ───────────────────────────
+
+@router.get("/users", response_model=List[AdminUserList], summary="[Admin] List all users")
 def admin_list_users(
     user_type: Optional[int] = Query(None, description="Filter: 1=Guide, 2=Vendor, 99=Admin"),
     db: Session = Depends(get_db),
@@ -33,7 +35,7 @@ def admin_list_users(
     return q.order_by(User.created_at.desc()).all()
 
 
-@router.put("/users/{user_id}/activate", summary="[Admin] Aktifkan / nonaktifkan user")
+@router.put("/users/{user_id}/activate", summary="[Admin] Activate / deactivate user")
 def admin_toggle_user(
     user_id: uuid.UUID,
     is_active: bool = Query(...),
@@ -42,11 +44,76 @@ def admin_toggle_user(
 ) -> Any:
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(404, "User tidak ditemukan")
+        raise HTTPException(404, "User not found")
     user.is_active = is_active
     db.commit()
-    return {"message": f"User {'diaktifkan' if is_active else 'dinonaktifkan'}"}
+    return {"message": f"User {'activated' if is_active else 'deactivated'}"}
 
+
+# ─────────────────────────── GUIDES ───────────────────────────
+
+@router.get("/guides", summary="[Admin] List all guides with certificate status")
+def admin_list_guides(
+    certificate_status: Optional[str] = Query(None, description="Filter: pending, approved, rejected"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_user_type(99)),
+) -> Any:
+    """Return guides joined with their user data, optionally filtered by certificate_status."""
+    q = (
+        db.query(Guide)
+        .options(joinedload(Guide.user))
+        .join(User, Guide.user_id == User.id)
+    )
+    if certificate_status:
+        q = q.filter(Guide.guide_certificate_status == certificate_status)
+    guides = q.order_by(Guide.created_at.desc()).all()
+    result = []
+    for g in guides:
+        result.append({
+            "guide_id": str(g.id),
+            "user_id": str(g.user_id),
+            "user_name": g.user.user_name,
+            "user_email": g.user.user_email,
+            "user_phone": g.user.user_phone,
+            "is_active": g.user.is_active,
+            "guide_nationality": g.guide_nationality,
+            "guide_certificate": g.guide_certificate,
+            "guide_certificate_status": g.guide_certificate_status,
+            "bio": g.bio,
+            "languages": g.languages,
+            "wallet_balance": str(g.wallet_balance),
+            "created_at": g.created_at.isoformat(),
+        })
+    return result
+
+
+@router.put("/guides/{guide_id}/approve", summary="[Admin] Approve or reject a guide certificate")
+def admin_approve_guide(
+    guide_id: uuid.UUID,
+    action: str = Query(..., regex="^(approve|reject)$"),
+    notes: Optional[str] = Query(None, description="Optional notes for rejection reason"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_user_type(99)),
+) -> Any:
+    guide = db.query(Guide).filter(Guide.id == guide_id).first()
+    if not guide:
+        raise HTTPException(404, "Guide not found")
+    guide.guide_certificate_status = "approved" if action == "approve" else "rejected"
+    # Mark the user as verified when approved
+    if action == "approve":
+        user = db.query(User).filter(User.id == guide.user_id).first()
+        if user:
+            user.is_verified = True
+    db.commit()
+    return {
+        "message": f"Guide {guide.guide_certificate_status}",
+        "guide_id": str(guide.id),
+        "guide_certificate_status": guide.guide_certificate_status,
+        "notes": notes,
+    }
+
+
+# ─────────────────────────── VENDORS ───────────────────────────
 
 @router.put("/vendors/{vendor_id}/approve", summary="[Admin] Approve / reject vendor")
 def admin_approve_vendor(
@@ -58,14 +125,20 @@ def admin_approve_vendor(
 ) -> Any:
     vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
     if not vendor:
-        raise HTTPException(404, "Vendor tidak ditemukan")
+        raise HTTPException(404, "Vendor not found")
     vendor.vendor_status = "approved" if action == "approve" else "rejected"
     vendor.approval_notes = notes
+    if action == "approve":
+        user = db.query(User).filter(User.id == vendor.user_id).first()
+        if user:
+            user.is_verified = True
     db.commit()
     return {"message": f"Vendor {vendor.vendor_status}"}
 
 
-@router.get("/transactions", response_model=List[AdminTransactionList], summary="[Admin] List semua transaksi")
+# ─────────────────────────── TRANSACTIONS ───────────────────────────
+
+@router.get("/transactions", response_model=List[AdminTransactionList], summary="[Admin] List all transactions")
 def admin_list_transactions(
     status: Optional[str] = Query(None),
     db: Session = Depends(get_db),
@@ -77,7 +150,9 @@ def admin_list_transactions(
     return q.order_by(Transaction.created_at.desc()).all()
 
 
-@router.get("/withdrawals", response_model=List[AdminWithdrawalResponse], summary="[Admin] List semua withdrawal guide")
+# ─────────────────────────── WITHDRAWALS ───────────────────────────
+
+@router.get("/withdrawals", response_model=List[AdminWithdrawalResponse], summary="[Admin] List all guide withdrawals")
 def admin_list_withdrawals(
     status: Optional[str] = Query(None, description="Filter: pending, processing, completed, failed"),
     db: Session = Depends(get_db),
@@ -91,19 +166,7 @@ def admin_list_withdrawals(
 
 @router.post(
     "/withdrawals/{withdrawal_id}/disburse",
-    summary="[Admin] Kirim dana guide via Xendit Disbursement",
-    description="""
-Admin memproses withdrawal guide dengan mengirim dana ke rekening bank via Xendit.
-
-**Flow:**
-1. Admin klik disburse
-2. Sistem panggil Xendit Disbursement API
-3. Status withdrawal berubah ke `processing`
-4. Xendit kirim callback ke `/payments/webhook/disbursement`
-5. Callback auto-update status ke `completed` atau `failed`
-
-**external_id format:** `CUSTHERDS-WD-{withdrawal_id}`
-    """,
+    summary="[Admin] Send guide funds via Xendit Disbursement",
 )
 async def admin_disburse_withdrawal(
     withdrawal_id: uuid.UUID,
@@ -112,12 +175,12 @@ async def admin_disburse_withdrawal(
 ) -> Any:
     w = db.query(GuideWithdrawal).filter(GuideWithdrawal.id == withdrawal_id).first()
     if not w:
-        raise HTTPException(404, "Withdrawal tidak ditemukan")
+        raise HTTPException(404, "Withdrawal not found")
     if w.status != "pending":
-        raise HTTPException(400, f"Hanya withdrawal berstatus 'pending' yang bisa diproses. Status saat ini: {w.status}")
+        raise HTTPException(400, f"Only 'pending' withdrawals can be processed. Current status: {w.status}")
 
     external_id = f"CUSTHERDS-WD-{w.id}"
-    description = f"Komisi guide Custherds - Withdrawal {w.id}"
+    description = f"Guide commission Custherds - Withdrawal {w.id}"
 
     try:
         xendit_response = await create_disbursement(
@@ -129,7 +192,7 @@ async def admin_disburse_withdrawal(
             amount=float(w.amount),
         )
     except Exception as e:
-        raise HTTPException(502, f"Gagal mengirim disbursement ke Xendit: {str(e)}")
+        raise HTTPException(502, f"Failed to send disbursement to Xendit: {str(e)}")
 
     w.status = "processing"
     w.xendit_disbursement_id = xendit_response.get("id")
@@ -139,7 +202,7 @@ async def admin_disburse_withdrawal(
     db.commit()
 
     return {
-        "message": "Disbursement berhasil dikirim ke Xendit. Menunggu konfirmasi transfer.",
+        "message": "Disbursement sent to Xendit. Awaiting transfer confirmation.",
         "withdrawal_id": str(w.id),
         "xendit_disbursement_id": w.xendit_disbursement_id,
         "status": w.status,
@@ -149,7 +212,7 @@ async def admin_disburse_withdrawal(
     }
 
 
-@router.put("/withdrawals/{withdrawal_id}/process", summary="[Admin] Update status withdrawal secara manual")
+@router.put("/withdrawals/{withdrawal_id}/process", summary="[Admin] Manually update withdrawal status")
 def admin_process_withdrawal(
     withdrawal_id: uuid.UUID,
     payload: AdminWithdrawalProcess,
@@ -158,9 +221,9 @@ def admin_process_withdrawal(
 ) -> Any:
     w = db.query(GuideWithdrawal).filter(GuideWithdrawal.id == withdrawal_id).first()
     if not w:
-        raise HTTPException(404, "Withdrawal tidak ditemukan")
+        raise HTTPException(404, "Withdrawal not found")
     if w.status not in ("pending", "processing"):
-        raise HTTPException(400, f"Status tidak bisa diproses: {w.status}")
+        raise HTTPException(400, f"Cannot process withdrawal with status: {w.status}")
     w.status = payload.status
     w.processed_by = current_user.id
     w.processed_at = datetime.now(timezone.utc)
@@ -168,10 +231,12 @@ def admin_process_withdrawal(
     if payload.xendit_disbursement_id:
         w.xendit_disbursement_id = payload.xendit_disbursement_id
     db.commit()
-    return {"message": f"Withdrawal diupdate ke status: {payload.status}"}
+    return {"message": f"Withdrawal updated to status: {payload.status}"}
 
 
-@router.get("/split-config", response_model=List[AdminSplitConfigResponse], summary="[Admin] List konfigurasi split revenue")
+# ─────────────────────────── SPLIT CONFIG ───────────────────────────
+
+@router.get("/split-config", response_model=List[AdminSplitConfigResponse], summary="[Admin] List revenue split configs")
 def admin_list_split_configs(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user_type(99)),
@@ -179,14 +244,14 @@ def admin_list_split_configs(
     return db.query(RevenueSplitConfig).order_by(RevenueSplitConfig.effective_from.desc()).all()
 
 
-@router.post("/split-config", response_model=AdminSplitConfigResponse, status_code=201, summary="[Admin] Buat konfigurasi split revenue baru")
+@router.post("/split-config", response_model=AdminSplitConfigResponse, status_code=201, summary="[Admin] Create new revenue split config")
 def admin_create_split_config(
     payload: AdminSplitConfigCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user_type(99)),
 ) -> Any:
     if abs(payload.vendor_percent + payload.guide_percent + payload.platform_percent - 100.0) > 0.01:
-        raise HTTPException(400, "Total persentase harus 100%")
+        raise HTTPException(400, "Total percentage must be 100%")
     db.query(RevenueSplitConfig).filter(RevenueSplitConfig.is_active == True).update({"is_active": False})  # noqa
     config = RevenueSplitConfig(
         vendor_percent=payload.vendor_percent,

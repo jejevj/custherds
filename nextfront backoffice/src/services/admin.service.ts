@@ -9,6 +9,22 @@ export interface AdminUser {
   created_at: string
 }
 
+export interface AdminGuide {
+  guide_id: string
+  user_id: string
+  user_name: string
+  user_email: string
+  user_phone: string | null
+  is_active: boolean
+  guide_nationality: string | null
+  guide_certificate: string | null
+  guide_certificate_status: 'pending' | 'approved' | 'rejected'
+  bio: string | null
+  languages: string | null
+  wallet_balance: string
+  created_at: string
+}
+
 export interface AdminTransaction {
   id: string
   booking_id: string
@@ -50,6 +66,17 @@ export const adminService = {
 
   toggleUser: (user_id: string, is_active: boolean) =>
     api.put<{ message: string }>(`/admin/users/${user_id}/activate`, null, { params: { is_active } }),
+
+  // Guides
+  listGuides: (certificate_status?: string) =>
+    api.get<AdminGuide[]>('/admin/guides', { params: certificate_status ? { certificate_status } : {} }),
+
+  approveGuide: (guide_id: string, action: 'approve' | 'reject', notes?: string) =>
+    api.put<{ message: string; guide_certificate_status: string }>(
+      `/admin/guides/${guide_id}/approve`,
+      null,
+      { params: { action, ...(notes ? { notes } : {}) } },
+    ),
 
   // Vendors
   approveVendor: (vendor_id: string, action: 'approve' | 'reject', notes?: string) =>
