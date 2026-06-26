@@ -39,14 +39,15 @@ export interface VendorUpdatePayload {
   allow_direct_booking?: boolean
 }
 
+// All optional so Partial<VendorProfile> is assignable; backend validates required fields
 export interface VendorSubmitPayload {
-  vendor_business_name: string
+  vendor_business_name?: string | null
   vendor_location?: string | null
-  vendor_contact_person: string
+  vendor_contact_person?: string | null
   vendor_npwp?: string | null
   vendor_nib?: string | null
   vendor_owner_id_card_url?: string | null
-  vendor_short_description: string
+  vendor_short_description?: string | null
   vendor_opening_hours?: string | null
   vendor_website?: string | null
 }
@@ -59,10 +60,10 @@ export interface VendorDepositInfo {
 }
 
 export const vendorsService = {
-  getProfile:    ()                               => api.get<VendorProfile>('/vendors/me'),
-  updateProfile: (payload: VendorUpdatePayload)  => api.put<VendorProfile>('/vendors/me', payload),
-  submitReview:  (payload: VendorSubmitPayload)  => api.post<VendorProfile>('/vendors/me/submit', payload),
-  getDeposit:    ()                               => api.get<VendorDepositInfo>('/vendors/me/deposit'),
+  getProfile:    ()                              => api.get<VendorProfile>('/vendors/me'),
+  updateProfile: (payload: VendorUpdatePayload) => api.put<VendorProfile>('/vendors/me', payload),
+  submitReview:  (payload: VendorSubmitPayload) => api.post<VendorProfile>('/vendors/me/submit', payload),
+  getDeposit:    ()                              => api.get<VendorDepositInfo>('/vendors/me/deposit'),
 }
 
 // ────────────────────────── GUIDE BROWSE ─────────────────────────────────
