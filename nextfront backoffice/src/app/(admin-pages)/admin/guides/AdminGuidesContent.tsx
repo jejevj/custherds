@@ -4,7 +4,7 @@ import { useSearchParams, useRouter } from "next/navigation"
 import { adminService, AdminGuide } from "@/services/admin.service"
 import { Button } from "@/components/ui/button"
 import { UserCheck, UserX, Eye, X, FileText } from "lucide-react"
-import { API_BASE_URL } from "@/lib/constants"
+import { uploadsService } from "@/services/uploads.service"
 import { getTokens } from "@/services/api"
 
 const STATUS_TABS = [
@@ -21,12 +21,11 @@ const STATUS_BADGE: Record<string, string> = {
   incomplete: "bg-gray-100 text-gray-500",
 }
 
-// Fetch a protected file and return an object URL
 async function fetchProtectedFile(relUrl: string): Promise<string | null> {
   if (!relUrl) return null
   try {
     const { access } = getTokens()
-    const url = relUrl.startsWith('http') ? relUrl : `${API_BASE_URL}${relUrl}`
+    const url = uploadsService.getUrl(relUrl)  // handles /api/v1 dedup
     const res = await fetch(url, { headers: access ? { Authorization: `Bearer ${access}` } : {} })
     if (!res.ok) return null
     const blob = await res.blob()
@@ -37,9 +36,9 @@ async function fetchProtectedFile(relUrl: string): Promise<string | null> {
 }
 
 function GuideDetailModal({ guide, onClose }: { guide: AdminGuide; onClose: () => void }) {
-  const [idCardSrc, setIdCardSrc]   = useState<string | null>(null)
-  const [certSrc,   setCertSrc]     = useState<string | null>(null)
-  const [loadingId, setLoadingId]   = useState(false)
+  const [idCardSrc,   setIdCardSrc]   = useState<string | null>(null)
+  const [certSrc,     setCertSrc]     = useState<string | null>(null)
+  const [loadingId,   setLoadingId]   = useState(false)
   const [loadingCert, setLoadingCert] = useState(false)
 
   useEffect(() => {
@@ -92,7 +91,6 @@ function GuideDetailModal({ guide, onClose }: { guide: AdminGuide; onClose: () =
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-background rounded-2xl shadow-2xl w-full max-w-xl my-auto border">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b">
           <div>
             <h3 className="font-semibold text-base">{guide.user_name}</h3>
@@ -104,7 +102,6 @@ function GuideDetailModal({ guide, onClose }: { guide: AdminGuide; onClose: () =
         </div>
 
         <div className="px-6 py-5 space-y-5">
-          {/* Status */}
           <div className="flex gap-3 flex-wrap">
             <span className={`text-xs px-2.5 py-1 rounded-full font-medium capitalize ${STATUS_BADGE[guide.guide_status] ?? 'bg-muted text-muted-foreground'}`}>
               Status: {guide.guide_status}
@@ -114,7 +111,6 @@ function GuideDetailModal({ guide, onClose }: { guide: AdminGuide; onClose: () =
             </span>
           </div>
 
-          {/* Rejection notes */}
           {guide.rejection_notes && (
             <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm">
               <p className="font-semibold text-red-700 mb-0.5">Catatan Penolakan</p>
@@ -122,22 +118,20 @@ function GuideDetailModal({ guide, onClose }: { guide: AdminGuide; onClose: () =
             </div>
           )}
 
-          {/* Info grid */}
           <div className="grid grid-cols-2 gap-3 text-sm">
             {([
-              ["Telepon",          guide.guide_phone],
-              ["Kewarganegaraan",  guide.guide_nationality],
-              ["Bahasa",           guide.languages],
-              ["Terdaftar",        new Date(guide.created_at).toLocaleDateString('id-ID', { day:'2-digit', month:'long', year:'numeric' })],
+              ["Telepon",         guide.guide_phone],
+              ["Kewarganegaraan", guide.guide_nationality],
+              ["Bahasa",          guide.languages],
+              ["Terdaftar",       new Date(guide.created_at).toLocaleDateString('id-ID', { day:'2-digit', month:'long', year:'numeric' })],
             ] as [string, string | null | undefined][]).map(([k, v]) => (
               <div key={k}>
                 <p className="text-xs text-muted-foreground">{k}</p>
-                <p className="font-medium">{v ?? '—'}</p>
+                <p className="font-medium">{v ?? '\u2014'}</p>
               </div>
             ))}
           </div>
 
-          {/* Bio */}
           {guide.bio && (
             <div>
               <p className="text-xs font-semibold text-muted-foreground mb-1">Bio</p>
@@ -145,7 +139,6 @@ function GuideDetailModal({ guide, onClose }: { guide: AdminGuide; onClose: () =
             </div>
           )}
 
-          {/* Documents */}
           <div className="grid grid-cols-1 gap-4">
             {renderDoc("KTP / Paspor",     guide.guide_id_card_url, idCardSrc, loadingId)}
             {renderDoc("Sertifikat Guide", guide.guide_certificate,  certSrc,   loadingCert)}
@@ -255,8 +248,8 @@ export default function AdminGuidesContent() {
               <tr key={g.guide_id} className="border-b last:border-0 hover:bg-muted/30">
                 <td className="px-4 py-3 font-medium">{g.user_name}</td>
                 <td className="px-4 py-3 text-muted-foreground text-xs">{g.user_email}</td>
-                <td className="px-4 py-3 text-muted-foreground text-xs">{g.user_phone ?? '—'}</td>
-                <td className="px-4 py-3">{g.guide_nationality ?? <span className="text-muted-foreground">—</span>}</td>
+                <td className="px-4 py-3 text-muted-foreground text-xs">{g.user_phone ?? '\u2014'}</td>
+                <td className="px-4 py-3">{g.guide_nationality ?? <span className="text-muted-foreground">\u2014</span>}</td>
                 <td className="px-4 py-3">
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${
                     STATUS_BADGE[g.guide_status] ?? 'bg-muted text-muted-foreground'
@@ -269,17 +262,14 @@ export default function AdminGuidesContent() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex gap-2 items-center">
-                    <Button size="sm" variant="outline"
-                      className="h-7 px-2.5 text-xs gap-1"
-                      onClick={() => setDetail(g)}>
+                    <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs gap-1" onClick={() => setDetail(g)}>
                       <Eye className="h-3.5 w-3.5" /> Detail
                     </Button>
                     {g.guide_status === 'pending' && (
                       <>
                         <Button size="sm"
                           className="h-7 px-3 text-xs bg-green-600 hover:bg-green-700 text-white gap-1"
-                          disabled={acting === g.guide_id}
-                          onClick={() => handleApprove(g)}>
+                          disabled={acting === g.guide_id} onClick={() => handleApprove(g)}>
                           <UserCheck className="h-3.5 w-3.5" />
                           {acting === g.guide_id ? '...' : 'Approve'}
                         </Button>
@@ -299,10 +289,8 @@ export default function AdminGuidesContent() {
         </table>
       </div>
 
-      {/* Detail modal */}
       {detail && <GuideDetailModal guide={detail} onClose={() => setDetail(null)} />}
 
-      {/* Reject modal */}
       {rejectId && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <div className="bg-background rounded-xl shadow-2xl p-6 w-full max-w-md space-y-4 border">
@@ -310,15 +298,12 @@ export default function AdminGuidesContent() {
             <p className="text-sm text-muted-foreground">Berikan alasan penolakan (opsional). Akan ditampilkan ke guide.</p>
             <textarea
               className="w-full border rounded-lg p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
-              rows={3}
-              placeholder="Contoh: Dokumen KTP buram atau tidak valid"
-              value={rejectNote}
-              onChange={e => setRejectNote(e.target.value)}
+              rows={3} placeholder="Contoh: Dokumen KTP buram atau tidak valid"
+              value={rejectNote} onChange={e => setRejectNote(e.target.value)}
             />
             <div className="flex justify-end gap-3">
               <Button variant="outline" onClick={() => { setRejectId(null); setRejectNote("") }}>Cancel</Button>
-              <Button className="bg-red-600 hover:bg-red-700 text-white"
-                disabled={!!acting} onClick={handleRejectConfirm}>
+              <Button className="bg-red-600 hover:bg-red-700 text-white" disabled={!!acting} onClick={handleRejectConfirm}>
                 {acting ? 'Processing...' : 'Confirm Reject'}
               </Button>
             </div>
