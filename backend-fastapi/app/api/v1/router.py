@@ -10,6 +10,7 @@ from app.api.v1.endpoints import (
     withdrawals,
     admin,
     webhooks,
+    payments,
 )
 
 api_router = APIRouter()
@@ -24,3 +25,4 @@ api_router.include_router(transactions.router, prefix="/transactions", tags=["Tr
 api_router.include_router(withdrawals.router,  prefix="/withdrawals",  tags=["Withdrawals"])
 api_router.include_router(admin.router,        prefix="/admin",        tags=["Admin"])
 api_router.include_router(webhooks.router,     prefix="/webhooks",     tags=["Webhooks"])
+api_router.include_router(payments.router,     prefix="/payments",     tags=["Payments"])
