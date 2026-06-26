@@ -1,7 +1,7 @@
 """add_allow_direct_booking_to_vendors
 
 Revision ID: a1b2c3d4e5f6
-Revises: 33ca01a9f9fd
+Revises: 0002
 Create Date: 2026-06-26 14:05:00
 """
 from alembic import op
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 
 # revision identifiers
 revision = 'a1b2c3d4e5f6'
-down_revision = '33ca01a9f9fd'
+down_revision = '0002'
 branch_labels = None
 depends_on = None
 
