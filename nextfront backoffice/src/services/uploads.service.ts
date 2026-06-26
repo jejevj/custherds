@@ -6,7 +6,19 @@ export interface UploadResult {
   filename: string
 }
 
-/** Upload single file → return { url, filename } */
+/**
+ * Resolve path relatif (/api/v1/uploads/xxx) ke full backend URL.
+ * Jika sudah http(s) dikembalikan as-is.
+ */
+export function resolveUploadUrl(url: string): string {
+  if (!url) return ''
+  if (url.startsWith('http')) return url
+  // API_BASE_URL = https://api-custherds.ourtestcloud.my.id/api/v1
+  // strip /api/v1 lalu sambung path relatif
+  return `${API_BASE_URL.replace(/\/api\/v1\/?$/, '')}${url}`
+}
+
+/** Upload single file → return { url (full), filename } */
 async function upload(file: File): Promise<UploadResult> {
   const { access } = getTokens()
   const form = new FormData()
@@ -23,22 +35,19 @@ async function upload(file: File): Promise<UploadResult> {
     throw new Error(err.detail ?? 'Upload gagal')
   }
 
-  return res.json() as Promise<UploadResult>
+  const data = await res.json() as UploadResult
+  return { ...data, url: resolveUploadUrl(data.url) }
 }
 
-/** Resolve relative URL (/api/v1/uploads/xxx) ke full URL */
-function getUrl(url: string): string {
-  if (!url) return ''
-  if (url.startsWith('http')) return url
-  return `${API_BASE_URL.replace('/api/v1', '')}${url}`
-}
+/** Resolve relative URL — alias untuk backward compat */
+const getUrl = resolveUploadUrl
 
 /** Backward-compat object — dipakai GuideStatusGate, AdminGuides, AdminVendors */
 export const uploadsService = { upload, getUrl }
 
 /**
- * Upload multiple foto sekaligus ke POST /api/v1/uploads/batch
- * (path /batch menghindari konflik 405 dengan GET /{filename})
+ * Upload multiple foto sekaligus ke POST /api/v1/uploads/batch.
+ * Return array full URL langsung siap dipakai sebagai <Image src>.
  */
 export async function uploadPhotos(files: File[]): Promise<string[]> {
   const { access } = getTokens()
@@ -57,5 +66,6 @@ export async function uploadPhotos(files: File[]): Promise<string[]> {
   }
 
   const data = await res.json() as { uploaded: UploadResult[]; count: number }
-  return data.uploaded.map(u => u.url)
+  // convert semua URL relatif ke full backend URL
+  return data.uploaded.map(u => resolveUploadUrl(u.url))
 }
