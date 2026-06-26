@@ -9,8 +9,8 @@ import {
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { MapPin, Clock, ShoppingBag, Search, X } from "lucide-react"
-import { useAuthStore } from "@/store/auth-store"
+import { MapPin, Clock, ShoppingBag, Search, X, Store } from "lucide-react"
+import { useAuthStore } from "@/store/auth.store"
 
 // Area code map — matches vendor_area integer in DB
 const AREA_MAP: Record<number, string> = {
@@ -53,13 +53,13 @@ interface VendorPublic {
 }
 
 export default function BrowseVendorsPage() {
-  const { token } = useAuthStore()
-  const [vendors, setVendors]       = useState<VendorPublic[]>([])
-  const [loading, setLoading]       = useState(false)
-  const [error, setError]           = useState<string | null>(null)
-  const [search, setSearch]         = useState("")
-  const [area, setArea]             = useState<string>("all")
-  const [category, setCategory]     = useState<string>("all")
+  const accessToken = useAuthStore((s) => s.accessToken)
+  const [vendors, setVendors]     = useState<VendorPublic[]>([])
+  const [loading, setLoading]     = useState(false)
+  const [error, setError]         = useState<string | null>(null)
+  const [search, setSearch]       = useState("")
+  const [area, setArea]           = useState<string>("all")
+  const [category, setCategory]   = useState<string>("all")
 
   const fetchVendors = useCallback(async () => {
     setLoading(true)
@@ -73,7 +73,7 @@ export default function BrowseVendorsPage() {
 
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/v1/vendors/browse?${params}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${accessToken}` } }
       )
       if (!res.ok) throw new Error("Failed to load vendors")
       const data: VendorPublic[] = await res.json()
@@ -83,7 +83,7 @@ export default function BrowseVendorsPage() {
     } finally {
       setLoading(false)
     }
-  }, [token, area, category, search])
+  }, [accessToken, area, category, search])
 
   useEffect(() => { fetchVendors() }, [fetchVendors])
 
