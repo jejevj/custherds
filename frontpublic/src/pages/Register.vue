@@ -54,7 +54,7 @@
                       <div class="col-md-6">
                         <div class="auth-page__field">
                           <label>Password <span class="req">*</span></label>
-                          <input type="password" v-model="pf.user_password" placeholder="Create a password" minlength="8" required />
+                          <input type="password" v-model="pf.password" placeholder="Create a password" minlength="8" required />
                         </div>
                       </div>
                       <div class="col-md-6">
@@ -64,46 +64,9 @@
                         </div>
                       </div>
                     </div>
-                    <div class="row g-3">
-                      <div class="col-md-6">
-                        <div class="auth-page__field">
-                          <label>Instagram Link</label>
-                          <input type="url" v-model="pf.ig_link" placeholder="https://www.instagram.com/..." />
-                        </div>
-                      </div>
-                      <div class="col-md-6">
-                        <div class="auth-page__field">
-                          <label>Facebook Link</label>
-                          <input type="url" v-model="pf.fb_link" placeholder="https://www.facebook.com/..." />
-                        </div>
-                      </div>
-                    </div>
-                    <div class="row g-3">
-                      <div class="col-md-6">
-                        <div class="auth-page__field">
-                          <label>YouTube Link</label>
-                          <input type="url" v-model="pf.yt_link" placeholder="https://www.youtube.com/..." />
-                        </div>
-                      </div>
-                      <div class="col-md-6">
-                        <div class="auth-page__field">
-                          <label>TikTok Link</label>
-                          <input type="url" v-model="pf.tiktok_link" placeholder="https://www.tiktok.com/@..." />
-                        </div>
-                      </div>
-                    </div>
-                    <h4 class="auth-page__section-title mt-4">2. Guide Profile Details</h4>
-                    <hr />
-                    <div class="auth-page__field">
-                      <label>Nationality</label>
-                      <input type="text" v-model="pf.guide_nationality" placeholder="Your country of origin" />
-                    </div>
-                    <div class="auth-page__field">
-                      <label>Upload License</label>
-                      <small class="auth-page__hint">File ext: jpg/png, max 2MB</small>
-                      <input type="file" accept=".jpg,.jpeg,.png" @change="e => pf.guide_certificate = e.target.files[0]" />
-                    </div>
+                    <p class="auth-page__hint mt-2">📌 After registration, you can complete your profile (social links, license upload, nationality) from your dashboard.</p>
                     <p class="auth-page__error" v-if="partnerError">{{ partnerError }}</p>
+                    <p class="auth-page__success" v-if="partnerSuccess">{{ partnerSuccess }}</p>
                     <!-- TnC checkbox -->
                     <div class="auth-page__tnc-row">
                       <label class="auth-page__tnc-label">
@@ -115,8 +78,8 @@
                       <span v-if="!tncAccepted" class="auth-page__tnc-hint">Please read the T&amp;C fully to enable this checkbox</span>
                     </div>
                     <div class="auth-page__actions">
-                      <button type="submit" class="thm-btn" :disabled="!tncAccepted">
-                        Register as Partner <span class="icon-up-right-arrow"></span>
+                      <button type="submit" class="thm-btn" :disabled="!tncAccepted || partnerLoading">
+                        {{ partnerLoading ? 'Submitting...' : 'Register as Partner' }} <span class="icon-up-right-arrow"></span>
                       </button>
                     </div>
                     <p class="auth-page__switch">Already have an account? <a href="#" @click.prevent="switchMode('login')">Login here</a></p>
@@ -153,41 +116,13 @@
                       <div class="col-md-6">
                         <div class="auth-page__field">
                           <label>Password <span class="req">*</span></label>
-                          <input type="password" v-model="vf.user_password" placeholder="Create a password" minlength="8" required />
+                          <input type="password" v-model="vf.password" placeholder="Create a password" minlength="8" required />
                         </div>
                       </div>
                       <div class="col-md-6">
                         <div class="auth-page__field">
                           <label>Confirm Password <span class="req">*</span></label>
                           <input type="password" v-model="vf.pass_confirm" placeholder="Confirm password" minlength="8" required />
-                        </div>
-                      </div>
-                    </div>
-                    <div class="row g-3">
-                      <div class="col-md-6">
-                        <div class="auth-page__field">
-                          <label>Instagram Link</label>
-                          <input type="url" v-model="vf.ig_link" placeholder="https://www.instagram.com/..." />
-                        </div>
-                      </div>
-                      <div class="col-md-6">
-                        <div class="auth-page__field">
-                          <label>Facebook Link</label>
-                          <input type="url" v-model="vf.fb_link" placeholder="https://www.facebook.com/..." />
-                        </div>
-                      </div>
-                    </div>
-                    <div class="row g-3">
-                      <div class="col-md-6">
-                        <div class="auth-page__field">
-                          <label>YouTube Link</label>
-                          <input type="url" v-model="vf.yt_link" placeholder="https://www.youtube.com/..." />
-                        </div>
-                      </div>
-                      <div class="col-md-6">
-                        <div class="auth-page__field">
-                          <label>TikTok Link</label>
-                          <input type="url" v-model="vf.tiktok_link" placeholder="https://www.tiktok.com/@..." />
                         </div>
                       </div>
                     </div>
@@ -298,11 +233,11 @@
                       <textarea v-model="vf.vendor_opening_hours" rows="3" placeholder="e.g., Mon–Sun 09:00–22:00"></textarea>
                     </div>
                     <div class="auth-page__field">
-                      <label>Minimum Spend</label>
-                      <input type="number" v-model="vf.vendor_min_spend" placeholder="Minimum spend amount" />
+                      <label>Minimum Spend (IDR)</label>
+                      <input type="number" v-model="vf.vendor_min_spend" placeholder="e.g., 100000" />
                     </div>
                     <div class="auth-page__field">
-                      <label>Cashback Percentage <span class="req">*</span></label>
+                      <label>Cashback Percentage for Guide <span class="req">*</span></label>
                       <input type="number" v-model="vf.vendor_cashback_percent" placeholder="e.g., 10" min="5" max="100" required />
                     </div>
                     <div class="auth-page__field">
@@ -310,6 +245,7 @@
                       <textarea v-model="vf.vendor_know_from" rows="3" placeholder="How did you find us?"></textarea>
                     </div>
                     <p class="auth-page__error" v-if="vendorError">{{ vendorError }}</p>
+                    <p class="auth-page__success" v-if="vendorSuccess">{{ vendorSuccess }}</p>
                     <!-- TnC checkbox -->
                     <div class="auth-page__tnc-row">
                       <label class="auth-page__tnc-label">
@@ -321,8 +257,8 @@
                       <span v-if="!tncAccepted" class="auth-page__tnc-hint">Please read the T&amp;C fully to enable this checkbox</span>
                     </div>
                     <div class="auth-page__actions">
-                      <button type="submit" class="thm-btn" :disabled="!tncAccepted">
-                        Register Business Vendor <span class="icon-up-right-arrow"></span>
+                      <button type="submit" class="thm-btn" :disabled="!tncAccepted || vendorLoading">
+                        {{ vendorLoading ? 'Submitting...' : 'Register Business Vendor' }} <span class="icon-up-right-arrow"></span>
                       </button>
                     </div>
                     <p class="auth-page__switch">Already have an account? <a href="#" @click.prevent="switchMode('login')">Login here</a></p>
@@ -353,11 +289,15 @@
                       <label>Password</label>
                       <input type="password" v-model="lf.password" placeholder="Enter your password" required />
                     </div>
+                    <p class="auth-page__error" v-if="loginError">{{ loginError }}</p>
+                    <p class="auth-page__success" v-if="loginSuccess">{{ loginSuccess }}</p>
                     <div class="auth-page__forgot">
-                      <a href="https://www.custherds.com/register/forgotPassword" target="_blank">Forgot your password?</a>
+                      <a href="/forgot-password">Forgot your password?</a>
                     </div>
                     <div class="auth-page__actions">
-                      <button type="submit" class="thm-btn">Login <span class="icon-up-right-arrow"></span></button>
+                      <button type="submit" class="thm-btn" :disabled="loginLoading">
+                        {{ loginLoading ? 'Logging in...' : 'Login' }} <span class="icon-up-right-arrow"></span>
+                      </button>
                     </div>
                     <p class="auth-page__switch">Don&rsquo;t have an account? <a href="#" @click.prevent="switchMode('partner')">Register here</a></p>
                   </form>
@@ -398,12 +338,11 @@
             <ul>
               <li>Currently, all payments and commissions are processed manually via bank transfer or QR payment.</li>
               <li>Automation of payment processes may be implemented in the future.</li>
-              <li>Custherds.com will notify users in advance if any automated system changes are introduced.</li>
             </ul>
             <p><strong>3. Commission Rules</strong></p>
             <ul>
               <li>Commissions earned by Affiliates depend on agreements between Vendors and the Platform.</li>
-              <li>Custherds.com does not guarantee a fixed percentage for every transaction; it is subject to each Vendor's deal.</li>
+              <li>Custherds.com does not guarantee a fixed percentage for every transaction.</li>
             </ul>
             <p><strong>4. Legal Base / Location</strong></p>
             <ul>
@@ -412,42 +351,21 @@
             </ul>
             <p><strong>5. User Responsibilities</strong></p>
             <ul>
-              <li>Users (Vendors and Affiliates) must provide accurate information when registering on the Platform.</li>
-              <li>Users are responsible for their own transactions outside the agreed referral system, but must follow Section 6 regarding prohibited direct transactions.</li>
+              <li>Users must provide accurate information when registering on the Platform.</li>
             </ul>
             <p><strong>6. Direct Transactions &amp; Anti-Cheating Policy</strong></p>
             <ul>
-              <li>All payments for transactions referred via Custherds.com must be processed through the Platform, unless otherwise agreed in writing by Custherds.com.</li>
-              <li>Vendors and Affiliates must not solicit or accept direct payments from each other outside the Platform in a way that bypasses commissions or agreed fees.</li>
-              <li>Any Vendor or Affiliate found bypassing the Platform to avoid paying commissions or fees will face:
-                <ul>
-                  <li>Immediate suspension or termination of their account</li>
-                  <li>Legal action to recover owed commissions</li>
-                  <li>Loss of access to all future opportunities on Custherds.com</li>
-                </ul>
-              </li>
-              <li>Custherds.com reserves the right to audit transactions and take measures to protect its platform, revenue, and users.</li>
+              <li>All payments for transactions referred via Custherds.com must be processed through the Platform.</li>
+              <li>Vendors and Affiliates must not bypass the Platform to avoid paying commissions.</li>
+              <li>Violations result in immediate account suspension and possible legal action.</li>
             </ul>
             <p><strong>7. Disclaimers &amp; Liability</strong></p>
             <ul>
-              <li>Custherds.com is a platform facilitator and is not responsible for direct transactions between users and Vendors outside the Platform's referral system.</li>
-              <li>Custherds.com is not liable for any losses, damages, or disputes arising from transactions conducted outside the Platform.</li>
-              <li>Custherds.com reserves the right to suspend or terminate accounts violating these Terms &amp; Conditions.</li>
+              <li>Custherds.com is not responsible for direct transactions outside the Platform's referral system.</li>
             </ul>
-            <p><strong>8. Intellectual Property</strong></p>
-            <ul>
-              <li>All content on Custherds.com, including logos, images, and text, is the property of Custherds.com unless otherwise stated.</li>
-              <li>Users may not copy, reproduce, or distribute content without permission.</li>
-            </ul>
-            <p><strong>9. Privacy &amp; Data</strong></p>
+            <p><strong>8. Privacy &amp; Data</strong></p>
             <ul>
               <li>Custherds.com collects and processes user data in accordance with applicable Indonesian privacy laws.</li>
-              <li>Users consent to the use of their data for Platform operations and communication purposes.</li>
-            </ul>
-            <p><strong>10. Amendments</strong></p>
-            <ul>
-              <li>Custherds.com may update these Terms &amp; Conditions at any time.</li>
-              <li>Users will be notified of major changes through the Platform or registered email addresses.</li>
             </ul>
             <p>By using Custherds.com, you acknowledge that you have read, understood, and agreed to these Terms &amp; Conditions.</p>
           </div>
@@ -462,11 +380,7 @@
               <input type="checkbox" v-model="tncModalChecked" />
               I have read and agree to all Terms &amp; Conditions
             </label>
-            <button
-              class="thm-btn tnc-modal__confirm-btn"
-              :disabled="!tncModalChecked"
-              @click="confirmTnc"
-            >
+            <button class="thm-btn tnc-modal__confirm-btn" :disabled="!tncModalChecked" @click="confirmTnc">
               Confirm &amp; Continue <span class="icon-up-right-arrow"></span>
             </button>
           </div>
@@ -479,7 +393,7 @@
 
 <script setup>
 import { ref, computed, nextTick } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRouter } from 'vue-router';
 import Preloader from '@/components/common/Preloader.vue';
 import ChatPopup from '@/components/common/ChatPopup.vue';
 import SidebarWidget from '@/components/common/SidebarWidget.vue';
@@ -490,13 +404,21 @@ import HeaderTwo from '@/components/layout/header/HeaderTwo.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import Footer1 from '@/components/layout/footer/Footer1.vue';
 
-const route = useRoute();
+const API_BASE = import.meta.env.VITE_API_URL || 'https://api-custherds.ourtestcloud.my.id/api/v1';
+
+const router = useRouter();
 const mode = ref('partner');
 const loginType = ref('partner');
 
 function switchMode(m) {
   mode.value = m;
   tncAccepted.value = false;
+  partnerError.value = '';
+  partnerSuccess.value = '';
+  vendorError.value = '';
+  vendorSuccess.value = '';
+  loginError.value = '';
+  loginSuccess.value = '';
 }
 
 const pageTitle = computed(() => {
@@ -521,16 +443,12 @@ function openTnc() {
   tncScrollPct.value     = 0;
   tncModalChecked.value  = false;
   document.body.style.overflow = 'hidden';
-  nextTick(() => {
-    if (tncBody.value) tncBody.value.scrollTop = 0;
-  });
+  nextTick(() => { if (tncBody.value) tncBody.value.scrollTop = 0; });
 }
-
 function closeTnc() {
   tncModalOpen.value = false;
   document.body.style.overflow = '';
 }
-
 function onTncScroll() {
   const el = tncBody.value;
   if (!el) return;
@@ -538,77 +456,151 @@ function onTncScroll() {
   tncScrollPct.value = Math.min(pct, 100);
   if (tncScrollPct.value >= 95) tncScrolledToEnd.value = true;
 }
-
 function confirmTnc() {
   if (!tncModalChecked.value) return;
   tncAccepted.value = true;
   closeTnc();
 }
-
 function handleSubmit(type) {
   if (!tncAccepted.value) { openTnc(); return; }
   if (type === 'partner') submitPartner();
   else submitVendor();
 }
 
-// ─ Partner form
-const partnerError = ref('');
+// ─ Partner (Guide) form
+const partnerError   = ref('');
+const partnerSuccess = ref('');
+const partnerLoading = ref(false);
 const pf = ref({
   user_name: '', user_email: '', user_phone: '',
-  user_password: '', pass_confirm: '',
-  ig_link: '', fb_link: '', yt_link: '', tiktok_link: '',
-  guide_nationality: '', guide_certificate: null
+  password: '', pass_confirm: '',
 });
-function submitPartner() {
-  if (pf.value.user_password !== pf.value.pass_confirm) { partnerError.value = 'Passwords do not match.'; return; }
+async function submitPartner() {
   partnerError.value = '';
-  const fd = new FormData();
-  Object.entries(pf.value).forEach(([k, v]) => { if (v) fd.append(k, v); });
-  fd.append('user_type', '1');
-  fetch('https://www.custherds.com/register/saveRegistration', { method: 'POST', body: fd })
-    .then(r => r.ok ? alert('Registration submitted!') : alert('Something went wrong.'))
-    .catch(() => alert('Network error. Please try again.'));
+  partnerSuccess.value = '';
+  if (pf.value.password !== pf.value.pass_confirm) {
+    partnerError.value = 'Passwords do not match.';
+    return;
+  }
+  partnerLoading.value = true;
+  try {
+    const res = await fetch(`${API_BASE}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_name:    pf.value.user_name,
+        user_email:   pf.value.user_email,
+        user_phone:   pf.value.user_phone || null,
+        password:     pf.value.password,
+        user_type:    1,
+        tnc_accepted: true,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Registration failed');
+    partnerSuccess.value = '✅ Registration successful! Your account is pending admin approval. You may login now.';
+    pf.value = { user_name: '', user_email: '', user_phone: '', password: '', pass_confirm: '' };
+    tncAccepted.value = false;
+  } catch (e) {
+    partnerError.value = e.message;
+  } finally {
+    partnerLoading.value = false;
+  }
 }
 
 // ─ Vendor form
-const vendorError = ref('');
+const vendorError   = ref('');
+const vendorSuccess = ref('');
+const vendorLoading = ref(false);
 const vf = ref({
   user_name: '', user_email: '', user_phone: '',
-  user_password: '', pass_confirm: '',
-  ig_link: '', fb_link: '', yt_link: '', tiktok_link: '',
+  password: '', pass_confirm: '',
   vendor_business_name: '', vendor_category: '', vendor_area: '',
   vendor_location: '', vendor_contact_person: '', vendor_website: '',
   vendor_short_description: '', vendor_opening_hours: '',
-  vendor_min_spend: '', vendor_cashback_percent: '', vendor_know_from: ''
+  vendor_min_spend: '', vendor_cashback_percent: '', vendor_know_from: '',
 });
-function submitVendor() {
-  if (vf.value.user_password !== vf.value.pass_confirm) { vendorError.value = 'Passwords do not match.'; return; }
+async function submitVendor() {
   vendorError.value = '';
-  const fd = new FormData();
-  Object.entries(vf.value).forEach(([k, v]) => { if (v) fd.append(k, v); });
-  fd.append('user_type', '2');
-  fetch('https://www.custherds.com/register/saveRegistration', { method: 'POST', body: fd })
-    .then(r => r.ok ? alert('Registration submitted!') : alert('Something went wrong.'))
-    .catch(() => alert('Network error. Please try again.'));
+  vendorSuccess.value = '';
+  if (vf.value.password !== vf.value.pass_confirm) {
+    vendorError.value = 'Passwords do not match.';
+    return;
+  }
+  vendorLoading.value = true;
+  try {
+    const res = await fetch(`${API_BASE}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_name:               vf.value.user_name,
+        user_email:              vf.value.user_email,
+        user_phone:              vf.value.user_phone || null,
+        password:                vf.value.password,
+        user_type:               2,
+        tnc_accepted:            true,
+        vendor_business_name:    vf.value.vendor_business_name,
+        vendor_category:         Number(vf.value.vendor_category),
+        vendor_area:             Number(vf.value.vendor_area),
+        vendor_cashback_percent: Number(vf.value.vendor_cashback_percent),
+        vendor_location:         vf.value.vendor_location || null,
+        vendor_contact_person:   vf.value.vendor_contact_person || null,
+        vendor_website:          vf.value.vendor_website || null,
+        vendor_short_description: vf.value.vendor_short_description || null,
+        vendor_opening_hours:    vf.value.vendor_opening_hours || null,
+        vendor_min_spend:        vf.value.vendor_min_spend ? Number(vf.value.vendor_min_spend) : null,
+        vendor_know_from:        vf.value.vendor_know_from || null,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Registration failed');
+    vendorSuccess.value = '✅ Registration successful! Your account is pending admin approval. You may login now.';
+    vf.value = { user_name: '', user_email: '', user_phone: '', password: '', pass_confirm: '', vendor_business_name: '', vendor_category: '', vendor_area: '', vendor_location: '', vendor_contact_person: '', vendor_website: '', vendor_short_description: '', vendor_opening_hours: '', vendor_min_spend: '', vendor_cashback_percent: '', vendor_know_from: '' };
+    tncAccepted.value = false;
+  } catch (e) {
+    vendorError.value = e.message;
+  } finally {
+    vendorLoading.value = false;
+  }
 }
 
 // ─ Login
-const lf = ref({ email: '', password: '' });
-function submitLogin() {
-  const endpoint = loginType.value === 'vendor'
-    ? 'https://www.custherds.com/loginVendor/auth'
-    : 'https://www.custherds.com/loginGuide/auth';
-  const fd = new FormData();
-  fd.append('uemail', lf.value.email);
-  fd.append('password', lf.value.password);
-  fetch(endpoint, { method: 'POST', body: fd })
-    .then(r => r.ok ? alert('Login successful!') : alert('Invalid credentials.'))
-    .catch(() => alert('Network error. Please try again.'));
+const lf           = ref({ email: '', password: '' });
+const loginError   = ref('');
+const loginSuccess = ref('');
+const loginLoading = ref(false);
+async function submitLogin() {
+  loginError.value   = '';
+  loginSuccess.value = '';
+  loginLoading.value = true;
+  try {
+    const fd = new URLSearchParams();
+    fd.append('username', lf.value.email);
+    fd.append('password', lf.value.password);
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: fd,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Login failed');
+    loginSuccess.value = `Welcome back, ${data.user_name}! Redirecting to dashboard...`;
+    // Redirect based on user_type
+    setTimeout(() => {
+      const dest = data.user_type === 2
+        ? 'https://partners-custherds.ourtestcloud.my.id/vendor/dashboard'
+        : 'https://partners-custherds.ourtestcloud.my.id/guide/dashboard';
+      window.location.href = dest;
+    }, 1500);
+  } catch (e) {
+    loginError.value = e.message;
+  } finally {
+    loginLoading.value = false;
+  }
 }
 </script>
 
 <style scoped>
-/* ─── Tabs ─── */
 .auth-page__tabs { display: flex; gap: 12px; margin-bottom: 24px; }
 .auth-page__tab {
   flex: 1; padding: 14px 20px; border: 2px solid #ddd; border-radius: 10px;
@@ -630,14 +622,12 @@ function submitLogin() {
   border-color: var(--thm-primary, #c9a84c);
   color: var(--thm-primary, #c9a84c); background: #fffaf0;
 }
-/* ─── Box ─── */
 .auth-page__box { border-radius: 16px; overflow: hidden; box-shadow: 0 12px 48px rgba(0,0,0,0.10); }
 .auth-page__hero { position: relative; background-size: cover; background-position: center; padding: 60px 40px; }
 .auth-page__hero-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.6); }
 .auth-page__hero-content { position: relative; z-index: 2; text-align: center; color: #fff; }
 .auth-page__hero-content h2 { font-size: 36px; font-weight: 700; margin-bottom: 12px; }
 .auth-page__hero-content p { font-size: 16px; opacity: 0.85; margin-bottom: 16px; }
-/* ─── Form ─── */
 .auth-page__form-wrap { background: #fff; padding: 40px; }
 .auth-page__section-title { font-size: 22px; font-weight: 700; color: var(--thm-black, #1a1a1a); margin-bottom: 12px; }
 .auth-page__field { margin-bottom: 20px; display: flex; flex-direction: column; gap: 6px; }
@@ -651,7 +641,7 @@ function submitLogin() {
 .auth-page__field input:focus,
 .auth-page__field select:focus,
 .auth-page__field textarea:focus { border-color: var(--thm-primary, #c9a84c); }
-.auth-page__hint { font-size: 12px; color: #999; }
+.auth-page__hint { font-size: 12px; color: #888; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 8px 12px; }
 .req { color: #e53e3e; }
 .auth-page__actions { margin-top: 24px; margin-bottom: 20px; }
 .auth-page__actions .thm-btn { width: 100%; text-align: center; display: block; padding: 14px; }
@@ -665,7 +655,10 @@ function submitLogin() {
   color: #e53e3e; font-size: 13px; background: #fff5f5;
   border: 1px solid #fed7d7; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;
 }
-/* ─── TnC Row in form ─── */
+.auth-page__success {
+  color: #276749; font-size: 13px; background: #f0fff4;
+  border: 1px solid #9ae6b4; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;
+}
 .auth-page__tnc-row { margin-bottom: 8px; }
 .auth-page__tnc-label {
   display: flex; align-items: center; gap: 8px;
@@ -674,7 +667,6 @@ function submitLogin() {
 .auth-page__tnc-label input[type="checkbox"] { width: 16px; height: 16px; cursor: default; }
 .auth-page__tnc-label a { color: var(--thm-primary, #c9a84c); text-decoration: underline; cursor: pointer; }
 .auth-page__tnc-hint { display: block; font-size: 11px; color: #999; margin-top: 4px; margin-left: 24px; }
-/* ─── TnC MODAL ─── */
 .tnc-modal__backdrop {
   position: fixed; inset: 0; z-index: 99999;
   background: rgba(0,0,0,0.65); backdrop-filter: blur(3px);
@@ -682,8 +674,8 @@ function submitLogin() {
 }
 .tnc-modal {
   background: #fff; border-radius: 16px;
-  width: 100%; max-width: 680px;
-  max-height: 90vh; display: flex; flex-direction: column;
+  width: 100%; max-width: 680px; max-height: 90vh;
+  display: flex; flex-direction: column;
   box-shadow: 0 24px 80px rgba(0,0,0,0.3); overflow: hidden;
 }
 .tnc-modal__header {
@@ -701,19 +693,15 @@ function submitLogin() {
 .tnc-modal__close:hover { background: rgba(255,255,255,0.45); }
 .tnc-modal__body {
   flex: 1; overflow-y: auto; padding: 28px;
-  font-size: 14px; line-height: 1.75; color: #333; scroll-behavior: smooth;
+  font-size: 14px; line-height: 1.75; color: #333;
 }
 .tnc-modal__body p { margin-bottom: 12px; }
 .tnc-modal__body ul { padding-left: 20px; margin-bottom: 12px; }
 .tnc-modal__body ul li { margin-bottom: 6px; }
 .tnc-modal__body hr { margin: 16px 0; border-color: #eee; }
 .tnc-modal__footer { padding: 16px 28px 20px; border-top: 2px solid #eee; background: #fafafa; }
-.tnc-modal__progress-wrap {
-  height: 6px; background: #e2e2e2; border-radius: 3px; margin-bottom: 12px; overflow: hidden;
-}
-.tnc-modal__progress-bar {
-  height: 100%; background: var(--thm-primary, #c9a84c); border-radius: 3px; transition: width 0.2s;
-}
+.tnc-modal__progress-wrap { height: 6px; background: #e2e2e2; border-radius: 3px; margin-bottom: 12px; overflow: hidden; }
+.tnc-modal__progress-bar { height: 100%; background: var(--thm-primary, #c9a84c); border-radius: 3px; transition: width 0.2s; }
 .tnc-modal__scroll-hint { font-size: 13px; color: #888; text-align: center; margin-bottom: 12px; }
 .tnc-modal__agree-label {
   display: flex; align-items: center; gap: 10px;

@@ -16,10 +16,10 @@ class RegisterRequest(BaseModel):
     user_name: str
     user_email: EmailStr
     password: str
-    user_type: int
+    user_type: int  # 1=Guide, 2=Vendor
     user_phone: Optional[str] = None
     tnc_accepted: bool = False
-    # vendor fields (wajib jika user_type=2)
+    # vendor-only fields (required if user_type=2)
     vendor_business_name: Optional[str] = None
     vendor_category: Optional[int] = None
     vendor_area: Optional[int] = None
@@ -29,6 +29,7 @@ class RegisterRequest(BaseModel):
     vendor_website: Optional[str] = None
     vendor_short_description: Optional[str] = None
     vendor_opening_hours: Optional[str] = None
+    vendor_min_spend: Optional[float] = None
     vendor_know_from: Optional[str] = None
 
 

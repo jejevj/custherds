@@ -1,9 +1,9 @@
 """Database seeder.
 
-Jalankan:
+Run:
     cd backend-fastapi
     python -m app.db.seeder           # production: superadmin + split config
-    python -m app.db.seeder --dev     # dev: tambah sample guide & vendor
+    python -m app.db.seeder --dev     # dev: add sample guide & vendor
 """
 import uuid
 from datetime import datetime, timezone
@@ -68,6 +68,7 @@ def seed_revenue_split_config(db, admin: User) -> RevenueSplitConfig:
 
 
 def seed_sample_guide(db) -> Optional[User]:
+    """Dev seed: Guide with status=pending (simulates real registration flow)."""
     existing = db.query(User).filter(User.user_email == "guide@custherds.dev").first()
     if existing:
         print("  [SKIP] Sample guide already exists")
@@ -78,6 +79,44 @@ def seed_sample_guide(db) -> Optional[User]:
         user_email="guide@custherds.dev",
         user_password=get_password_hash("Guide@Dev2026!"),
         user_type=1,
+        user_phone="+6281234567890",
+        is_active=True,
+        is_verified=False,
+        tnc_accepted=True,
+        tnc_accepted_at=datetime.now(timezone.utc),
+    )
+    db.add(user)
+    db.flush()
+    guide = Guide(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        guide_nationality="Indonesian",
+        guide_certificate_status="pending",  # pending until admin approves
+        bio="Sample guide for development testing.",
+        languages="English, Indonesian, Balinese",
+        total_earnings=Decimal("0.00"),
+        pending_earnings=Decimal("0.00"),
+        wallet_balance=Decimal("0.00"),
+    )
+    db.add(guide)
+    db.flush()
+    print(f"  [OK] Sample guide (pending): {user.user_email}")
+    return user
+
+
+def seed_sample_guide_approved(db) -> Optional[User]:
+    """Dev seed: Approved guide with full profile (for testing guide dashboard)."""
+    existing = db.query(User).filter(User.user_email == "guide.approved@custherds.dev").first()
+    if existing:
+        print("  [SKIP] Sample approved guide already exists")
+        return existing
+    user = User(
+        id=uuid.uuid4(),
+        user_name="Made Approved Guide",
+        user_email="guide.approved@custherds.dev",
+        user_password=get_password_hash("Guide@Dev2026!"),
+        user_type=1,
+        user_phone="+6281234567891",
         is_active=True,
         is_verified=True,
         tnc_accepted=True,
@@ -90,22 +129,23 @@ def seed_sample_guide(db) -> Optional[User]:
         user_id=user.id,
         guide_nationality="Indonesian",
         guide_certificate_status="approved",
-        bio="Sample guide for development testing.",
-        languages="English, Indonesian, Balinese",
-        total_earnings=Decimal("0.00"),
-        pending_earnings=Decimal("0.00"),
-        wallet_balance=Decimal("0.00"),
+        bio="Experienced guide specializing in Ubud cultural tours.",
+        languages="English, Indonesian, Balinese, Japanese",
+        total_earnings=Decimal("1250000.00"),
+        pending_earnings=Decimal("125000.00"),
+        wallet_balance=Decimal("375000.00"),
         bank_name="BCA",
         bank_account_number="1234567890",
-        bank_account_name="Wayan Sample Guide",
+        bank_account_name="Made Approved Guide",
     )
     db.add(guide)
     db.flush()
-    print(f"  [OK] Sample guide: {user.user_email}")
+    print(f"  [OK] Sample approved guide: {user.user_email}")
     return user
 
 
 def seed_sample_vendor(db) -> Optional[User]:
+    """Dev seed: Vendor with status=pending (simulates real registration flow)."""
     existing = db.query(User).filter(User.user_email == "vendor@custherds.dev").first()
     if existing:
         print("  [SKIP] Sample vendor already exists")
@@ -116,8 +156,9 @@ def seed_sample_vendor(db) -> Optional[User]:
         user_email="vendor@custherds.dev",
         user_password=get_password_hash("Vendor@Dev2026!"),
         user_type=2,
+        user_phone="+6281234567892",
         is_active=True,
-        is_verified=True,
+        is_verified=False,
         tnc_accepted=True,
         tnc_accepted_at=datetime.now(timezone.utc),
     )
@@ -134,6 +175,49 @@ def seed_sample_vendor(db) -> Optional[User]:
         vendor_opening_hours="Mon-Sun 08:00-22:00",
         vendor_min_spend=Decimal("100000.00"),
         vendor_cashback_percent=10.0,
+        vendor_status="pending",  # always pending on registration
+        deposit_balance=Decimal("0.00"),
+    )
+    db.add(vendor)
+    db.flush()
+    print(f"  [OK] Sample vendor (pending): {user.user_email}")
+    return user
+
+
+def seed_sample_vendor_approved(db) -> Optional[User]:
+    """Dev seed: Approved vendor with full profile + products (for testing guide browse)."""
+    existing = db.query(User).filter(User.user_email == "vendor.approved@custherds.dev").first()
+    if existing:
+        print("  [SKIP] Sample approved vendor already exists")
+        return existing
+    user = User(
+        id=uuid.uuid4(),
+        user_name="Nyoman Approved Vendor",
+        user_email="vendor.approved@custherds.dev",
+        user_password=get_password_hash("Vendor@Dev2026!"),
+        user_type=2,
+        user_phone="+6281234567893",
+        is_active=True,
+        is_verified=True,
+        tnc_accepted=True,
+        tnc_accepted_at=datetime.now(timezone.utc),
+    )
+    db.add(user)
+    db.flush()
+    vendor = Vendor(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        vendor_business_name="Neka Art Museum Ubud",
+        vendor_category=35,  # Art & Craft
+        vendor_area=10,  # Ubud
+        vendor_location="Jl. Raya Sanggingan, Ubud, Gianyar, Bali",
+        vendor_contact_person="Nyoman",
+        vendor_website="https://nekaartmuseum.com",
+        vendor_short_description="Premier art museum in Ubud showcasing traditional and modern Balinese art.",
+        vendor_opening_hours="Mon-Sun 09:00-17:00",
+        vendor_min_spend=Decimal("75000.00"),
+        vendor_cashback_percent=12.0,
+        vendor_know_from="Referral from Custherds team",
         vendor_status="approved",
         deposit_balance=Decimal("5000000.00"),
     )
@@ -142,17 +226,17 @@ def seed_sample_vendor(db) -> Optional[User]:
     product = Product(
         id=uuid.uuid4(),
         vendor_id=vendor.id,
-        name="Nasi Campur Ubud",
-        description="Traditional Balinese mixed rice, serves 1 pax.",
-        price=Decimal("75000.00"),
+        name="Museum Entry Ticket (Adult)",
+        description="Full access to all galleries. Includes free audio guide.",
+        price=Decimal("150000.00"),
         currency="IDR",
         min_pax=1,
-        max_pax=10,
+        max_pax=50,
         is_active=True,
     )
     db.add(product)
     db.flush()
-    print(f"  [OK] Sample vendor: {user.user_email}")
+    print(f"  [OK] Sample approved vendor: {user.user_email}")
     return user
 
 
@@ -164,10 +248,19 @@ def run_all_seeds(dev_mode: bool = False) -> None:
         seed_revenue_split_config(db, admin)
         if dev_mode:
             print("\n--- Dev seeds (--dev) ---")
-            seed_sample_guide(db)
-            seed_sample_vendor(db)
+            seed_sample_guide(db)            # pending guide
+            seed_sample_guide_approved(db)   # approved guide (for dashboard testing)
+            seed_sample_vendor(db)           # pending vendor
+            seed_sample_vendor_approved(db)  # approved vendor (for browse testing)
         db.commit()
         print("\n[DONE] All seeds committed.\n")
+        if dev_mode:
+            print("Dev accounts:")
+            print("  Guide  (pending):  guide@custherds.dev         / Guide@Dev2026!")
+            print("  Guide  (approved): guide.approved@custherds.dev / Guide@Dev2026!")
+            print("  Vendor (pending):  vendor@custherds.dev         / Vendor@Dev2026!")
+            print("  Vendor (approved): vendor.approved@custherds.dev / Vendor@Dev2026!")
+            print("  Admin:             admin@custherds.com           / Admin@Custherds2026!\n")
     except Exception as e:
         db.rollback()
         print(f"\n[ERROR] Seeder failed: {e}")
