@@ -13,10 +13,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useState } from "react"
 import { Eye, EyeOff, Loader2 } from "lucide-react"
+import { login } from "@/services/authService"
+import { useAuthStore } from "@/store/auth.store"
 
 interface LoginFormProps extends React.ComponentPropsWithoutRef<"div"> {
   role?: "vendor" | "guide" | "admin" | "default"
-  loginEndpoint?: string
   registerHref?: string
 }
 
@@ -27,18 +28,23 @@ const roleLabels: Record<string, string> = {
   default: "Partner",
 }
 
-// Default redirect per role
+const roleUserType: Record<string, number> = {
+  vendor:  2,
+  guide:   1,
+  admin:   99,
+  default: 0,
+}
+
 const roleRedirects: Record<string, string> = {
   vendor:  "/vendor/dashboard",
   guide:   "/guide/dashboard",
-  admin:   "/admin/dashboard",
-  default: "/dashboard/analytics",
+  admin:   "/dashboard",
+  default: "/dashboard",
 }
 
 export function LoginForm({
   className,
   role = "default",
-  loginEndpoint,
   registerHref = "#",
   ...props
 }: LoginFormProps) {
@@ -46,50 +52,24 @@ export function LoginForm({
   const [email, setEmail]               = useState("")
   const [password, setPassword]         = useState("")
   const [loading, setLoading]           = useState(false)
-  const [msg, setMsg]                   = useState("")
-  const [ok, setOk]                     = useState(false)
-
-  // TODO: Remove demo mode and re-enable API validation before production
-  const DEMO_MODE = true
+  const [error, setError]               = useState("")
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setMsg("")
+    setError("")
     setLoading(true)
-
-    if (DEMO_MODE) {
-      setOk(true)
-      setMsg("Login successful! Redirecting\u2026")
-      const redirectUrl = roleRedirects[role] || roleRedirects["default"]
-      setTimeout(() => { window.location.href = redirectUrl }, 800)
-      setLoading(false)
-      return
-    }
-
-    // Production: validate via API
-    if (!loginEndpoint) { setLoading(false); return }
     try {
-      const params = new URLSearchParams()
-      params.append("email",    email)
-      params.append("password", password)
-      const res  = await fetch(loginEndpoint, {
-        method:  "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body:    params.toString(),
-      })
-      const data = await res.json()
-      if (data.status) {
-        setOk(true)
-        setMsg(data.msg || "Login successful! Redirecting\u2026")
-        const redirectUrl = data.redirect || roleRedirects[role] || roleRedirects["default"]
-        setTimeout(() => { window.location.href = redirectUrl }, 800)
-      } else {
-        setOk(false)
-        setMsg(data.msg || "Invalid email or password.")
+      const result = await login({ user_email: email, user_password: password })
+      const expectedType = roleUserType[role]
+      if (expectedType !== 0 && result.user?.user_type !== expectedType) {
+        setError(`Akun ini bukan akun ${roleLabels[role]}. Gunakan halaman login yang sesuai.`)
+        useAuthStore.getState().logout()
+        return
       }
-    } catch {
-      setOk(false)
-      setMsg("Network error. Please try again.")
+      window.location.href = roleRedirects[role]
+    } catch (err: unknown) {
+      const e = err as { detail?: string }
+      setError(e?.detail || "Email atau password salah.")
     } finally {
       setLoading(false)
     }
@@ -122,10 +102,7 @@ export function LoginForm({
                 <div className="grid gap-2">
                   <div className="flex items-center">
                     <Label htmlFor="password">Password</Label>
-                    <a
-                      href="#"
-                      className="ml-auto text-sm underline-offset-4 hover:underline"
-                    >
+                    <a href="#" className="ml-auto text-sm underline-offset-4 hover:underline">
                       Forgot your password?
                     </a>
                   </div>
@@ -150,20 +127,9 @@ export function LoginForm({
                   </div>
                 </div>
 
-                {msg && (
-                  <p className={cn(
-                    "text-sm rounded-md px-3 py-2",
-                    ok
-                      ? "text-green-600 bg-green-50 border border-green-200"
-                      : "text-red-600 bg-red-50 border border-red-200"
-                  )}>
-                    {msg}
-                  </p>
-                )}
-
-                {DEMO_MODE && (
-                  <p className="text-xs text-center text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
-                    &#9888;&#65039; Demo mode active &mdash; login without validation
+                {error && (
+                  <p className="text-sm rounded-md px-3 py-2 text-red-600 bg-red-50 border border-red-200">
+                    {error}
                   </p>
                 )}
 
