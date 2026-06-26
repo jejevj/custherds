@@ -23,7 +23,18 @@ export default function GuideStatusGate({ children }: Props) {
 
   useEffect(() => {
     guidesService.getProfile()
-      .then(p => { setProfile(p); setForm({ bio: p.bio ?? "", guide_phone: p.guide_phone ?? "", guide_nationality: p.guide_nationality ?? "", languages: p.languages ?? "", bank_name: p.bank_name ?? "", bank_account_number: p.bank_account_number ?? "", bank_account_name: p.bank_account_name ?? "" }) })
+      .then(p => {
+        setProfile(p)
+        setForm({
+          bio: p.bio ?? "",
+          guide_phone: p.guide_phone ?? "",
+          guide_nationality: p.guide_nationality ?? "",
+          languages: p.languages ?? "",
+          bank_name: p.bank_name ?? "",
+          bank_account_number: p.bank_account_number ?? "",
+          bank_account_name: p.bank_account_name ?? "",
+        })
+      })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
@@ -46,7 +57,7 @@ export default function GuideStatusGate({ children }: Props) {
     setSaving(false)
     setSubmitting(true)
     try {
-      const updated = await guidesService.submitReview()
+      const updated = await guidesService.submitReview(form)
       setProfile(updated)
     } catch {
       setError("Gagal mengirim pengajuan. Coba lagi.")
@@ -58,7 +69,6 @@ export default function GuideStatusGate({ children }: Props) {
   return (
     <>
       {children}
-      {/* Fullscreen overlay */}
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
         style={{
           background: "oklch(0 0 0 / 0.75)",
@@ -96,8 +106,6 @@ export default function GuideStatusGate({ children }: Props) {
                 </p>
               </div>
             </div>
-
-            {/* Rejection note */}
             {status === "rejected" && profile.rejection_notes && (
               <div className="mt-4 rounded-xl px-4 py-3 text-sm"
                 style={{ background: "oklch(0.577 0.245 27 / 0.15)", border: "1px solid oklch(0.577 0.245 27 / 0.35)" }}
@@ -108,7 +116,6 @@ export default function GuideStatusGate({ children }: Props) {
             )}
           </div>
 
-          {/* Content */}
           {status === "pending" ? (
             <div className="px-8 py-8">
               <div className="space-y-2">
@@ -125,28 +132,17 @@ export default function GuideStatusGate({ children }: Props) {
             </div>
           ) : (
             <div className="px-8 py-6 space-y-5">
-              {error && (
-                <p className="text-sm text-destructive">{error}</p>
-              )}
+              {error && <p className="text-sm text-destructive">{error}</p>}
 
-              {/* Profil */}
               <div>
                 <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Profil</p>
                 <div className="space-y-3">
                   <div className="grid gap-1.5">
                     <Label className="text-sm">Bio / Deskripsi Diri <span className="text-destructive">*</span></Label>
-                    <textarea
-                      rows={3}
-                      value={form.bio ?? ""}
-                      onChange={e => set("bio", e.target.value)}
+                    <textarea rows={3} value={form.bio ?? ""} onChange={e => set("bio", e.target.value)}
                       placeholder="Ceritakan pengalaman & keahlian kamu sebagai guide"
-                      className="w-full rounded-lg px-3 py-2 text-sm resize-none transition-colors focus:outline-none focus:ring-1"
-                      style={{
-                        background: "oklch(1 0 0 / 0.06)",
-                        border: "1px solid oklch(1 0 0 / 0.15)",
-                        color: "oklch(var(--foreground))",
-                        outline: "none",
-                      }}
+                      className="w-full rounded-lg px-3 py-2 text-sm resize-none"
+                      style={{ background: "oklch(1 0 0 / 0.06)", border: "1px solid oklch(1 0 0 / 0.15)", outline: "none" }}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
@@ -168,7 +164,6 @@ export default function GuideStatusGate({ children }: Props) {
 
               <Separator style={{ background: "oklch(1 0 0 / 0.10)" }} />
 
-              {/* Bank */}
               <div>
                 <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Informasi Rekening Bank</p>
                 <div className="space-y-3">
@@ -189,13 +184,8 @@ export default function GuideStatusGate({ children }: Props) {
                 </div>
               </div>
 
-              {/* Submit */}
               <div className="pt-2">
-                <Button
-                  onClick={handleSaveAndSubmit}
-                  disabled={!isComplete || submitting || saving}
-                  className="w-full h-11 font-semibold"
-                >
+                <Button onClick={handleSaveAndSubmit} disabled={!isComplete || submitting || saving} className="w-full h-11 font-semibold">
                   {saving ? "Menyimpan data…" : submitting ? "Mengirim pengajuan…" : "Simpan & Kirim untuk Direview"}
                 </Button>
                 {!isComplete && (

@@ -26,21 +26,9 @@ export interface GuideWallet {
   total_earnings: string
 }
 
-export interface GuideSubmitPayload {
-  guide_nationality: string
-  guide_phone: string
-  guide_id_card_url: string
-  guide_certificate: string
-  bio: string
-  languages: string
-  bank_name: string
-  bank_account_number: string
-  bank_account_name: string
-}
-
 export const guidesService = {
-  getProfile:    ()                              => api.get<GuideProfile>('/guides/me'),
+  getProfile:    ()                               => api.get<GuideProfile>('/guides/me'),
   updateProfile: (payload: Partial<GuideProfile>) => api.put<GuideProfile>('/guides/me', payload),
-  submitReview:  (payload: GuideSubmitPayload)   => api.post<GuideProfile>('/guides/me/submit', payload),
-  getWallet:     ()                              => api.get<GuideWallet>('/guides/me/wallet'),
+  submitReview:  (payload: Partial<GuideProfile>) => api.post<GuideProfile>('/guides/me/submit', payload),
+  getWallet:     ()                               => api.get<GuideWallet>('/guides/me/wallet'),
 }
