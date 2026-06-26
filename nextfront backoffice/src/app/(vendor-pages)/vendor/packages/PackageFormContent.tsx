@@ -35,19 +35,26 @@ const DAYS_ID: Record<string, string> = {
   Thu: 'Kamis', Fri: 'Jumat', Sat: 'Sabtu', Sun: 'Minggu',
 }
 
+// Generate all 24-hour slots in 30-min increments: 00:00 – 23:30
+const ALL_SLOTS: string[] = Array.from({ length: 48 }, (_, i) => {
+  const h = String(Math.floor(i / 2)).padStart(2, '0')
+  const m = i % 2 === 0 ? '00' : '30'
+  return `${h}:${m}`
+})
+
 const textareaClass =
-  "w-full border border-white/10 rounded-lg px-3 py-2 text-sm resize-none bg-white/5 backdrop-blur-sm " +
-  "text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+  'w-full border border-white/10 rounded-lg px-3 py-2 text-sm resize-none bg-white/5 backdrop-blur-sm ' +
+  'text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50'
 
 export default function PackageFormContent({ mode, packageId }: Props) {
   const router = useRouter()
-  const [form,       setForm]       = useState<PackageCreate>(EMPTY_FORM)
-  const [loading,    setLoading]    = useState(mode === 'edit')
-  const [saving,     setSaving]     = useState(false)
-  const [error,      setError]      = useState('')
-  const [success,    setSuccess]    = useState(false)
-  const [slotInput,  setSlotInput]  = useState('')
-  const [photoInput, setPhotoInput] = useState('')
+  const [form,        setForm]        = useState<PackageCreate>(EMPTY_FORM)
+  const [loading,     setLoading]     = useState(mode === 'edit')
+  const [saving,      setSaving]      = useState(false)
+  const [error,       setError]       = useState('')
+  const [success,     setSuccess]     = useState(false)
+  const [showPicker,  setShowPicker]  = useState(false)
+  const [photoInput,  setPhotoInput]  = useState('')
 
   useEffect(() => {
     if (mode === 'edit' && packageId) {
@@ -79,16 +86,10 @@ export default function PackageFormContent({ mode, packageId }: Props) {
     set('available_days', days.includes(day) ? days.filter(d => d !== day) : [...days, day])
   }
 
-  const addSlot = () => {
-    const val = slotInput.trim()
-    if (!val) return
-    if (!form.available_slots.includes(val))
-      set('available_slots', [...form.available_slots, val])
-    setSlotInput('')
+  const toggleSlot = (slot: string) => {
+    const slots = form.available_slots
+    set('available_slots', slots.includes(slot) ? slots.filter(s => s !== slot) : [...slots, slot].sort())
   }
-
-  const removeSlot = (slot: string) =>
-    set('available_slots', form.available_slots.filter(s => s !== slot))
 
   const addPhoto = () => {
     const val = photoInput.trim()
@@ -144,7 +145,7 @@ export default function PackageFormContent({ mode, packageId }: Props) {
         </div>
       </div>
 
-      {/* Card — glassmorphism, full width */}
+      {/* Card */}
       <div className="w-full rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md shadow-xl p-6 space-y-5">
         {error   && <p className="text-sm text-red-500">{error}</p>}
         {success && <p className="text-sm text-green-500">Package berhasil disimpan.</p>}
@@ -186,50 +187,27 @@ export default function PackageFormContent({ mode, packageId }: Props) {
         <div className="grid grid-cols-2 gap-4">
           <div className="grid gap-1.5">
             <Label>Min Pax</Label>
-            <Input
-              type="number" min={1}
-              value={form.min_pax}
-              onChange={e => set('min_pax', Number(e.target.value))}
-            />
+            <Input type="number" min={1} value={form.min_pax}
+              onChange={e => set('min_pax', Number(e.target.value))} />
           </div>
           <div className="grid gap-1.5">
-            <Label>
-              Max Pax
-              <span className="text-xs text-muted-foreground ml-1">(kosong = tak terbatas)</span>
-            </Label>
-            <Input
-              type="number" min={1}
-              value={form.max_pax ?? ''}
-              onChange={e => set('max_pax', e.target.value ? Number(e.target.value) : null)}
-              placeholder="—"
-            />
+            <Label>Max Pax <span className="text-xs text-muted-foreground ml-1">(kosong = tak terbatas)</span></Label>
+            <Input type="number" min={1} value={form.max_pax ?? ''} placeholder="—"
+              onChange={e => set('max_pax', e.target.value ? Number(e.target.value) : null)} />
           </div>
         </div>
 
         {/* Durasi & Quota */}
         <div className="grid grid-cols-2 gap-4">
           <div className="grid gap-1.5">
-            <Label>
-              Durasi
-              <span className="text-xs text-muted-foreground ml-1">(menit)</span>
-            </Label>
-            <Input
-              type="number" min={1}
-              value={form.duration_minutes ?? ''}
-              onChange={e => set('duration_minutes', e.target.value ? Number(e.target.value) : null)}
-              placeholder="cth: 90"
-            />
+            <Label>Durasi <span className="text-xs text-muted-foreground ml-1">(menit)</span></Label>
+            <Input type="number" min={1} value={form.duration_minutes ?? ''} placeholder="cth: 90"
+              onChange={e => set('duration_minutes', e.target.value ? Number(e.target.value) : null)} />
           </div>
           <div className="grid gap-1.5">
-            <Label>
-              Quota per Slot
-              <span className="text-xs text-muted-foreground ml-1">(max booking)</span>
-            </Label>
-            <Input
-              type="number" min={1}
-              value={form.quota_per_slot}
-              onChange={e => set('quota_per_slot', Number(e.target.value))}
-            />
+            <Label>Quota per Slot <span className="text-xs text-muted-foreground ml-1">(max booking)</span></Label>
+            <Input type="number" min={1} value={form.quota_per_slot}
+              onChange={e => set('quota_per_slot', Number(e.target.value))} />
           </div>
         </div>
 
@@ -240,10 +218,7 @@ export default function PackageFormContent({ mode, packageId }: Props) {
             {DAYS.map(day => {
               const active = form.available_days.includes(day)
               return (
-                <button
-                  key={day}
-                  type="button"
-                  onClick={() => toggleDay(day)}
+                <button key={day} type="button" onClick={() => toggleDay(day)}
                   className={[
                     'px-3 py-1.5 rounded-lg border text-xs font-medium transition-all',
                     active
@@ -258,19 +233,46 @@ export default function PackageFormContent({ mode, packageId }: Props) {
           </div>
         </div>
 
-        {/* Slot jam */}
+        {/* Slot jam — picker 24 jam */}
         <div className="grid gap-2">
-          <Label>Slot Jam</Label>
-          <div className="flex gap-2">
-            <Input
-              value={slotInput}
-              onChange={e => setSlotInput(e.target.value)}
-              placeholder="cth: 09:00"
-              className="max-w-[140px]"
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSlot() } }}
-            />
-            <Button type="button" variant="outline" size="sm" onClick={addSlot}>Tambah</Button>
+          <div className="flex items-center justify-between">
+            <Label>Slot Jam</Label>
+            <button
+              type="button"
+              onClick={() => setShowPicker(p => !p)}
+              className="text-xs text-primary hover:underline"
+            >
+              {showPicker ? 'Tutup picker' : 'Pilih dari daftar jam'}
+            </button>
           </div>
+
+          {/* Grid picker 24 jam */}
+          {showPicker && (
+            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+              <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-8">
+                {ALL_SLOTS.map(slot => {
+                  const active = form.available_slots.includes(slot)
+                  return (
+                    <button
+                      key={slot}
+                      type="button"
+                      onClick={() => toggleSlot(slot)}
+                      className={[
+                        'py-1 rounded-md text-xs font-medium border transition-all',
+                        active
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-white/5 border-white/10 text-muted-foreground hover:bg-white/10',
+                      ].join(' ')}
+                    >
+                      {slot}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Tampilkan slot yang sudah dipilih */}
           {form.available_slots.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {form.available_slots.map(slot => (
@@ -279,11 +281,8 @@ export default function PackageFormContent({ mode, packageId }: Props) {
                   className="flex items-center gap-1 border border-white/10 bg-white/5 rounded-lg px-2.5 py-1 text-xs text-muted-foreground"
                 >
                   {slot}
-                  <button
-                    type="button"
-                    onClick={() => removeSlot(slot)}
-                    className="hover:text-destructive ml-0.5"
-                  >×</button>
+                  <button type="button" onClick={() => toggleSlot(slot)}
+                    className="hover:text-destructive ml-0.5">×</button>
                 </span>
               ))}
             </div>
@@ -300,23 +299,18 @@ export default function PackageFormContent({ mode, packageId }: Props) {
               placeholder="https://..."
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addPhoto() } }}
             />
-            <Button type="button" variant="outline" size="sm" onClick={addPhoto}>Tambah</Button>
+            <Button type="button" size="sm" onClick={addPhoto}>Tambah</Button>
           </div>
           {form.photo_urls.length > 0 && (
             <div className="space-y-1.5">
               {form.photo_urls.map(url => (
-                <div
-                  key={url}
+                <div key={url}
                   className="flex items-center justify-between border border-white/10 bg-white/5 rounded-lg px-3 py-2"
                 >
                   <span className="text-xs text-muted-foreground truncate">{url}</span>
-                  <button
-                    type="button"
-                    onClick={() => removePhoto(url)}
+                  <button type="button" onClick={() => removePhoto(url)}
                     className="text-xs text-muted-foreground hover:text-destructive ml-3 shrink-0"
-                  >
-                    Hapus
-                  </button>
+                  >Hapus</button>
                 </div>
               ))}
             </div>
@@ -326,25 +320,17 @@ export default function PackageFormContent({ mode, packageId }: Props) {
         {/* Syarat */}
         <div className="grid gap-1.5">
           <Label>Syarat & Ketentuan <span className="text-xs text-muted-foreground">(opsional)</span></Label>
-          <textarea
-            className={textareaClass}
-            rows={3}
-            value={form.terms}
-            onChange={e => set('terms', e.target.value)}
-            placeholder="cth: Minimal pemesanan H-1, tidak termasuk minuman"
-          />
+          <textarea className={textareaClass} rows={3}
+            value={form.terms} onChange={e => set('terms', e.target.value)}
+            placeholder="cth: Minimal pemesanan H-1, tidak termasuk minuman" />
         </div>
 
         {/* Catatan internal */}
         <div className="grid gap-1.5">
           <Label>Catatan Internal <span className="text-xs text-muted-foreground">(opsional)</span></Label>
-          <textarea
-            className={textareaClass}
-            rows={2}
-            value={form.notes}
-            onChange={e => set('notes', e.target.value)}
-            placeholder="Catatan internal untuk tim kamu"
-          />
+          <textarea className={textareaClass} rows={2}
+            value={form.notes} onChange={e => set('notes', e.target.value)}
+            placeholder="Catatan internal untuk tim kamu" />
         </div>
 
         <Button onClick={handleSubmit} disabled={saving} className="w-full">
