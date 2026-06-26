@@ -23,11 +23,25 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email atau password salah")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Akun belum aktif")
+
     access_token = create_access_token(
         subject=str(user.id),
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     )
-    return {"access_token": access_token, "token_type": "bearer", "user_type": user.user_type}
+    refresh_token = create_access_token(
+        subject=str(user.id),
+        expires_delta=timedelta(days=7),
+    )
+
+    return {
+        "access_token":  access_token,
+        "refresh_token": refresh_token,
+        "token_type":    "bearer",
+        "user_id":       str(user.id),
+        "user_name":     user.user_name,
+        "user_email":    user.user_email,
+        "user_type":     user.user_type,
+    }
 
 
 @router.post("/register", response_model=RegisterResponse, status_code=201, summary="Register user baru")

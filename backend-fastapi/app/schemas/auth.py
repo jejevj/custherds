@@ -4,7 +4,11 @@ from pydantic import BaseModel, EmailStr
 
 class Token(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str
+    user_id: str
+    user_name: str
+    user_email: str
     user_type: int
 
 
