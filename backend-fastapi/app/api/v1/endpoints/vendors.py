@@ -1,54 +1,48 @@
+from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
-from app.core.deps import get_db, get_current_active_user, require_role
-from app.models.vendor import Vendor
+from app.db.session import get_db
+from app.core.deps import get_current_user, require_user_type
 from app.models.user import User
-from app.schemas.vendor import VendorCreate, VendorUpdate, VendorResponse
+from app.models.vendor import Vendor
+from app.schemas.vendors import VendorProfile, VendorUpdateRequest, VendorDepositInfo
 
 router = APIRouter()
 
 
-@router.get("/", response_model=List[VendorResponse])
-def list_vendors(skip: int = 0, limit: int = 20, db: Session = Depends(get_db)):
-    return db.query(Vendor).filter(Vendor.is_approved == True).offset(skip).limit(limit).all()
-
-
-@router.post("/", response_model=VendorResponse, status_code=201)
-def create_vendor(
-    payload: VendorCreate,
+@router.get("/me", response_model=VendorProfile, summary="Profil vendor yang sedang login")
+def get_vendor_profile(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role("vendor")),
-):
-    if db.query(Vendor).filter(Vendor.user_id == current_user.id).first():
-        raise HTTPException(status_code=400, detail="Vendor profile already exists")
-    vendor = Vendor(**payload.model_dump(), user_id=current_user.id)
-    db.add(vendor)
-    db.commit()
-    db.refresh(vendor)
+    current_user: User = Depends(require_user_type(2)),
+) -> Any:
+    vendor = db.query(Vendor).filter(Vendor.user_id == current_user.id).first()
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Profil vendor tidak ditemukan")
     return vendor
 
 
-@router.get("/{vendor_id}", response_model=VendorResponse)
-def get_vendor(vendor_id: int, db: Session = Depends(get_db)):
-    vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
-    if not vendor:
-        raise HTTPException(status_code=404, detail="Vendor not found")
-    return vendor
-
-
-@router.put("/{vendor_id}", response_model=VendorResponse)
-def update_vendor(
-    vendor_id: int,
-    payload: VendorUpdate,
+@router.put("/me", response_model=VendorProfile, summary="Update profil vendor")
+def update_vendor_profile(
+    payload: VendorUpdateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role("vendor", "admin")),
-):
-    vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
+    current_user: User = Depends(require_user_type(2)),
+) -> Any:
+    vendor = db.query(Vendor).filter(Vendor.user_id == current_user.id).first()
     if not vendor:
-        raise HTTPException(status_code=404, detail="Vendor not found")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+        raise HTTPException(status_code=404, detail="Profil vendor tidak ditemukan")
+    for field, value in payload.dict(exclude_unset=True).items():
         setattr(vendor, field, value)
     db.commit()
     db.refresh(vendor)
+    return vendor
+
+
+@router.get("/me/deposit", response_model=VendorDepositInfo, summary="Info saldo deposit vendor")
+def get_vendor_deposit(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_user_type(2)),
+) -> Any:
+    vendor = db.query(Vendor).filter(Vendor.user_id == current_user.id).first()
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Profil vendor tidak ditemukan")
     return vendor
