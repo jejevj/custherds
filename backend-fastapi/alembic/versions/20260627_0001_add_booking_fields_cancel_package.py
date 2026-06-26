@@ -1,7 +1,7 @@
 """add booking fields: booking_type, package, cancelled_by/reason/at
 
 Revision ID: 20260627_0001
-Revises: a1b2c3d4e5f6
+Revises: e732b622c087
 Create Date: 2026-06-27
 
 """
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
 
 revision = '20260627_0001'
-down_revision = 'a1b2c3d4e5f6'
+down_revision = 'e732b622c087'
 branch_labels = None
 depends_on = None
 
@@ -29,7 +29,7 @@ def upgrade() -> None:
     op.add_column('bookings', sa.Column('cancelled_reason', sa.Text, nullable=True))
     op.add_column('bookings', sa.Column('cancelled_at', sa.DateTime(timezone=True), nullable=True))
 
-    # FK for package_id (packages table was added after initial schema)
+    # FK for package_id (packages table was added in 33ca01a9f9fd)
     op.create_foreign_key(
         'fk_bookings_package_id',
         'bookings', 'packages',
