@@ -1,20 +1,18 @@
 "use client"
 
 import { useEffect, useState } from "react"
-
 import { GuideSidebar } from "@/components/guide-sidebar"
 import { NotificationDropdown } from "@/components/notification-dropdown"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { GlobalSearch } from "@/components/global-search"
 import { UserDropdown } from "@/components/UserDropdown"
 import Footer from "@/components/layout/Footer"
-
+import { GuideStatusGate } from "@/components/layout/GuideStatusGate"
 import {
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
-
 import { cn } from "@/lib/utils"
 
 export default function GuideLayout({
@@ -23,8 +21,8 @@ export default function GuideLayout({
   children: React.ReactNode
 }) {
   const [scrolled, setScrolled] = useState(false)
-  const [open, setOpen] = useState(true)
-  const [hovered, setHovered] = useState(false)
+  const [open,     setOpen]     = useState(true)
+  const [hovered,  setHovered]  = useState(false)
 
   const isExpanded = open || hovered
 
@@ -67,7 +65,11 @@ export default function GuideLayout({
             </div>
           </div>
         </header>
-        <div className="flex flex-1 flex-col p-6">{children}</div>
+        <div className="flex flex-1 flex-col p-6">
+          <GuideStatusGate>
+            {children}
+          </GuideStatusGate>
+        </div>
         <Footer />
       </SidebarInset>
     </SidebarProvider>
