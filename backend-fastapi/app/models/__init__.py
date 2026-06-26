@@ -8,5 +8,6 @@ from app.models.revenue_split_config import RevenueSplitConfig
 from app.models.guide_withdrawal import GuideWithdrawal
 from app.models.vendor_deposit_topup import VendorDepositTopup
 from app.models.destination import Destination
+from app.models.commission_disbursement import CommissionDisbursement
 from app.models.audit_log import AuditLog
 from app.models.api_log import ApiLog
