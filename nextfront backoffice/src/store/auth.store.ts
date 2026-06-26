@@ -43,7 +43,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'custherds-auth',
-      partialState: (state: AuthState) => ({
+      partialize: (state: AuthState) => ({
         accessToken:  state.accessToken,
         refreshToken: state.refreshToken,
         user:         state.user,
