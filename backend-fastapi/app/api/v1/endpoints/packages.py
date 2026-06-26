@@ -12,10 +12,8 @@ from app.schemas.packages import PackageCreate, PackageUpdate, PackageResponse
 router = APIRouter()
 
 
-# ───────────────────────── VENDOR CRUD ──────────────────────────────
-# PENTING: route literal (/my-packages, /my-packages/{id}) HARUS didaftarkan
-# SEBELUM route dengan path parameter (/vendors/{vendor_id}/...) agar FastAPI
-# tidak menangkap string literal sebagai nilai path parameter.
+# ───────────────────────── VENDOR CRUD ───────────────────────────
+# Literal routes di atas, path-param routes di bawah.
 
 @router.get("/my-packages", response_model=List[PackageResponse], summary="[Vendor] List semua package saya")
 def list_my_packages(
@@ -60,6 +58,24 @@ def create_package(
     db.add(pkg)
     db.commit()
     db.refresh(pkg)
+    return pkg
+
+
+@router.get("/my-packages/{package_id}", response_model=PackageResponse, summary="[Vendor] Detail package saya")
+def get_my_package(
+    package_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_user_type(2)),
+) -> Any:
+    vendor = db.query(Vendor).filter(Vendor.user_id == current_user.id).first()
+    if not vendor:
+        raise HTTPException(404, "Profil vendor tidak ditemukan")
+    pkg = db.query(Package).filter(
+        Package.id == package_id,
+        Package.vendor_id == vendor.id,
+    ).first()
+    if not pkg:
+        raise HTTPException(404, "Package tidak ditemukan")
     return pkg
 
 
@@ -108,7 +124,6 @@ def delete_package(
 
 
 # ──────────────────────── PUBLIC (Guide browse) ─────────────────────
-# Path parameter routes di bawah agar tidak menangkap literal di atas.
 
 @router.get("/vendors/{vendor_id}/packages", response_model=List[PackageResponse], summary="Browse packages milik vendor")
 def list_vendor_packages(
