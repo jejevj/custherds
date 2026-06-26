@@ -6,15 +6,13 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { AlertTriangle, Upload, Eye, CalendarDays, Users, FileText, MapPin, CheckCircle2 } from "lucide-react"
+import { useTableSearch } from "@/hooks/useTableSearch"
+import { TableSearchInput } from "@/components/ui/TableSearchInput"
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
   confirmed:          "default",
@@ -36,12 +34,7 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled:          "Dibatalkan",
 }
 
-function Row({ icon, label, value, mono }: {
-  icon?: React.ReactNode
-  label: string
-  value: string
-  mono?: boolean
-}) {
+function Row({ icon, label, value, mono }: { icon?: React.ReactNode; label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex justify-between items-start px-3 py-2 gap-4">
       <span className="text-muted-foreground flex items-center gap-1.5 shrink-0 text-xs">{icon}{label}</span>
@@ -56,21 +49,16 @@ export default function GuideBookingsPage() {
   const [error,      setError]      = useState("")
   const [submitting, setSubmitting] = useState(false)
 
-  // detail modal
-  const [detailBook, setDetailBook] = useState<Booking | null>(null)
+  const { query, setQuery, filtered } = useTableSearch(bookings)
 
-  // cancel dialog
-  const [cancelTarget, setCancelTarget] = useState<string | null>(null)
-  const [cancelReason, setCancelReason] = useState("")
-  const [cancelError,  setCancelError]  = useState("")
-
-  // upload receipt dialog
+  const [detailBook,    setDetailBook]    = useState<Booking | null>(null)
+  const [cancelTarget,  setCancelTarget]  = useState<string | null>(null)
+  const [cancelReason,  setCancelReason]  = useState("")
+  const [cancelError,   setCancelError]   = useState("")
   const [receiptTarget, setReceiptTarget] = useState<string | null>(null)
   const [receiptUrl,    setReceiptUrl]    = useState("")
   const [receiptError,  setReceiptError]  = useState("")
-
-  // view rejection reason
-  const [viewReason, setViewReason] = useState<string | null>(null)
+  const [viewReason,    setViewReason]    = useState<string | null>(null)
 
   useEffect(() => {
     bookingsService.list()
@@ -100,8 +88,7 @@ export default function GuideBookingsPage() {
     try {
       const updated = await bookingsService.uploadReceipt(receiptTarget, receiptUrl.trim())
       setBookings(prev => prev.map(b => b.id === updated.id ? updated : b))
-      setReceiptTarget(null)
-      setReceiptUrl("")
+      setReceiptTarget(null); setReceiptUrl("")
     } catch { setReceiptError("Gagal upload receipt. Coba lagi.") }
     finally { setSubmitting(false) }
   }
@@ -114,6 +101,13 @@ export default function GuideBookingsPage() {
           <p className="text-muted-foreground">Semua booking yang kamu buat.</p>
         </div>
         <Button asChild><Link href="/guide/bookings/create">+ Buat Booking</Link></Button>
+      </div>
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <TableSearchInput value={query} onChange={setQuery} placeholder="Cari kode, tanggal, status..." />
+        {query && (
+          <p className="text-xs text-muted-foreground whitespace-nowrap">{filtered.length} dari {bookings.length} hasil</p>
+        )}
       </div>
 
       {error && <p className="text-sm text-red-500">{error}</p>}
@@ -133,9 +127,11 @@ export default function GuideBookingsPage() {
           <tbody>
             {loading ? (
               <tr><td colSpan={6} className="text-center py-10 text-muted-foreground">Memuat...</td></tr>
-            ) : bookings.length === 0 ? (
-              <tr><td colSpan={6} className="text-center py-10 text-muted-foreground">Belum ada booking.</td></tr>
-            ) : bookings.map(b => (
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan={6} className="text-center py-10 text-muted-foreground">
+                {query ? `Tidak ada hasil untuk "${query}"` : "Belum ada booking."}
+              </td></tr>
+            ) : filtered.map(b => (
               <tr key={b.id} className="border-b last:border-0 hover:bg-muted/30">
                 <td className="px-4 py-3 font-mono text-xs">{b.booking_code}</td>
                 <td className="px-4 py-3">{new Date(b.booking_date).toLocaleDateString("id-ID")}</td>
@@ -145,35 +141,22 @@ export default function GuideBookingsPage() {
                     {STATUS_LABEL[b.status] ?? b.status}
                   </Badge>
                 </td>
-                {/* Kolom Detail: tombol Lihat Detail untuk semua status */}
                 <td className="px-4 py-3">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setDetailBook(b)}
-                  >
+                  <Button size="sm" variant="outline" onClick={() => setDetailBook(b)}>
                     <Eye size={13} className="mr-1" /> Lihat Detail
                   </Button>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex gap-2 flex-wrap">
                     {b.status === "pending_receipt" && (
-                      <Button
-                        size="sm"
-                        variant="default"
-                        className="bg-amber-500 hover:bg-amber-600 text-white"
-                        onClick={() => { setReceiptTarget(b.id); setReceiptUrl(""); setReceiptError("") }}
-                      >
+                      <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white"
+                        onClick={() => { setReceiptTarget(b.id); setReceiptUrl(""); setReceiptError("") }}>
                         <Upload size={13} className="mr-1" /> Upload Receipt
                       </Button>
                     )}
-                    {["pending_vendor", "confirmed", "pending_receipt", "pending_completion"].includes(b.status) && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-red-500 border-red-300 hover:bg-red-50"
-                        onClick={() => { setCancelTarget(b.id); setCancelReason(""); setCancelError("") }}
-                      >
+                    {["pending_vendor","confirmed","pending_receipt","pending_completion"].includes(b.status) && (
+                      <Button size="sm" variant="outline" className="text-red-500 border-red-300 hover:bg-red-50"
+                        onClick={() => { setCancelTarget(b.id); setCancelReason(""); setCancelError("") }}>
                         Batalkan
                       </Button>
                     )}
@@ -185,7 +168,7 @@ export default function GuideBookingsPage() {
         </table>
       </div>
 
-      {/* ─── Detail Booking Modal ─────────────────────────────────────────── */}
+      {/* Detail Modal */}
       <Dialog open={!!detailBook} onOpenChange={open => { if (!open) setDetailBook(null) }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -198,55 +181,40 @@ export default function GuideBookingsPage() {
               )}
             </DialogTitle>
           </DialogHeader>
-
           {detailBook && (
             <div className="space-y-4 py-1">
-              {/* Info rows */}
               <div className="rounded-lg border bg-muted/20 divide-y text-sm">
                 <Row icon={<FileText size={12}/>}     label="Kode Booking" value={detailBook.booking_code} mono />
-                <Row icon={<CalendarDays size={12}/>} label="Tanggal"       value={new Date(detailBook.booking_date).toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })} />
+                <Row icon={<CalendarDays size={12}/>} label="Tanggal"       value={new Date(detailBook.booking_date).toLocaleDateString("id-ID", { weekday:"long", year:"numeric", month:"long", day:"numeric" })} />
                 {detailBook.booking_time && <Row label="Waktu" value={detailBook.booking_time} />}
                 <Row icon={<Users size={12}/>} label="Jumlah Pax" value={`${detailBook.pax_count} orang`} />
                 {detailBook.tourist_nationality && <Row label="Kewarganegaraan" value={detailBook.tourist_nationality} />}
-                {detailBook.checkin_at && (
-                  <Row icon={<MapPin size={12}/>} label="Checkin" value={new Date(detailBook.checkin_at).toLocaleString("id-ID")} />
-                )}
-                {detailBook.receipt_uploaded_at && (
-                  <Row icon={<Upload size={12}/>} label="Receipt diupload" value={new Date(detailBook.receipt_uploaded_at).toLocaleString("id-ID")} />
-                )}
-                {detailBook.completed_at && (
-                  <Row icon={<CheckCircle2 size={12}/>} label="Selesai pada" value={new Date(detailBook.completed_at).toLocaleString("id-ID")} />
-                )}
+                {detailBook.checkin_at && <Row icon={<MapPin size={12}/>} label="Checkin" value={new Date(detailBook.checkin_at).toLocaleString("id-ID")} />}
+                {detailBook.receipt_uploaded_at && <Row icon={<Upload size={12}/>} label="Receipt diupload" value={new Date(detailBook.receipt_uploaded_at).toLocaleString("id-ID")} />}
+                {detailBook.completed_at && <Row icon={<CheckCircle2 size={12}/>} label="Selesai pada" value={new Date(detailBook.completed_at).toLocaleString("id-ID")} />}
               </div>
-
-              {/* Instruksi khusus status confirmed */}
               {detailBook.status === "confirmed" && (
                 <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3 text-sm">
                   <p className="font-medium text-blue-400 mb-1">📋 Instruksi Checkin</p>
                   <p className="text-muted-foreground text-xs">
                     Tunjukkan halaman ini atau kode booking
                     <span className="font-mono font-bold text-foreground mx-1">{detailBook.booking_code}</span>
-                    ke petugas vendor saat tiba di lokasi. Petugas akan melakukan checkin dari sistem mereka.
+                    ke petugas vendor saat tiba di lokasi.
                   </p>
                 </div>
               )}
-
-              {/* Rejection reason */}
               {detailBook.status === "rejected" && detailBook.vendor_rejection_reason && (
                 <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm">
                   <p className="text-xs text-muted-foreground mb-1">Alasan Penolakan</p>
                   <p className="text-red-400">{detailBook.vendor_rejection_reason}</p>
                 </div>
               )}
-
-              {/* Cancelled reason */}
               {detailBook.status === "cancelled" && detailBook.cancelled_reason && (
                 <div className="rounded-lg border border-orange-500/20 bg-orange-500/5 px-4 py-3 text-sm">
                   <p className="text-xs text-muted-foreground mb-1">Alasan Pembatalan</p>
                   <p className="text-orange-400">{detailBook.cancelled_reason}</p>
                 </div>
               )}
-
               {detailBook.notes && (
                 <div className="text-sm">
                   <p className="text-muted-foreground text-xs mb-1">Catatan</p>
@@ -255,19 +223,11 @@ export default function GuideBookingsPage() {
               )}
             </div>
           )}
-
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setDetailBook(null)}>Tutup</Button>
             {detailBook?.status === "pending_receipt" && (
-              <Button
-                className="bg-amber-500 hover:bg-amber-600 text-white"
-                onClick={() => {
-                  setReceiptTarget(detailBook.id)
-                  setReceiptUrl("")
-                  setReceiptError("")
-                  setDetailBook(null)
-                }}
-              >
+              <Button className="bg-amber-500 hover:bg-amber-600 text-white"
+                onClick={() => { setReceiptTarget(detailBook.id); setReceiptUrl(""); setReceiptError(""); setDetailBook(null) }}>
                 <Upload size={14} className="mr-1" /> Upload Receipt
               </Button>
             )}
@@ -275,53 +235,36 @@ export default function GuideBookingsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ─── Upload Receipt Dialog ────────────────────────────────────────── */}
+      {/* Upload Receipt */}
       <Dialog open={!!receiptTarget} onOpenChange={open => { if (!open) setReceiptTarget(null) }}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Upload className="w-5 h-5 text-amber-500" /> Upload Bukti Kunjungan
-            </DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Upload className="w-5 h-5 text-amber-500" /> Upload Bukti Kunjungan</DialogTitle></DialogHeader>
           <div className="py-2 space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Vendor sudah melakukan checkin. Upload URL file bukti kunjungan
-              (foto, invoice, atau dokumen lainnya).
-            </p>
+            <p className="text-sm text-muted-foreground">Vendor sudah melakukan checkin. Upload URL file bukti kunjungan.</p>
             <div className="space-y-1">
               <Label htmlFor="receipt-url">URL Receipt <span className="text-red-500">*</span></Label>
-              <Input
-                id="receipt-url"
-                placeholder="https://..."
-                value={receiptUrl}
-                onChange={e => { setReceiptUrl(e.target.value); setReceiptError("") }}
-              />
+              <Input id="receipt-url" placeholder="https://..." value={receiptUrl}
+                onChange={e => { setReceiptUrl(e.target.value); setReceiptError("") }} />
             </div>
             {receiptError && <p className="text-sm text-red-500">{receiptError}</p>}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setReceiptTarget(null)} disabled={submitting}>Batal</Button>
             <Button onClick={submitReceipt} disabled={submitting} className="bg-amber-500 hover:bg-amber-600 text-white">
-              <Upload size={14} className="mr-1" />
-              {submitting ? "Mengupload..." : "Submit Receipt"}
+              <Upload size={14} className="mr-1" />{submitting ? "Mengupload..." : "Submit Receipt"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ─── Cancel Dialog ────────────────────────────────────────────────── */}
+      {/* Cancel */}
       <Dialog open={!!cancelTarget} onOpenChange={open => { if (!open) setCancelTarget(null) }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Batalkan Booking</DialogTitle></DialogHeader>
           <div className="space-y-3 py-2">
             <Label htmlFor="cancel-reason">Alasan Pembatalan <span className="text-red-500">*</span></Label>
-            <Textarea
-              id="cancel-reason"
-              placeholder="Tuliskan alasan pembatalan booking ini..."
-              value={cancelReason}
-              onChange={e => { setCancelReason(e.target.value); setCancelError("") }}
-              rows={4}
-            />
+            <Textarea id="cancel-reason" placeholder="Tuliskan alasan..." value={cancelReason}
+              onChange={e => { setCancelReason(e.target.value); setCancelError("") }} rows={4} />
             {cancelError && <p className="text-sm text-red-500">{cancelError}</p>}
           </div>
           <DialogFooter>
@@ -333,20 +276,12 @@ export default function GuideBookingsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ─── View Rejection Reason (shortcut dari tabel) ──────────────────── */}
+      {/* View Rejection Reason */}
       <Dialog open={!!viewReason} onOpenChange={open => { if (!open) setViewReason(null) }}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600">
-              <AlertTriangle className="w-5 h-5" /> Alasan Penolakan
-            </DialogTitle>
-          </DialogHeader>
-          <div className="py-2">
-            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{viewReason}</p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setViewReason(null)}>Tutup</Button>
-          </DialogFooter>
+          <DialogHeader><DialogTitle className="flex items-center gap-2 text-red-600"><AlertTriangle className="w-5 h-5" /> Alasan Penolakan</DialogTitle></DialogHeader>
+          <div className="py-2"><p className="text-sm text-muted-foreground whitespace-pre-wrap">{viewReason}</p></div>
+          <DialogFooter><Button variant="outline" onClick={() => setViewReason(null)}>Tutup</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

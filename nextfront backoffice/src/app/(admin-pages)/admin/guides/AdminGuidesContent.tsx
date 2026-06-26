@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { UserCheck, UserX, Eye, X, FileText } from "lucide-react"
 import { uploadsService } from "@/services/uploads.service"
 import { getTokens } from "@/services/api"
+import { useTableSearch } from "@/hooks/useTableSearch"
+import { TableSearchInput } from "@/components/ui/TableSearchInput"
 
 const STATUS_TABS = [
   { label: "All",       value: undefined },
@@ -25,7 +27,7 @@ async function fetchProtectedFile(relUrl: string): Promise<string | null> {
   if (!relUrl) return null
   try {
     const { access } = getTokens()
-    const url = uploadsService.getUrl(relUrl)  // handles /api/v1 dedup
+    const url = uploadsService.getUrl(relUrl)
     const res = await fetch(url, { headers: access ? { Authorization: `Bearer ${access}` } : {} })
     if (!res.ok) return null
     const blob = await res.blob()
@@ -77,8 +79,7 @@ function GuideDetailModal({ guide, onClose }: { guide: AdminGuide; onClose: () =
             <img src={blobSrc} alt={label} className="rounded-lg border max-h-52 w-full object-contain bg-muted cursor-zoom-in" />
           </a>
         ) : blobSrc && isPdf(origUrl) ? (
-          <a href={blobSrc} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-2 text-sm text-blue-600 underline">
+          <a href={blobSrc} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-blue-600 underline">
             <FileText className="h-4 w-4" /> Buka PDF
           </a>
         ) : (
@@ -100,7 +101,6 @@ function GuideDetailModal({ guide, onClose }: { guide: AdminGuide; onClose: () =
             <X className="h-4 w-4" />
           </button>
         </div>
-
         <div className="px-6 py-5 space-y-5">
           <div className="flex gap-3 flex-wrap">
             <span className={`text-xs px-2.5 py-1 rounded-full font-medium capitalize ${STATUS_BADGE[guide.guide_status] ?? 'bg-muted text-muted-foreground'}`}>
@@ -110,14 +110,12 @@ function GuideDetailModal({ guide, onClose }: { guide: AdminGuide; onClose: () =
               Sertifikat: {guide.guide_certificate_status}
             </span>
           </div>
-
           {guide.rejection_notes && (
             <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm">
               <p className="font-semibold text-red-700 mb-0.5">Catatan Penolakan</p>
               <p className="text-red-600">{guide.rejection_notes}</p>
             </div>
           )}
-
           <div className="grid grid-cols-2 gap-3 text-sm">
             {([
               ["Telepon",         guide.guide_phone],
@@ -131,14 +129,12 @@ function GuideDetailModal({ guide, onClose }: { guide: AdminGuide; onClose: () =
               </div>
             ))}
           </div>
-
           {guide.bio && (
             <div>
               <p className="text-xs font-semibold text-muted-foreground mb-1">Bio</p>
               <p className="text-sm leading-relaxed">{guide.bio}</p>
             </div>
           )}
-
           <div className="grid grid-cols-1 gap-4">
             {renderDoc("KTP / Paspor",     guide.guide_id_card_url, idCardSrc, loadingId)}
             {renderDoc("Sertifikat Guide", guide.guide_certificate,  certSrc,   loadingCert)}
@@ -161,6 +157,8 @@ export default function AdminGuidesContent() {
   const [rejectId,   setRejectId]   = useState<string | null>(null)
   const [rejectNote, setRejectNote] = useState("")
   const [detail,     setDetail]     = useState<AdminGuide | null>(null)
+
+  const { query, setQuery, filtered } = useTableSearch(guides)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -211,17 +209,25 @@ export default function AdminGuidesContent() {
         <p className="text-muted-foreground">Review and approve Herd Partner registrations.</p>
       </div>
 
-      <div className="flex gap-2 flex-wrap">
-        {STATUS_TABS.map(tab => (
-          <button key={tab.label} onClick={() => setTab(tab.value)}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
-              statusFilter === tab.value
-                ? 'bg-primary text-primary-foreground border-primary'
-                : 'bg-background text-muted-foreground border-border hover:border-primary/60'
-            }`}>
-            {tab.label}
-          </button>
-        ))}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex gap-2 flex-wrap">
+          {STATUS_TABS.map(tab => (
+            <button key={tab.label} onClick={() => setTab(tab.value)}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                statusFilter === tab.value
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-background text-muted-foreground border-border hover:border-primary/60'
+              }`}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-3">
+          <TableSearchInput value={query} onChange={setQuery} />
+          {query && (
+            <p className="text-xs text-muted-foreground whitespace-nowrap">{filtered.length} dari {guides.length} hasil</p>
+          )}
+        </div>
       </div>
 
       {error && <p className="text-sm text-red-500">{error}</p>}
@@ -242,9 +248,11 @@ export default function AdminGuidesContent() {
           <tbody>
             {loading ? (
               <tr><td colSpan={7} className="text-center py-10 text-muted-foreground">Loading...</td></tr>
-            ) : guides.length === 0 ? (
-              <tr><td colSpan={7} className="text-center py-10 text-muted-foreground">No guides found.</td></tr>
-            ) : guides.map(g => (
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan={7} className="text-center py-10 text-muted-foreground">
+                {query ? `Tidak ada hasil untuk "${query}"` : "No guides found."}
+              </td></tr>
+            ) : filtered.map(g => (
               <tr key={g.guide_id} className="border-b last:border-0 hover:bg-muted/30">
                 <td className="px-4 py-3 font-medium">{g.user_name}</td>
                 <td className="px-4 py-3 text-muted-foreground text-xs">{g.user_email}</td>
