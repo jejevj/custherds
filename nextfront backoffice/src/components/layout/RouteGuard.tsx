@@ -3,27 +3,31 @@
 import { useEffect } from 'react'
 import { useAuthStore } from '@/store/auth.store'
 
-export default function RouteGuard({ children }: { children: React.ReactNode }) {
+interface RouteGuardProps {
+  children: React.ReactNode
+  requiredUserType: number
+  loginPath: string
+}
+
+export default function RouteGuard({ children, requiredUserType, loginPath }: RouteGuardProps) {
   const isLoggedIn  = useAuthStore((s) => s.isLoggedIn)
   const user        = useAuthStore((s) => s.user)
   const hasHydrated = useAuthStore((s) => s._hasHydrated)
 
   useEffect(() => {
-    // Tunggu hydration selesai dulu
     if (!hasHydrated) return
-
     if (!isLoggedIn) {
-      window.location.href = '/login'
+      window.location.href = loginPath
       return
     }
-    if (user && user.user_type !== 99) {
-      window.location.href = '/login'
+    if (user && user.user_type !== requiredUserType) {
+      window.location.href = loginPath
     }
-  }, [hasHydrated, isLoggedIn, user])
+  }, [hasHydrated, isLoggedIn, user, requiredUserType, loginPath])
 
-  // Jangan render apapun sebelum hydration selesai
   if (!hasHydrated) return null
   if (!isLoggedIn)  return null
+  if (user && user.user_type !== requiredUserType) return null
 
   return <>{children}</>
 }
