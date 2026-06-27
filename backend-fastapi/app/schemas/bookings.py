@@ -3,6 +3,8 @@ from decimal import Decimal
 from datetime import date, time, datetime
 from pydantic import BaseModel, UUID4, computed_field
 
+TX_MAX_ATTEMPT = 3
+
 
 class BookingCreate(BaseModel):
     """
@@ -34,9 +36,6 @@ class BookingCheckinRequest(BaseModel):
     notes: Optional[str] = None
 
 
-# BookingReceiptUpload dihapus — diganti submit-transaction (multipart form)
-
-
 class BookingResponse(BaseModel):
     id: UUID4
     booking_code: str
@@ -61,25 +60,23 @@ class BookingResponse(BaseModel):
 
     # Checkin & Receipt fields
     checkin_at: Optional[datetime]
-    receipt_url: Optional[str]          # path API: /api/v1/uploads/<filename>
+    receipt_url: Optional[str]
     receipt_uploaded_at: Optional[datetime]
     completed_at: Optional[datetime]
+
+    # Revisi transaksi
+    tx_attempt: int = 0
+    tx_attempt_max: int = TX_MAX_ATTEMPT
 
     created_at: datetime
     updated_at: datetime
 
     # Estimasi komisi guide: subtotal_package x guide_percent / 100
-    # Di-inject dari endpoint sebelum return (bukan computed_field DB)
     estimated_commission: Optional[Decimal] = None
 
     @computed_field
     @property
     def total_price(self) -> Optional[Decimal]:
-        """
-        Computed total price:
-        - booking_type = "package" : subtotal_package (price_per_pax * pax_count)
-        - booking_type = "direct"  : None, diisi saat guide submit transaksi
-        """
         if self.subtotal_package is not None:
             return self.subtotal_package
         return None
