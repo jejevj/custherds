@@ -40,7 +40,15 @@ function formatRupiah(n?: number | string | null) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num)
 }
 
-// ── Simple Lightbox (no Radix, no Dialog) ──────────────────────────────────
+/** Parse extra photos dari receipt_notes: "[extra_photos:[path1,path2]]" */
+function parseExtraPhotos(notes: string | null): string[] {
+  if (!notes) return []
+  const match = notes.match(/\[extra_photos:\[(.+?)\]/)
+  if (!match) return []
+  return match[1].split(",").map(s => s.trim()).filter(Boolean)
+}
+
+// ── Simple Lightbox ────────────────────────────────────────────────────────
 function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -71,7 +79,7 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
   )
 }
 
-// ── Receipt photos (checkin + transaction) ─────────────────────────────────
+// ── Photo Grid ────────────────────────────────────────────────────────────
 function PhotoGrid({ urls, label }: { urls: string[]; label: string }) {
   const [lightbox, setLightbox] = useState<string | null>(null)
   if (!urls.length) return null
@@ -101,7 +109,7 @@ function PhotoGrid({ urls, label }: { urls: string[]; label: string }) {
   )
 }
 
-// ── Main Page Component ────────────────────────────────────────────────────
+// ── Main Page Component ───────────────────────────────────────────────────
 export default function BookingDetailContent() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
@@ -201,22 +209,23 @@ export default function BookingDetailContent() {
   if (loading) return <div className="p-8 text-muted-foreground">Memuat...</div>
   if (error || !booking) return <div className="p-8 text-red-400">{error || "Booking tidak ditemukan."}</div>
 
-  const isPending      = booking.status === "pending_vendor"
-  const isConfirmed    = booking.status === "confirmed"
-  const isNeedTxReview = booking.status === "pending_completion"
+  const isPending         = booking.status === "pending_vendor"
+  const isConfirmed       = booking.status === "confirmed"
+  const isNeedTxReview    = booking.status === "pending_completion"
   const txPendingApproval = tx?.status === "pending_vendor_approval"
 
-  // Kumpulkan semua URL foto bukti kunjungan
+  // Foto bukti kunjungan (dari booking.receipt_url)
   const checkinPhotos: string[] = booking.receipt_url
     ? [resolveReceiptUrl(booking.receipt_url)]
     : []
 
-  // Foto receipt dari transaksi
-  const txPhotos: string[] = tx?.receipt_urls
-    ? (tx.receipt_urls as string[]).map(resolveReceiptUrl)
-    : tx?.receipt_url
-      ? [resolveReceiptUrl(tx.receipt_url)]
-      : []
+  // Foto receipt dari transaksi: receipt_image (utama) + extra_photos di receipt_notes
+  const txPhotos: string[] = tx
+    ? [
+        ...(tx.receipt_image ? [resolveReceiptUrl(tx.receipt_image)] : []),
+        ...parseExtraPhotos(tx.receipt_notes).map(resolveReceiptUrl),
+      ]
+    : []
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 py-6 px-4">
