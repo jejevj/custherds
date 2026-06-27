@@ -1,7 +1,7 @@
 # Custherds Backend API (FastAPI) — Development Progress
 
-> Last updated: 2026-06-21  
-> Last commit: [`799a1ab`](https://github.com/jejevj/custherds/commit/799a1ab89fa357b5de74d440086fc8b1a59d78f2) — feat: add Basic Auth protection for Swagger /docs and /redoc
+> Last updated: 2026-06-27  
+> Last commit: [`146df99`](https://github.com/jejevj/custherds/commit/146df992cbb395215c47395a8e0c23d18ee34e9c) — fix: gunakan Decimal di webhook_invoice untuk wallet_balance dan total_earnings
 
 ---
 
@@ -9,8 +9,7 @@
 
 ### 🏗️ Project Skeleton
 - [x] Init struktur folder FastAPI — `app/`, `alembic/`, `core/`, `db/`, `models/`, `schemas/`, `api/v1/endpoints/`
-  - Commit: [`84bf655`](https://github.com/jejevj/custherds/commit/84bf655ed3decf8af6e00736af3a409b9d01486a)
-- [x] `requirements.txt` — FastAPI, Uvicorn, SQLAlchemy, Alembic, Pydantic v2, python-jose, passlib, psycopg2
+- [x] `requirements.txt` — FastAPI, Uvicorn, SQLAlchemy, Alembic, Pydantic v2, python-jose, passlib, psycopg2, xendit-python
 - [x] `.env.example` — template variabel environment
 - [x] `.gitignore` — exclude `__pycache__`, `.env`, `venv/`
 - [x] `README.md` — panduan setup & quick start
@@ -21,71 +20,64 @@
 - [x] `core/deps.py` — `get_db()` dependency injection
 
 ### 🗄️ Database
-- [x] `db/base_class.py` — `Base` declarative class (dipisah untuk hindari circular import)
-- [x] `db/base.py` — import semua models untuk Alembic detection
+- [x] PostgreSQL running di `127.0.0.1:5432`, database `custherds`
+- [x] `db/base_class.py` — `Base` declarative class
 - [x] `db/session.py` — SQLAlchemy engine + `SessionLocal`
-- [x] `alembic/env.py` — konfigurasi Alembic dengan auto-detect model changes
+- [x] Alembic migration berjalan
 - [x] Fix circular import — semua model import `Base` dari `base_class.py`
-  - Commit: [`1fe0f57`](https://github.com/jejevj/custherds/commit/1fe0f57c682be4c50dc4d2b5d892274bbd9fd381)
 
 ### 🌐 API & Endpoints
-- [x] `GET /` — root status endpoint (service name, version, status)
+- [x] `GET /` — root status
 - [x] `GET /health` — uptime server
-- [x] `GET /api/v1/health` — health check detail + DB connectivity + latency
-  - Commit: [`740bfae`](https://github.com/jejevj/custherds/commit/740bfae89052933094b9044d13eb07868f0f9fa0)
+- [x] `GET /api/v1/health` — health check detail + DB latency
+- [x] Auth — login, register, refresh token, role-based (admin, vendor, guide, tourist)
+- [x] Users — CRUD
+- [x] Vendors — CRUD + profile
+- [x] Guides — CRUD + profile + wallet
+- [x] Bookings — create, list, detail, approve/reject vendor, cancel
+- [x] Transactions — create invoice Xendit, list, detail
+- [x] Payments — create invoice, VA, QR Code + semua webhook endpoint
+- [x] Guide Withdrawals — request, list, approve/reject admin, disbursement Xendit
+- [x] Uploads — upload file/gambar
+
+### 💳 Xendit Integration
+- [x] `POST /api/v1/payments/invoice` — buat invoice Xendit
+- [x] `POST /api/v1/payments/virtual-account` — buat VA
+- [x] `POST /api/v1/payments/qr-code` — buat QRIS
+- [x] `POST /api/v1/payments/webhook/invoice` — **WIRED ke DB**: settle TX, kredit wallet guide, booking → completed
+  - Fix Decimal/float TypeError — Commit: [`146df99`](https://github.com/jejevj/custherds/commit/146df992cbb395215c47395a8e0c23d18ee34e9c)
+- [x] `POST /api/v1/payments/webhook/disbursement` — **WIRED ke DB**: update status withdrawal, refund saldo jika failed
+- [x] Webhook lainnya (fva, ewallet, qr, payout, dll) — log only
 
 ### 📖 Swagger / API Docs
-- [x] Swagger UI tersedia di `/docs`
-- [x] ReDoc tersedia di `/redoc`
-- [x] Basic Auth protection untuk `/docs`, `/redoc`, `/openapi.json`
-  - Username: `admin`
-  - Password: di `.env` — `SWAGGER_PASSWORD`
-  - Commit: [`799a1ab`](https://github.com/jejevj/custherds/commit/799a1ab89fa357b5de74d440086fc8b1a59d78f2)
+- [x] Swagger UI — `/docs` (Basic Auth protected)
+- [x] ReDoc — `/redoc`
 
 ### 🚀 Deployment
 - [x] Systemd service `custherds-api.service` — auto-start on reboot
 - [x] Berjalan di port `3005`
 - [x] Domain: `https://api-custherds.ourtestcloud.my.id`
+- [x] Frontend: `https://partners-custherds.ourtestcloud.my.id`
+- [x] CORS configured: localhost:3000, partners domain, wildcard
 
 ---
 
-## 🔄 Sedang / Pending
+## 🔄 Diketahui / Perlu Perhatian
 
-- [ ] Setup database PostgreSQL & jalankan migrasi pertama (`alembic upgrade head`)
-- [ ] Finalisasi schema/model database (belum ditentukan)
-
----
-
-## 🗺️ Rencana Selanjutnya (To-Do)
-
-### Models & Schema
-- [ ] Diskusi & finalisasi entity/model yang dibutuhkan
-- [ ] Buat model SQLAlchemy di `app/models/`
-- [ ] Buat Pydantic schema di `app/schemas/`
-- [ ] Generate migrasi Alembic: `alembic revision --autogenerate -m "init"`
-
-### Authentication
-- [ ] Endpoint `POST /api/v1/auth/login` — return JWT
-- [ ] Endpoint `POST /api/v1/auth/register`
-- [ ] Endpoint `POST /api/v1/auth/refresh` — refresh token
-- [ ] Role-based access control (admin, vendor, guide, tourist)
-
-### Endpoints (setelah model final)
-- [ ] `/api/v1/users` — CRUD user
-- [ ] `/api/v1/vendors` — CRUD vendor
-- [ ] `/api/v1/guides` — CRUD guide
-- [ ] `/api/v1/products` — CRUD produk/layanan
-- [ ] `/api/v1/orders` — manajemen order
-- [ ] `/api/v1/destinations` — destinasi wisata
-- [ ] `/api/v1/reviews` — ulasan
+- [ ] Webhook `fva`, `ewallet`, `qr`, dll belum wired ke DB (log only)
+- [ ] Notifikasi real-time (WebSocket / push notification) belum ada
+- [ ] Unit test belum ada
+- [ ] Rate limiting belum dikonfigurasi
 
 ---
 
-## 📋 Commit Log
+## 📋 Commit Log (Terbaru)
 
-| Commit | Pesan |
-|--------|-------|
-| [`799a1ab`](https://github.com/jejevj/custherds/commit/799a1ab89fa357b5de74d440086fc8b1a59d78f2) | feat: add Basic Auth protection for Swagger |
-| [`740bfae`](https://github.com/jejevj/custherds/commit/740bfae89052933094b9044d13eb07868f0f9fa0) | refactor: strip unfinished models, keep skeleton + health check |
-| [`1fe0f57`](https://github.com/jejevj/custherds/commit/1fe0f57c682be4c50dc4d2b5d892274bbd9fd381) | fix: resolve circular import — separate Base class |
-| [`84bf655`](https://github.com/jejevj/custherds/commit/84bf655ed3decf8af6e00736af3a409b9d01486a) | feat: init FastAPI backend service with full project structure |
+| Commit | Tanggal | Pesan |
+|--------|---------|-------|
+| [`146df99`](https://github.com/jejevj/custherds/commit/146df992cbb395215c47395a8e0c23d18ee34e9c) | 2026-06-27 | fix: gunakan Decimal di webhook_invoice |
+| [`885a21a`](https://github.com/jejevj/custherds/commit/885a21a229794bf758304ceef072e0bc4987ed56) | 2026-06-27 | fix: webhook/invoice sekarang settle TX dan booking ke DB |
+| [`799a1ab`](https://github.com/jejevj/custherds/commit/799a1ab89fa357b5de74d440086fc8b1a59d78f2) | 2026-06-21 | feat: add Basic Auth protection for Swagger |
+| [`740bfae`](https://github.com/jejevj/custherds/commit/740bfae89052933094b9044d13eb07868f0f9fa0) | 2026-06-21 | refactor: strip unfinished models, keep skeleton + health check |
+| [`1fe0f57`](https://github.com/jejevj/custherds/commit/1fe0f57c682be4c50dc4d2b5d892274bbd9fd381) | 2026-06-21 | fix: resolve circular import |
+| [`84bf655`](https://github.com/jejevj/custherds/commit/84bf655ed3decf8af6e00736af3a409b9d01486a) | 2026-06-21 | feat: init FastAPI backend service |
