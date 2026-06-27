@@ -30,13 +30,11 @@ class BookingCancelRequest(BaseModel):
 
 
 class BookingCheckinRequest(BaseModel):
-    """Guide checkin saat tiba di lokasi. confirmed → pending_receipt."""
-    notes: Optional[str] = None            # catatan opsional saat checkin
+    """Vendor checkin guide yang datang. confirmed → pending_receipt."""
+    notes: Optional[str] = None
 
 
-class BookingReceiptUpload(BaseModel):
-    """Guide upload URL receipt/bukti kunjungan. pending_receipt → pending_completion."""
-    receipt_url: str                       # URL file yang sudah diupload via /uploads
+# BookingReceiptUpload dihapus — diganti submit-transaction (multipart form)
 
 
 class BookingResponse(BaseModel):
@@ -63,7 +61,7 @@ class BookingResponse(BaseModel):
 
     # Checkin & Receipt fields
     checkin_at: Optional[datetime]
-    receipt_url: Optional[str]
+    receipt_url: Optional[str]          # path API: /api/v1/uploads/<filename>
     receipt_uploaded_at: Optional[datetime]
     completed_at: Optional[datetime]
 

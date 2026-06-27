@@ -6,21 +6,14 @@ from pydantic import BaseModel, UUID4
 
 class TransactionCreate(BaseModel):
     """
-    Guide submit nota transaksi setelah kunjungan selesai.
-
-    Untuk package booking:
-      - gross_amount = subtotal_package + extra_amount
-      - extra_amount + extra_notes diisi jika ada tambahan di luar package
-
-    Untuk direct booking:
-      - gross_amount = total yang disepakati
-      - extra_amount = None
+    Dibuat internal oleh endpoint submit-transaction (multipart form).
+    Tidak dipakai langsung oleh client lagi — client kirim multipart.
     """
     booking_id: UUID4
     gross_amount: Decimal
     extra_amount: Optional[Decimal] = None
     extra_notes: Optional[str] = None
-    receipt_image: Optional[str] = None
+    receipt_image: Optional[str] = None    # path API /api/v1/uploads/<file>
     receipt_notes: Optional[str] = None
 
 
@@ -41,7 +34,7 @@ class TransactionResponse(BaseModel):
     gross_amount: Decimal
     extra_amount: Optional[Decimal]
     extra_notes: Optional[str]
-    receipt_image: Optional[str]
+    receipt_image: Optional[str]           # path API /api/v1/uploads/<file>
     receipt_notes: Optional[str]
     vendor_percent_snapshot: Decimal
     guide_percent_snapshot: Decimal

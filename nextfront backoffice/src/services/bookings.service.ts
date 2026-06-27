@@ -31,7 +31,7 @@ export interface Booking {
 
   // Checkin & Receipt flow
   checkin_at: string | null
-  receipt_url: string | null
+  receipt_url: string | null      // path API /api/v1/uploads/<filename> — serve via backend
   receipt_uploaded_at: string | null
   completed_at: string | null
 
@@ -62,15 +62,13 @@ export const bookingsService = {
   cancel: (id: string, reason: string) =>
     api.post<Booking>(`/bookings/${id}/cancel`, { reason }),
 
-  /** Guide checkin saat tiba di lokasi. confirmed → pending_receipt */
+  /** Vendor checkin guide yang datang. confirmed → pending_receipt */
   checkin: (id: string, notes?: string) =>
     api.post<Booking>(`/bookings/${id}/checkin`, { notes }),
 
-  /** Guide upload receipt/bukti kunjungan. pending_receipt → pending_completion */
-  uploadReceipt: (id: string, receipt_url: string) =>
-    api.post<Booking>(`/bookings/${id}/upload-receipt`, { receipt_url }),
-
-  /** Vendor konfirmasi selesai setelah cek receipt. pending_completion → completed */
+  /** Vendor konfirmasi selesai setelah transaksi di-approve. pending_completion → completed */
   complete: (id: string) =>
     api.post<Booking>(`/bookings/${id}/complete`, {}),
+
+  // uploadReceipt dihapus — diganti transactionsService.submitTransaction
 }

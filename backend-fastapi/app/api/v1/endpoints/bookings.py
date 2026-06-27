@@ -1,7 +1,7 @@
 import uuid
 from typing import Any, List, Optional
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.core.deps import get_current_user, require_user_type
@@ -10,14 +10,17 @@ from app.models.booking import Booking
 from app.models.guide import Guide
 from app.models.vendor import Vendor
 from app.models.package import Package
+from app.models.transaction import Transaction
+from app.models.revenue_split_config import RevenueSplitConfig
 from app.schemas.bookings import (
     BookingCreate,
     BookingResponse,
     BookingVendorAction,
     BookingCancelRequest,
     BookingCheckinRequest,
-    BookingReceiptUpload,
 )
+from app.schemas.transactions import TransactionResponse
+from app.api.v1.endpoints.uploads import _save_upload, ALLOWED_CONTENT_TYPES, MAX_SIZE_BYTES
 from datetime import datetime, timezone
 
 router = APIRouter()
@@ -28,6 +31,14 @@ def _generate_booking_code(db: Session) -> str:
     while True:
         code = "BK" + "".join(random.choices(string.digits, k=8))
         if not db.query(Booking).filter(Booking.booking_code == code).first():
+            return code
+
+
+def _generate_tx_code(db: Session) -> str:
+    import random, string
+    while True:
+        code = "TX" + "".join(random.choices(string.digits, k=10))
+        if not db.query(Transaction).filter(Transaction.transaction_code == code).first():
             return code
 
 
@@ -52,6 +63,13 @@ def _check_quota(
             400,
             f"Slot ini sudah penuh. Quota {quota_per_slot} booking untuk jadwal ini sudah terpenuhi."
         )
+
+
+def _get_active_split(db: Session) -> RevenueSplitConfig:
+    config = db.query(RevenueSplitConfig).filter(RevenueSplitConfig.is_active == True).first()  # noqa
+    if not config:
+        raise HTTPException(500, "Konfigurasi split revenue tidak ditemukan")
+    return config
 
 
 # ─────────────────────────────── CREATE BOOKING ────────────────────────────────
@@ -208,9 +226,8 @@ def vendor_checkin(
 ) -> Any:
     """
     Petugas vendor menerima guide yang datang dan meng-approve checkin.
-    Guide menunjukkan booking code / detail ke petugas, lalu petugas klik Checkin.
     Status: confirmed → pending_receipt
-    Setelah checkin, guide wajib upload receipt/bukti kunjungan.
+    Setelah checkin, guide wajib submit transaksi (upload file + nominal).
     """
     vendor = db.query(Vendor).filter(Vendor.user_id == current_user.id).first()
     if not vendor:
@@ -233,19 +250,32 @@ def vendor_checkin(
     return booking
 
 
-# ─────────────────────────────── GUIDE UPLOAD RECEIPT ──────────────────────────
+# ─────────────────────── GUIDE SUBMIT TRANSAKSI (file + nominal) ───────────────
 
-@router.post("/{booking_id}/upload-receipt", response_model=BookingResponse, summary="Guide upload bukti kunjungan (receipt)")
-def upload_receipt(
+@router.post(
+    "/{booking_id}/submit-transaction",
+    response_model=TransactionResponse,
+    status_code=201,
+    summary="Guide submit transaksi: upload bukti (file) + nominal. pending_receipt → pending_completion"
+)
+async def submit_transaction(
     booking_id: uuid.UUID,
-    payload: BookingReceiptUpload,
+    gross_amount: Decimal = Form(..., description="Total nominal transaksi"),
+    extra_amount: Optional[Decimal] = Form(None, description="Biaya tambahan di luar package (opsional)"),
+    extra_notes: Optional[str] = Form(None, description="Keterangan biaya tambahan"),
+    receipt_notes: Optional[str] = Form(None, description="Catatan tambahan bukti"),
+    receipt_file: UploadFile = File(..., description="File bukti kunjungan (jpg/png/webp/pdf, maks 5MB)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user_type(1)),
 ) -> Any:
     """
-    Guide mengupload URL receipt/bukti kunjungan setelah vendor checkin.
-    Status: pending_receipt → pending_completion
-    Vendor kemudian akan mengkonfirmasi dan mengubah status ke completed.
+    Guide mengupload file bukti kunjungan dan menginput nominal transaksi.
+    Backend:
+    1. Validasi file (tipe & ukuran)
+    2. Simpan file ke storage, hasilkan path API /api/v1/uploads/<filename>
+    3. Buat record Transaction dengan split otomatis
+    4. Update booking pending_receipt → pending_completion
+    5. Simpan receipt_url (path API) ke booking untuk referensi cepat
     """
     guide = db.query(Guide).filter(Guide.user_id == current_user.id).first()
     if not guide:
@@ -258,15 +288,70 @@ def upload_receipt(
     if not booking:
         raise HTTPException(404, "Booking tidak ditemukan")
     if booking.status != "pending_receipt":
-        raise HTTPException(400, f"Upload receipt hanya bisa dilakukan saat status 'pending_receipt'. Status saat ini: {booking.status}")
+        raise HTTPException(
+            400,
+            f"Submit transaksi hanya bisa saat status 'pending_receipt'. Status saat ini: {booking.status}"
+        )
+    if db.query(Transaction).filter(Transaction.booking_id == booking.id).first():
+        raise HTTPException(400, "Transaksi untuk booking ini sudah ada")
 
+    # ── Validasi & simpan file ──────────────────────────────────────────────────
+    if receipt_file.content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(415, f"Tipe file tidak diizinkan: {receipt_file.content_type}. Gunakan jpg/png/webp/pdf.")
+    content = await receipt_file.read()
+    if len(content) > MAX_SIZE_BYTES:
+        raise HTTPException(413, "File terlalu besar. Maksimal 5 MB.")
+    filename = _save_upload(content, receipt_file.filename or "receipt")
+    receipt_path = f"/api/v1/uploads/{filename}"  # path API — bukan URL eksternal
+
+    # ── Validasi gross_amount untuk package booking ─────────────────────────────
+    if booking.booking_type == "package" and booking.subtotal_package:
+        extra = extra_amount or Decimal("0")
+        expected_gross = booking.subtotal_package + extra
+        if gross_amount != expected_gross:
+            raise HTTPException(
+                400,
+                f"gross_amount tidak sesuai. Subtotal package: {booking.subtotal_package}, "
+                f"extra: {extra}, total seharusnya: {expected_gross}"
+            )
+
+    # ── Hitung split otomatis ───────────────────────────────────────────────────
+    split = _get_active_split(db)
+    gross = Decimal(str(gross_amount))
+    vendor_amount = (gross * Decimal(str(split.vendor_percent))   / 100).quantize(Decimal("0.01"))
+    guide_comm    = (gross * Decimal(str(split.guide_percent))    / 100).quantize(Decimal("0.01"))
+    platform_fee  = (gross * Decimal(str(split.platform_percent)) / 100).quantize(Decimal("0.01"))
+
+    # ── Buat Transaction ────────────────────────────────────────────────────────
+    tx = Transaction(
+        transaction_code=_generate_tx_code(db),
+        booking_id=booking.id,
+        vendor_id=booking.vendor_id,
+        guide_id=guide.id,
+        gross_amount=gross,
+        extra_amount=extra_amount,
+        extra_notes=extra_notes,
+        receipt_image=receipt_path,
+        receipt_notes=receipt_notes,
+        split_config_id=split.id,
+        vendor_percent_snapshot=split.vendor_percent,
+        guide_percent_snapshot=split.guide_percent,
+        platform_percent_snapshot=split.platform_percent,
+        vendor_amount=vendor_amount,
+        guide_commission=guide_comm,
+        platform_fee=platform_fee,
+        status="pending_vendor_approval",
+    )
+    db.add(tx)
+
+    # ── Update Booking ──────────────────────────────────────────────────────────
     booking.status = "pending_completion"
-    booking.receipt_url = payload.receipt_url
+    booking.receipt_url = receipt_path
     booking.receipt_uploaded_at = datetime.now(timezone.utc)
 
     db.commit()
-    db.refresh(booking)
-    return booking
+    db.refresh(tx)
+    return tx
 
 
 # ─────────────────────────────── VENDOR COMPLETE ───────────────────────────────
@@ -278,9 +363,8 @@ def complete_booking(
     current_user: User = Depends(require_user_type(2)),
 ) -> Any:
     """
-    Vendor mengkonfirmasi bahwa kunjungan sudah selesai setelah melihat receipt guide.
+    Vendor mengkonfirmasi bahwa kunjungan sudah selesai setelah approve transaksi.
     Status: pending_completion → completed
-    Setelah completed, transaksi/komisi bisa diproses.
     """
     vendor = db.query(Vendor).filter(Vendor.user_id == current_user.id).first()
     booking = db.query(Booking).filter(

@@ -1,6 +1,7 @@
 "use client"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { bookingsService, Booking } from "@/services/bookings.service"
+import { transactionsService, resolveReceiptUrl } from "@/services/transactions.service"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -10,7 +11,10 @@ import {
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { AlertTriangle, Upload, Eye, CalendarDays, Users, FileText, MapPin, CheckCircle2 } from "lucide-react"
+import {
+  AlertTriangle, Upload, Eye, CalendarDays, Users, FileText,
+  MapPin, CheckCircle2, ImageIcon, Receipt, DollarSign,
+} from "lucide-react"
 import { useTableSearch } from "@/hooks/useTableSearch"
 import { TableSearchInput } from "@/components/ui/TableSearchInput"
 
@@ -27,11 +31,18 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = 
 const STATUS_LABEL: Record<string, string> = {
   pending_vendor:     "Menunggu Approval",
   confirmed:          "Dikonfirmasi",
-  pending_receipt:    "Upload Receipt",
-  pending_completion: "Menunggu Konfirmasi",
+  pending_receipt:    "Submit Transaksi",
+  pending_completion: "Menunggu Konfirmasi Vendor",
   completed:          "Selesai",
   rejected:           "Ditolak",
   cancelled:          "Dibatalkan",
+}
+
+function formatRupiah(n?: number | string | null) {
+  if (n == null || n === "") return "-"
+  const num = Number(n)
+  if (isNaN(num)) return "-"
+  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num)
 }
 
 function Row({ icon, label, value, mono }: { icon?: React.ReactNode; label: string; value: string; mono?: boolean }) {
@@ -51,14 +62,22 @@ export default function GuideBookingsPage() {
 
   const { query, setQuery, filtered } = useTableSearch(bookings)
 
-  const [detailBook,    setDetailBook]    = useState<Booking | null>(null)
-  const [cancelTarget,  setCancelTarget]  = useState<string | null>(null)
-  const [cancelReason,  setCancelReason]  = useState("")
-  const [cancelError,   setCancelError]   = useState("")
-  const [receiptTarget, setReceiptTarget] = useState<string | null>(null)
-  const [receiptUrl,    setReceiptUrl]    = useState("")
-  const [receiptError,  setReceiptError]  = useState("")
-  const [viewReason,    setViewReason]    = useState<string | null>(null)
+  const [detailBook,   setDetailBook]   = useState<Booking | null>(null)
+  const [cancelTarget, setCancelTarget] = useState<string | null>(null)
+  const [cancelReason, setCancelReason] = useState("")
+  const [cancelError,  setCancelError]  = useState("")
+  const [viewReason,   setViewReason]   = useState<string | null>(null)
+
+  // Submit Transaksi state
+  const [txTarget,      setTxTarget]      = useState<Booking | null>(null)
+  const [txFile,        setTxFile]        = useState<File | null>(null)
+  const [txFilePreview, setTxFilePreview] = useState<string | null>(null)
+  const [txGross,       setTxGross]       = useState("")
+  const [txExtra,       setTxExtra]       = useState("")
+  const [txExtraNotes,  setTxExtraNotes]  = useState("")
+  const [txNotes,       setTxNotes]       = useState("")
+  const [txError,       setTxError]       = useState("")
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     bookingsService.list()
@@ -66,6 +85,58 @@ export default function GuideBookingsPage() {
       .catch(() => setError("Gagal memuat bookings."))
       .finally(() => setLoading(false))
   }, [])
+
+  const openTxDialog = (b: Booking) => {
+    setTxTarget(b)
+    setTxFile(null); setTxFilePreview(null)
+    setTxGross(b.subtotal_package ? String(Number(b.subtotal_package)) : "")
+    setTxExtra(""); setTxExtraNotes(""); setTxNotes(""); setTxError("")
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null
+    setTxFile(file)
+    setTxFilePreview(file ? URL.createObjectURL(file) : null)
+    setTxError("")
+  }
+
+  const submitTransaction = async () => {
+    if (!txTarget) return
+    if (!txFile)  { setTxError("File bukti kunjungan wajib diupload."); return }
+    const gross = parseFloat(txGross)
+    if (!txGross || isNaN(gross) || gross <= 0) { setTxError("Nominal transaksi wajib diisi dan harus > 0."); return }
+
+    // Untuk package: validasi gross = subtotal + extra
+    if (txTarget.booking_type === "package" && txTarget.subtotal_package) {
+      const extra = parseFloat(txExtra) || 0
+      const expected = Number(txTarget.subtotal_package) + extra
+      if (Math.abs(gross - expected) > 0.01) {
+        setTxError(`Nominal harus = subtotal package ${formatRupiah(txTarget.subtotal_package)} + extra ${formatRupiah(extra)} = ${formatRupiah(expected)}`)
+        return
+      }
+    }
+
+    setSubmitting(true)
+    try {
+      await transactionsService.submitTransaction(txTarget.id, {
+        receiptFile: txFile,
+        grossAmount: gross,
+        extraAmount: txExtra ? parseFloat(txExtra) : undefined,
+        extraNotes:  txExtraNotes || undefined,
+        receiptNotes: txNotes || undefined,
+      })
+      // Update booking status lokal
+      setBookings(prev => prev.map(b =>
+        b.id === txTarget.id ? { ...b, status: "pending_completion" } : b
+      ))
+      setTxTarget(null)
+    } catch (err: unknown) {
+      const detail = (err as { detail?: string })?.detail
+      setTxError(detail ?? "Gagal submit transaksi. Coba lagi.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   const submitCancel = async () => {
     if (!cancelTarget) return
@@ -81,17 +152,7 @@ export default function GuideBookingsPage() {
     finally { setSubmitting(false) }
   }
 
-  const submitReceipt = async () => {
-    if (!receiptTarget) return
-    if (!receiptUrl.trim()) { setReceiptError("URL receipt wajib diisi."); return }
-    setSubmitting(true)
-    try {
-      const updated = await bookingsService.uploadReceipt(receiptTarget, receiptUrl.trim())
-      setBookings(prev => prev.map(b => b.id === updated.id ? updated : b))
-      setReceiptTarget(null); setReceiptUrl("")
-    } catch { setReceiptError("Gagal upload receipt. Coba lagi.") }
-    finally { setSubmitting(false) }
-  }
+  const isPackage = txTarget?.booking_type === "package"
 
   return (
     <div className="space-y-6">
@@ -150,8 +211,8 @@ export default function GuideBookingsPage() {
                   <div className="flex gap-2 flex-wrap">
                     {b.status === "pending_receipt" && (
                       <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white"
-                        onClick={() => { setReceiptTarget(b.id); setReceiptUrl(""); setReceiptError("") }}>
-                        <Upload size={13} className="mr-1" /> Upload Receipt
+                        onClick={() => openTxDialog(b)}>
+                        <Receipt size={13} className="mr-1" /> Submit Transaksi
                       </Button>
                     )}
                     {["pending_vendor","confirmed","pending_receipt","pending_completion"].includes(b.status) && (
@@ -190,9 +251,20 @@ export default function GuideBookingsPage() {
                 <Row icon={<Users size={12}/>} label="Jumlah Pax" value={`${detailBook.pax_count} orang`} />
                 {detailBook.tourist_nationality && <Row label="Kewarganegaraan" value={detailBook.tourist_nationality} />}
                 {detailBook.checkin_at && <Row icon={<MapPin size={12}/>} label="Checkin" value={new Date(detailBook.checkin_at).toLocaleString("id-ID")} />}
-                {detailBook.receipt_uploaded_at && <Row icon={<Upload size={12}/>} label="Receipt diupload" value={new Date(detailBook.receipt_uploaded_at).toLocaleString("id-ID")} />}
+                {detailBook.receipt_uploaded_at && <Row icon={<Upload size={12}/>} label="Transaksi disubmit" value={new Date(detailBook.receipt_uploaded_at).toLocaleString("id-ID")} />}
                 {detailBook.completed_at && <Row icon={<CheckCircle2 size={12}/>} label="Selesai pada" value={new Date(detailBook.completed_at).toLocaleString("id-ID")} />}
               </div>
+              {detailBook.receipt_url && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2">
+                  <p className="text-xs text-muted-foreground mb-2">Bukti Kunjungan</p>
+                  <img
+                    src={resolveReceiptUrl(detailBook.receipt_url)}
+                    alt="Bukti kunjungan"
+                    className="rounded-md max-h-48 w-full object-contain bg-black/10"
+                    onError={e => { (e.target as HTMLImageElement).style.display='none' }}
+                  />
+                </div>
+              )}
               {detailBook.status === "confirmed" && (
                 <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3 text-sm">
                   <p className="font-medium text-blue-400 mb-1">📋 Instruksi Checkin</p>
@@ -227,37 +299,150 @@ export default function GuideBookingsPage() {
             <Button variant="outline" onClick={() => setDetailBook(null)}>Tutup</Button>
             {detailBook?.status === "pending_receipt" && (
               <Button className="bg-amber-500 hover:bg-amber-600 text-white"
-                onClick={() => { setReceiptTarget(detailBook.id); setReceiptUrl(""); setReceiptError(""); setDetailBook(null) }}>
-                <Upload size={14} className="mr-1" /> Upload Receipt
+                onClick={() => { openTxDialog(detailBook); setDetailBook(null) }}>
+                <Receipt size={14} className="mr-1" /> Submit Transaksi
               </Button>
             )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Upload Receipt */}
-      <Dialog open={!!receiptTarget} onOpenChange={open => { if (!open) setReceiptTarget(null) }}>
-        <DialogContent>
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><Upload className="w-5 h-5 text-amber-500" /> Upload Bukti Kunjungan</DialogTitle></DialogHeader>
-          <div className="py-2 space-y-3">
-            <p className="text-sm text-muted-foreground">Vendor sudah melakukan checkin. Upload URL file bukti kunjungan.</p>
-            <div className="space-y-1">
-              <Label htmlFor="receipt-url">URL Receipt <span className="text-red-500">*</span></Label>
-              <Input id="receipt-url" placeholder="https://..." value={receiptUrl}
-                onChange={e => { setReceiptUrl(e.target.value); setReceiptError("") }} />
+      {/* Submit Transaksi Dialog */}
+      <Dialog open={!!txTarget} onOpenChange={open => { if (!open) setTxTarget(null) }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="w-5 h-5 text-amber-500" /> Submit Transaksi
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+
+            {/* Info package */}
+            {isPackage && txTarget.subtotal_package && (
+              <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3 text-sm">
+                <p className="text-xs text-muted-foreground mb-1">Subtotal Package</p>
+                <p className="font-bold text-blue-400 text-base">{formatRupiah(txTarget.subtotal_package)}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {txTarget.pax_count} pax × {formatRupiah(txTarget.package_price_snapshot)}
+                  {" — Tambahkan extra di bawah jika ada biaya di luar package"}
+                </p>
+              </div>
+            )}
+
+            {/* File upload */}
+            <div className="space-y-2">
+              <Label>Bukti Kunjungan <span className="text-red-500">*</span></Label>
+              <div
+                className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-amber-400 transition-colors"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {txFilePreview ? (
+                  <img src={txFilePreview} alt="Preview" className="mx-auto max-h-40 rounded-md object-contain" />
+                ) : (
+                  <div className="text-muted-foreground">
+                    <ImageIcon className="mx-auto mb-2" size={28} />
+                    <p className="text-sm">Klik untuk pilih foto / PDF</p>
+                    <p className="text-xs mt-1">JPG, PNG, WebP, PDF — maks 5MB</p>
+                  </div>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              {txFile && (
+                <p className="text-xs text-muted-foreground">
+                  {txFile.name} ({(txFile.size / 1024 / 1024).toFixed(2)} MB)
+                  <button className="ml-2 text-red-400 hover:underline" onClick={() => { setTxFile(null); setTxFilePreview(null) }}>Hapus</button>
+                </p>
+              )}
             </div>
-            {receiptError && <p className="text-sm text-red-500">{receiptError}</p>}
+
+            {/* Nominal */}
+            <div className="space-y-1">
+              <Label htmlFor="tx-gross">Total Nominal Transaksi <span className="text-red-500">*</span></Label>
+              <div className="relative">
+                <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">Rp</span>
+                <Input
+                  id="tx-gross"
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  className="pl-9"
+                  value={txGross}
+                  onChange={e => { setTxGross(e.target.value); setTxError("") }}
+                  readOnly={isPackage && !txExtra}  /* package: otomatis dari subtotal+extra */
+                />
+              </div>
+              {isPackage && (
+                <p className="text-xs text-muted-foreground">Package: otomatis = subtotal + extra amount</p>
+              )}
+            </div>
+
+            {/* Extra amount (opsional) */}
+            <div className="space-y-1">
+              <Label htmlFor="tx-extra">Biaya Tambahan di Luar Package <span className="text-muted-foreground text-xs">(opsional)</span></Label>
+              <div className="relative">
+                <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">Rp</span>
+                <Input
+                  id="tx-extra"
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  className="pl-9"
+                  value={txExtra}
+                  onChange={e => {
+                    setTxExtra(e.target.value)
+                    setTxError("")
+                    // Auto-update gross untuk package
+                    if (isPackage && txTarget?.subtotal_package) {
+                      const extra = parseFloat(e.target.value) || 0
+                      setTxGross(String(Number(txTarget.subtotal_package) + extra))
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Extra notes */}
+            {txExtra && parseFloat(txExtra) > 0 && (
+              <div className="space-y-1">
+                <Label htmlFor="tx-extra-notes">Keterangan Biaya Tambahan</Label>
+                <Textarea id="tx-extra-notes" placeholder="Contoh: makan siang, tiket masuk ekstra..." rows={2}
+                  value={txExtraNotes} onChange={e => setTxExtraNotes(e.target.value)} />
+              </div>
+            )}
+
+            {/* Catatan */}
+            <div className="space-y-1">
+              <Label htmlFor="tx-notes">Catatan Tambahan <span className="text-muted-foreground text-xs">(opsional)</span></Label>
+              <Textarea id="tx-notes" placeholder="Catatan untuk vendor..." rows={2}
+                value={txNotes} onChange={e => setTxNotes(e.target.value)} />
+            </div>
+
+            {/* Total preview */}
+            {txGross && !isNaN(parseFloat(txGross)) && parseFloat(txGross) > 0 && (
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 flex justify-between items-center">
+                <span className="text-sm font-medium flex items-center gap-1"><DollarSign size={14} /> Total Transaksi</span>
+                <span className="text-lg font-bold text-emerald-400">{formatRupiah(txGross)}</span>
+              </div>
+            )}
+
+            {txError && <p className="text-sm text-red-500">{txError}</p>}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setReceiptTarget(null)} disabled={submitting}>Batal</Button>
-            <Button onClick={submitReceipt} disabled={submitting} className="bg-amber-500 hover:bg-amber-600 text-white">
-              <Upload size={14} className="mr-1" />{submitting ? "Mengupload..." : "Submit Receipt"}
+            <Button variant="outline" onClick={() => setTxTarget(null)} disabled={submitting}>Batal</Button>
+            <Button onClick={submitTransaction} disabled={submitting} className="bg-amber-500 hover:bg-amber-600 text-white">
+              <Receipt size={14} className="mr-1" />{submitting ? "Mengupload..." : "Submit Transaksi"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Cancel */}
+      {/* Cancel Dialog */}
       <Dialog open={!!cancelTarget} onOpenChange={open => { if (!open) setCancelTarget(null) }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Batalkan Booking</DialogTitle></DialogHeader>
