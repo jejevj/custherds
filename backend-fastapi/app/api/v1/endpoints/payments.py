@@ -8,6 +8,8 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.models.guide_withdrawal import GuideWithdrawal
 from app.models.guide import Guide
+from app.models.transaction import Transaction
+from app.models.booking import Booking
 import uuid
 import logging
 
@@ -227,17 +229,73 @@ async def create_qr_code(payload: CreateQRPayload):
 # WEBHOOK ROUTES
 # ===========================================================================
 
-@router.post("/webhook/invoice", summary="[Webhook] Xendit Invoice")
+@router.post("/webhook/invoice", summary="[Webhook] Xendit Invoice Paid — settle TX & booking")
 async def webhook_invoice(
     request: Request,
+    db: Session = Depends(get_db),
     x_callback_token: Optional[str] = Header(None),
 ):
+    """
+    Dipanggil Xendit saat invoice PAID.
+    Settle transaksi, kredit wallet guide, dan set booking → completed.
+    """
     _verify_webhook(x_callback_token)
     body = await request.json()
-    status = body.get("status", "UNKNOWN")
-    external_id = body.get("external_id")
-    paid_amount = body.get("paid_amount")
-    return {"status": "ok", "event": "invoice", "invoice_status": status, "external_id": external_id, "paid_amount": paid_amount}
+    logger.info(f"[Webhook/invoice] received: id={body.get('id')} status={body.get('status')} external_id={body.get('external_id')}")
+
+    status = body.get("status", "")
+    external_id: str = body.get("external_id", "")
+    xendit_invoice_id: str = body.get("id", "")
+
+    # Hanya proses jika PAID
+    if status != "PAID":
+        return {"status": "ok", "message": f"Status {status} diabaikan"}
+
+    # external_id harus format CUSTHERDS-TX-{tx_code}
+    if not external_id.startswith("CUSTHERDS-TX-"):
+        logger.warning(f"[Webhook/invoice] external_id tidak dikenali: {external_id}")
+        return {"status": "ok", "message": "external_id tidak dikenali"}
+
+    tx_code = external_id.replace("CUSTHERDS-TX-", "")
+    tx = db.query(Transaction).filter(Transaction.transaction_code == tx_code).first()
+    if not tx:
+        logger.error(f"[Webhook/invoice] Transaction tidak ditemukan: {tx_code}")
+        return {"status": "ok", "message": "Transaction tidak ditemukan"}
+
+    if tx.status == "settled":
+        return {"status": "ok", "message": "Sudah settled sebelumnya, skip"}
+
+    if tx.status != "payment_pending":
+        logger.warning(f"[Webhook/invoice] Status tidak expected: {tx.status}")
+        return {"status": "ok", "message": f"Status {tx.status} tidak bisa diproses"}
+
+    now = datetime.now(timezone.utc)
+
+    # 1. Settle transaksi
+    tx.status            = "settled"
+    tx.paid_at           = now
+    tx.settled_at        = now
+    tx.xendit_invoice_id = xendit_invoice_id
+
+    # 2. Kredit wallet guide
+    guide = db.query(Guide).filter(Guide.id == tx.guide_id).first()
+    if guide:
+        guide.wallet_balance = (guide.wallet_balance or 0) + float(tx.guide_commission)
+        guide.total_earnings = (guide.total_earnings or 0) + float(tx.guide_commission)
+        logger.info(f"[Webhook/invoice] Guide {guide.id} wallet +{tx.guide_commission}")
+
+    # 3. Booking → completed
+    booking = db.query(Booking).filter(Booking.id == tx.booking_id).first()
+    if booking:
+        booking.status       = "completed"
+        booking.completed_at = now
+        logger.info(f"[Webhook/invoice] Booking {booking.booking_code} → completed")
+
+    db.commit()
+    db.refresh(tx)
+
+    logger.info(f"[Webhook/invoice] TX {tx.transaction_code} settled via PAYG")
+    return {"status": "ok", "transaction_code": tx.transaction_code, "new_status": "settled"}
 
 
 @router.post("/webhook/fva", summary="[Webhook] Fixed Virtual Account")
