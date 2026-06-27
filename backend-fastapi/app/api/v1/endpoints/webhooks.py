@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.core.config import settings
 from app.models.transaction import Transaction
+from app.models.booking import Booking
 from app.models.guide import Guide
 from app.models.vendor import Vendor
 import logging
@@ -49,14 +50,12 @@ async def xendit_invoice_paid(
     body = await request.json()
     logger.info(f"Xendit webhook received: {body.get('id')} status={body.get('status')}")
 
-    # Xendit kirim status PAID
     if body.get("status") != "PAID":
         return {"message": "Status bukan PAID, diabaikan"}
 
     external_id: str = body.get("external_id", "")
     xendit_invoice_id: str = body.get("id", "")
 
-    # external_id format: CUSTHERDS-TX-{transaction_code}
     if not external_id.startswith("CUSTHERDS-TX-"):
         logger.warning(f"external_id tidak dikenali: {external_id}")
         return {"message": "external_id tidak dikenali"}
@@ -74,18 +73,29 @@ async def xendit_invoice_paid(
         logger.warning(f"Status tidak expected: {tx.status}")
         return {"message": f"Status tidak bisa diproses: {tx.status}"}
 
-    # Update transaction → settled
+    now = datetime.now(timezone.utc)
+
+    # ── Update transaction → settled ──────────────────────────────────────
     tx.status = "settled"
-    tx.paid_at = datetime.now(timezone.utc)
-    tx.settled_at = datetime.now(timezone.utc)
+    tx.paid_at = now
+    tx.settled_at = now
     tx.xendit_invoice_id = xendit_invoice_id
 
-    # Kreditkan komisi ke wallet guide
+    # ── Kreditkan komisi ke wallet guide ─────────────────────────────────
     guide = db.query(Guide).filter(Guide.id == tx.guide_id).first()
     if guide:
         guide.wallet_balance += tx.guide_commission
         guide.total_earnings += tx.guide_commission
         logger.info(f"Guide {guide.id} wallet +{tx.guide_commission}")
+
+    # ── Update booking → completed ────────────────────────────────────────
+    booking = db.query(Booking).filter(Booking.id == tx.booking_id).first()
+    if booking:
+        booking.status = "completed"
+        booking.completed_at = now
+        logger.info(f"Booking {booking.booking_code} → completed (via PAYG webhook)")
+    else:
+        logger.warning(f"Booking tidak ditemukan untuk tx {tx.transaction_code}")
 
     db.commit()
     logger.info(f"Transaction {tx.transaction_code} settled via Xendit pay-as-you-go")
@@ -103,7 +113,7 @@ async def xendit_invoice_expired(
     db: Session = Depends(get_db),
     x_callback_token: str = Header("", alias="x-callback-token"),
 ) -> Any:
-    """Jika invoice expired (tidak dibayar dalam 24 jam), kembalikan status ke pending_vendor_approval."""
+    """Jika invoice expired (tidak dibayar dalam batas waktu), kembalikan status ke pending_vendor_approval."""
     _verify_xendit_token(x_callback_token)
 
     body = await request.json()
