@@ -15,7 +15,7 @@ import {
   ArrowLeft, FileText, CalendarDays, Users, Package, MapPin,
   Upload, Receipt, Clock, Banknote, TrendingUp, ImageIcon,
   Image as ImageIcon2, CheckCircle2, AlertTriangle,
-  ChevronLeft, ChevronRight, ZoomIn, ZoomOut, X, Plus,
+  ChevronLeft, ChevronRight, ZoomIn, ZoomOut, X, Plus, AlertCircle,
 } from "lucide-react"
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
@@ -74,6 +74,38 @@ function InfoRow({ icon, label, value, mono, highlight }: {
     <div className="flex justify-between items-start px-3 py-2 gap-4">
       <span className="text-muted-foreground flex items-center gap-1.5 shrink-0 text-xs">{icon}{label}</span>
       <span className={valClass}>{value}</span>
+    </div>
+  )
+}
+
+// ── Attempt Badge ─────────────────────────────────────────────────────────────
+function TxAttemptBanner({ attempt, max }: { attempt: number; max: number }) {
+  if (attempt === 0) return null
+  const remaining = max - attempt
+  const isLast    = remaining === 1
+  const isFinal   = remaining <= 0
+  return (
+    <div className={`rounded-xl border px-4 py-3 text-sm flex items-start gap-3 ${
+      isFinal ? "border-red-500/40 bg-red-500/10"
+      : isLast ? "border-orange-500/40 bg-orange-500/10"
+      : "border-yellow-500/30 bg-yellow-500/5"
+    }`}>
+      <AlertCircle size={16} className={`shrink-0 mt-0.5 ${
+        isFinal ? "text-red-400" : isLast ? "text-orange-400" : "text-yellow-400"
+      }`} />
+      <div>
+        <p className={`font-semibold ${
+          isFinal ? "text-red-400" : isLast ? "text-orange-400" : "text-yellow-400"
+        }`}>
+          Percobaan {attempt} dari {max}
+        </p>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {isFinal
+            ? "Transaksi sudah ditolak 3x. Booking ini telah ditutup."
+            : `Transaksi kamu ditolak vendor. Kamu masih bisa submit ulang ${remaining}x lagi.`
+          }
+        </p>
+      </div>
     </div>
   )
 }
@@ -227,7 +259,7 @@ export default function GuideBookingDetailContent() {
         extraNotes: txExtraNotes || undefined,
         receiptNotes: txNotes || undefined,
       })
-      setBooking(prev => prev ? { ...prev, status: "pending_completion" } : prev)
+      await fetchData()
       setShowTxForm(false)
     } catch (err: unknown) {
       setTxError((err as { detail?: string })?.detail ?? "Gagal submit transaksi. Coba lagi.")
@@ -264,6 +296,12 @@ export default function GuideBookingDetailContent() {
     ? { label: "Estimasi Komisi", value: formatRupiah(booking.estimated_commission), real: false }
     : null
 
+  // Info percobaan revisi
+  const txAttempt    = booking.tx_attempt ?? 0
+  const txAttemptMax = booking.tx_attempt_max ?? 3
+  // Apakah booking ini rejected karena 3x gagal (bukan rejection booking biasa)
+  const isRejectedByTx = booking.status === "rejected" && txAttempt >= txAttemptMax
+
   return (
     <div className="space-y-6">
       {lightboxImages.length > 0 && (
@@ -288,6 +326,9 @@ export default function GuideBookingDetailContent() {
           {STATUS_LABEL[booking.status] ?? booking.status}
         </Badge>
       </div>
+
+      {/* Banner percobaan revisi — tampil jika sudah pernah ditolak */}
+      <TxAttemptBanner attempt={txAttempt} max={txAttemptMax} />
 
       {/* Content Grid */}
       <div className={`grid gap-6 ${ showTxPanel ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1" }`}>
@@ -314,7 +355,7 @@ export default function GuideBookingDetailContent() {
             )}
           </div>
 
-          {/* Komisi card — estimasi atau real */}
+          {/* Komisi card */}
           {komisiBadge && !showTxPanel && (
             <div className={`rounded-xl border px-4 py-3 ${
               komisiBadge.real
@@ -345,6 +386,20 @@ export default function GuideBookingDetailContent() {
             </div>
           )}
 
+          {/* Tx ditolak — bisa submit ulang */}
+          {booking.status === "pending_receipt" && txAttempt > 0 && (
+            <div className="rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3 text-sm flex items-start gap-2">
+              <AlertTriangle size={14} className="text-orange-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="font-medium text-orange-400">Transaksi Ditolak Vendor</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Silakan submit ulang transaksi dengan bukti yang lebih jelas.
+                  Sisa percobaan: <span className="font-semibold text-orange-300">{txAttemptMax - txAttempt}x</span>
+                </p>
+              </div>
+            </div>
+          )}
+
           {booking.status === "pending_completion" && (
             <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm flex items-start gap-2">
               <Clock size={14} className="text-amber-400 mt-0.5 shrink-0" />
@@ -355,12 +410,27 @@ export default function GuideBookingDetailContent() {
             </div>
           )}
 
-          {booking.status === "rejected" && booking.vendor_rejection_reason && (
+          {/* Rejected karena 3x gagal */}
+          {isRejectedByTx && (
+            <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm">
+              <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                <AlertCircle size={11} /> Booking Ditutup
+              </p>
+              <p className="text-red-400 font-medium">Transaksi ditolak 3x oleh vendor.</p>
+              {booking.vendor_rejection_reason && (
+                <p className="text-xs text-muted-foreground mt-1">{booking.vendor_rejection_reason}</p>
+              )}
+            </div>
+          )}
+
+          {/* Rejected biasa (bukan karena tx) */}
+          {booking.status === "rejected" && !isRejectedByTx && booking.vendor_rejection_reason && (
             <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm">
               <p className="text-xs text-muted-foreground mb-1">Alasan Penolakan</p>
               <p className="text-red-400">{booking.vendor_rejection_reason}</p>
             </div>
           )}
+
           {booking.status === "cancelled" && booking.cancelled_reason && (
             <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 px-4 py-3 text-sm">
               <p className="text-xs text-muted-foreground mb-1">Alasan Pembatalan</p>
@@ -377,7 +447,8 @@ export default function GuideBookingDetailContent() {
           <div className="flex gap-3 flex-wrap">
             {booking.status === "pending_receipt" && (
               <Button className="bg-amber-500 hover:bg-amber-600 text-white" onClick={openTxForm}>
-                <Receipt size={14} className="mr-1" /> Submit Transaksi
+                <Receipt size={14} className="mr-1" />
+                {txAttempt > 0 ? `Submit Ulang (${txAttemptMax - txAttempt}x tersisa)` : "Submit Transaksi"}
               </Button>
             )}
             {canCancel(booking) && (
@@ -468,10 +539,24 @@ export default function GuideBookingDetailContent() {
         <DialogContent className="sm:max-w-[700px] w-full p-0 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b bg-card">
             <h5 className="text-lg font-semibold flex items-center gap-2">
-              <Receipt className="w-5 h-5 text-amber-500" /> Submit Transaksi
+              <Receipt className="w-5 h-5 text-amber-500" />
+              {txAttempt > 0 ? `Submit Ulang Transaksi (Percobaan ${txAttempt + 1}/${txAttemptMax})` : "Submit Transaksi"}
             </h5>
           </div>
           <div className="px-6 py-5 space-y-5 overflow-y-auto" style={{ maxHeight: "calc(100vh - 200px)" }}>
+            {txAttempt > 0 && (
+              <div className="rounded-lg border border-orange-500/30 bg-orange-500/5 px-4 py-3 text-sm flex items-start gap-2">
+                <AlertTriangle size={14} className="text-orange-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium text-orange-400">Transaksi sebelumnya ditolak</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Pastikan foto bukti kunjungan jelas dan nominal sesuai.
+                    Percobaan tersisa: <span className="font-semibold">{txAttemptMax - txAttempt}x</span>
+                  </p>
+                </div>
+              </div>
+            )}
+
             {isPackage && booking?.subtotal_package && (
               <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3 text-sm">
                 <p className="text-xs text-muted-foreground mb-1">Subtotal Package</p>
