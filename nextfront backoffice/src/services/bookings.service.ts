@@ -41,6 +41,14 @@ export interface Booking {
   receipt_uploaded_at: string | null
   completed_at: string | null
 
+  /**
+   * Jumlah percobaan submit transaksi yang sudah ditolak vendor.
+   * Maksimal TX_MAX_ATTEMPT (3x). Jika sudah 3x → booking status = "rejected".
+   */
+  tx_attempt: number
+  /** Batas maksimal percobaan (selalu 3, dari backend). */
+  tx_attempt_max: number
+
   created_at: string
   updated_at: string
 }
