@@ -93,12 +93,18 @@ function Lightbox({ images, initialIndex, onClose }: { images: string[]; initial
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft") prev()
-      if (e.key === "ArrowRight") next()
-      if (e.key === "Escape") onClose()
+      if (e.key === "ArrowLeft") { e.stopPropagation(); prev() }
+      if (e.key === "ArrowRight") { e.stopPropagation(); next() }
+      if (e.key === "Escape") {
+        // Intercept Esc sebelum sampai ke Radix Dialog di belakang Lightbox
+        e.stopPropagation()
+        e.preventDefault()
+        onClose()
+      }
     }
-    window.addEventListener("keydown", h)
-    return () => window.removeEventListener("keydown", h)
+    // useCapture: true — tangkap di fase capture sebelum Radix punya kesempatan
+    window.addEventListener("keydown", h, true)
+    return () => window.removeEventListener("keydown", h, true)
   }, [prev, next, onClose])
 
   return (
@@ -228,7 +234,6 @@ export default function GuideBookingsPage() {
     }
     setSubmitting(true)
     try {
-      // Kirim SEMUA file sekaligus — backend handle split foto utama vs extra
       await transactionsService.submitTransaction(txTarget.id, {
         receiptFiles: txFiles.map(fp => fp.file),
         grossAmount: grossNum,
