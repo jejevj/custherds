@@ -17,7 +17,7 @@ from app.schemas.transactions import (
     TransactionVendorApprove, TransactionVendorReject,
     TransactionInvoiceResponse,
 )
-from app.services.xendit import create_invoice
+from app.services.xendit import create_invoice, create_disbursement
 from typing import Optional
 
 router = APIRouter()
@@ -43,6 +43,45 @@ def _get_active_split(db: Session) -> RevenueSplitConfig:
     if not config:
         raise HTTPException(500, "Konfigurasi split revenue tidak ditemukan")
     return config
+
+
+import logging
+logger = logging.getLogger(__name__)
+
+
+async def _disburse_guide_commission(tx: Transaction, db: Session) -> None:
+    """
+    Kirim komisi guide ke rekening via Xendit Disbursement.
+    Dipanggil setelah transaksi settled. Jika gagal, komisi tetap di wallet_balance.
+    """
+    guide = db.query(Guide).filter(Guide.id == tx.guide_id).first()
+    if not guide:
+        return
+
+    if not all([guide.bank_name, guide.bank_account_number, guide.bank_account_name]):
+        logger.info(
+            f"[Disbursement] Guide {guide.id} belum lengkap data bank — "
+            f"komisi Rp {tx.guide_commission} tetap di wallet_balance"
+        )
+        return
+
+    external_id = f"CUSTHERDS-COMM-{tx.transaction_code}"
+    description = f"Komisi Guide | Booking {tx.booking_id} | Transaksi {tx.transaction_code}"
+
+    try:
+        result = await create_disbursement(
+            external_id=external_id,
+            bank_code=guide.bank_name,
+            account_number=guide.bank_account_number,
+            account_holder_name=guide.bank_account_name,
+            amount=float(tx.guide_commission),
+            description=description,
+        )
+        xendit_disb_id = result.get("id", "")
+        logger.info(f"[Disbursement] Berhasil | guide={guide.id} | amount={tx.guide_commission} | xendit_id={xendit_disb_id}")
+        tx.xendit_disbursement_id = xendit_disb_id
+    except Exception as e:
+        logger.error(f"[Disbursement] GAGAL | guide={guide.id} | tx={tx.transaction_code} | error={str(e)}")
 
 
 @router.post("", response_model=TransactionResponse, status_code=201, summary="Guide submit nota transaksi")
@@ -136,10 +175,6 @@ def get_transaction_by_booking(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Any:
-    """
-    Mengembalikan transaksi AKTIF (pending_vendor_approval / payment_pending / settled)
-    untuk booking tertentu. Transaksi yang sudah rejected tidak dikembalikan.
-    """
     tx = db.query(Transaction).filter(
         Transaction.booking_id == booking_id,
         Transaction.status.notin_(["rejected"]),
@@ -175,9 +210,6 @@ async def vendor_approve_transaction(
     if tx.status != "pending_vendor_approval":
         raise HTTPException(400, f"Transaksi tidak bisa diproses, status saat ini: {tx.status}")
 
-    # Tagihan ke vendor = Komisi Guide + Fee Platform
-    # (vendor sudah menerima 100% gross dari tamu di lapangan,
-    #  yang harus dibayarkan ke platform hanya bagian non-vendor)
     tagihan = tx.guide_commission + tx.platform_fee
 
     if payload.payment_method == "deposit":
@@ -189,27 +221,37 @@ async def vendor_approve_transaction(
                 f"Tagihan (Komisi Guide + Fee Platform): {_fmt_rp(tagihan)}"
             )
         vendor.deposit_balance -= tagihan
-        tx.status = "settled"
-        tx.payment_method = "deposit"
-        tx.paid_at = datetime.now(timezone.utc)
-        tx.settled_at = datetime.now(timezone.utc)
-        tx.vendor_reviewed_at = datetime.now(timezone.utc)
+        tx.status              = "settled"
+        tx.payment_method      = "deposit"
+        tx.paid_at             = datetime.now(timezone.utc)
+        tx.settled_at          = datetime.now(timezone.utc)
+        tx.vendor_reviewed_at  = datetime.now(timezone.utc)
+
+        # Kredit wallet guide
         guide = db.query(Guide).filter(Guide.id == tx.guide_id).first()
         if guide:
-            guide.wallet_balance += tx.guide_commission
-            guide.total_earnings += tx.guide_commission
+            guide.wallet_balance  += tx.guide_commission
+            guide.total_earnings  += tx.guide_commission
+
+        # Selesaikan booking
         booking = db.query(Booking).filter(Booking.id == tx.booking_id).first()
         if booking:
-            booking.status = "completed"
+            booking.status       = "completed"
             booking.completed_at = datetime.now(timezone.utc)
+
         db.commit()
         db.refresh(tx)
+
+        # Disbursement komisi ke rekening guide
+        await _disburse_guide_commission(tx, db)
+        db.commit()
+
         return TransactionInvoiceResponse(
             transaction=tx,
             payment_method="deposit",
             invoice_url=None,
             xendit_invoice_id=None,
-            message="Pembayaran via deposit berhasil. Transaksi settled.",
+            message="Pembayaran via deposit berhasil. Komisi guide sedang diproses ke rekening.",
         )
 
     elif payload.payment_method == "pay_as_you_go":
@@ -228,11 +270,12 @@ async def vendor_approve_transaction(
             )
         except Exception as e:
             raise HTTPException(502, f"Gagal membuat invoice Xendit: {str(e)}")
-        tx.status = "payment_pending"
-        tx.payment_method = "pay_as_you_go"
-        tx.xendit_invoice_id = xendit_response.get("id")
-        tx.xendit_invoice_url = xendit_response.get("invoice_url")
-        tx.vendor_reviewed_at = datetime.now(timezone.utc)
+
+        tx.status              = "payment_pending"
+        tx.payment_method      = "pay_as_you_go"
+        tx.xendit_invoice_id   = xendit_response.get("id")
+        tx.xendit_invoice_url  = xendit_response.get("invoice_url")
+        tx.vendor_reviewed_at  = datetime.now(timezone.utc)
         db.commit()
         db.refresh(tx)
         return TransactionInvoiceResponse(
