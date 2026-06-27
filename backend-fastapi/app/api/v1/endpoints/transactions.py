@@ -22,6 +22,8 @@ from typing import Optional
 
 router = APIRouter()
 
+TX_MAX_ATTEMPT = 3
+
 
 def _generate_tx_code(db: Session) -> str:
     import random, string
@@ -51,10 +53,16 @@ def create_transaction(
     booking = db.query(Booking).filter(Booking.id == payload.booking_id, Booking.guide_id == guide.id).first()
     if not booking:
         raise HTTPException(404, "Booking tidak ditemukan")
-    if booking.status != "confirmed":
-        raise HTTPException(400, f"Booking belum confirmed, status: {booking.status}")
-    if db.query(Transaction).filter(Transaction.booking_id == booking.id).first():
-        raise HTTPException(400, "Transaksi untuk booking ini sudah ada")
+    if booking.status != "pending_receipt":
+        raise HTTPException(400, f"Booking belum siap submit transaksi, status: {booking.status}")
+
+    # Cek apakah masih ada tx aktif (pending_vendor_approval) untuk booking ini
+    existing_active_tx = db.query(Transaction).filter(
+        Transaction.booking_id == booking.id,
+        Transaction.status == "pending_vendor_approval",
+    ).first()
+    if existing_active_tx:
+        raise HTTPException(400, "Sudah ada transaksi aktif menunggu approval vendor.")
 
     # Validasi gross_amount untuk package booking
     if booking.booking_type == "package" and booking.subtotal_package:
@@ -93,8 +101,8 @@ def create_transaction(
         status="pending_vendor_approval",
     )
     db.add(tx)
-    # Update booking status ke completed
-    booking.status = "completed"
+    booking.status = "pending_completion"
+    booking.receipt_uploaded_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(tx)
     return tx
@@ -117,6 +125,25 @@ def list_transactions(
     if status:
         q = q.filter(Transaction.status == status)
     return q.order_by(Transaction.created_at.desc()).all()
+
+
+@router.get("/by-booking/{booking_id}", response_model=TransactionResponse, summary="Ambil transaksi aktif berdasarkan booking")
+def get_transaction_by_booking(
+    booking_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """
+    Mengembalikan transaksi AKTIF (pending_vendor_approval / payment_pending / settled)
+    untuk booking tertentu. Transaksi yang sudah rejected tidak dikembalikan.
+    """
+    tx = db.query(Transaction).filter(
+        Transaction.booking_id == booking_id,
+        Transaction.status.notin_(["rejected"]),
+    ).order_by(Transaction.created_at.desc()).first()
+    if not tx:
+        raise HTTPException(404, "Transaksi aktif tidak ditemukan untuk booking ini")
+    return tx
 
 
 @router.get("/{tx_id}", response_model=TransactionResponse, summary="Detail transaksi")
@@ -161,6 +188,10 @@ async def vendor_approve_transaction(
         if guide:
             guide.wallet_balance += tx.guide_commission
             guide.total_earnings += tx.guide_commission
+        booking = db.query(Booking).filter(Booking.id == tx.booking_id).first()
+        if booking:
+            booking.status = "completed"
+            booking.completed_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(tx)
         return TransactionInvoiceResponse(
@@ -215,13 +246,27 @@ def vendor_reject_transaction(
         raise HTTPException(404, "Transaksi tidak ditemukan")
     if tx.status != "pending_vendor_approval":
         raise HTTPException(400, f"Status tidak bisa diproses: {tx.status}")
+
+    # Reject tx ini
     tx.status = "rejected"
     tx.vendor_rejection_reason = payload.reason
     tx.vendor_reviewed_at = datetime.now(timezone.utc)
-    # Kembalikan booking ke confirmed agar guide bisa resubmit
+
+    # Update booking: increment tx_attempt
     booking = db.query(Booking).filter(Booking.id == tx.booking_id).first()
     if booking:
-        booking.status = "confirmed"
+        booking.tx_attempt = (booking.tx_attempt or 0) + 1
+        if booking.tx_attempt >= TX_MAX_ATTEMPT:
+            # Sudah 3x ditolak — booking rejected final
+            booking.status = "rejected"
+            booking.vendor_rejection_reason = (
+                f"Transaksi ditolak {TX_MAX_ATTEMPT}x oleh vendor. "
+                f"Alasan terakhir: {payload.reason}"
+            )
+        else:
+            # Masih bisa revisi — kembalikan ke pending_receipt
+            booking.status = "pending_receipt"
+
     db.commit()
     db.refresh(tx)
     return tx
