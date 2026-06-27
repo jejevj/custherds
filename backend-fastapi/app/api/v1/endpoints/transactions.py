@@ -25,6 +25,11 @@ router = APIRouter()
 TX_MAX_ATTEMPT = 3
 
 
+def _fmt_rp(amount: Decimal) -> str:
+    """Format Decimal ke string Rupiah, misal: Rp 2.200.000"""
+    return f"Rp {int(amount):,}".replace(",", ".")
+
+
 def _generate_tx_code(db: Session) -> str:
     import random, string
     while True:
@@ -180,8 +185,8 @@ async def vendor_approve_transaction(
             raise HTTPException(
                 400,
                 f"Saldo deposit tidak cukup. "
-                f"Saldo: {vendor.deposit_balance}, "
-                f"Tagihan (Komisi Guide + Fee Platform): {tagihan}"
+                f"Saldo: {_fmt_rp(vendor.deposit_balance)}, "
+                f"Tagihan (Komisi Guide + Fee Platform): {_fmt_rp(tagihan)}"
             )
         vendor.deposit_balance -= tagihan
         tx.status = "settled"
@@ -217,7 +222,7 @@ async def vendor_approve_transaction(
         try:
             xendit_response = await create_invoice(
                 external_id=external_id,
-                amount=float(tagihan),   # ✅ hanya komisi guide + fee platform
+                amount=float(tagihan),
                 payer_email=vendor_user.user_email if vendor_user else "vendor@custherds.com",
                 description=description,
             )
