@@ -14,7 +14,10 @@ from app.schemas.vendors import (
     VendorSubmitRequest,
     VendorDepositInfo,
     VendorPublic,
+    VendorDetail,
+    PackagePublic,
 )
+import uuid
 
 router = APIRouter()
 
@@ -102,7 +105,6 @@ def browse_vendors(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Any:
-    # Ambil guide_percent dari split config aktif
     split = db.query(RevenueSplitConfig).filter(RevenueSplitConfig.is_active == True).first()  # noqa
     guide_pct = float(split.guide_percent) if split else 0.0
 
@@ -122,12 +124,10 @@ def browse_vendors(
     for v in vendors:
         active_pkgs = [p for p in v.packages if p.is_active]
         package_count = len(active_pkgs)
-        # Komisi tertinggi = max(price_per_pax) * guide_pct / 100
         max_commission: Optional[float] = None
         if active_pkgs:
             max_price = max(float(p.price_per_pax) for p in active_pkgs)
             max_commission = round(max_price * guide_pct / 100, 2)
-        # Cover photo = foto pertama dari package pertama
         cover = None
         for p in active_pkgs:
             if p.photo_urls:
@@ -152,7 +152,6 @@ def browse_vendors(
         )
         result.append(item)
 
-    # Sorting
     if sort == "commission_desc":
         result.sort(key=lambda x: x.max_commission_per_pax or 0, reverse=True)
     elif sort == "packages_desc":
@@ -161,3 +160,71 @@ def browse_vendors(
         result.sort(key=lambda x: x.vendor_business_name)
 
     return result[skip:skip + limit]
+
+
+@router.get(
+    "/browse/{vendor_id}",
+    response_model=VendorDetail,
+    summary="Detail vendor + daftar paket (Guide)",
+    tags=["Vendors – Browse"],
+)
+def get_vendor_detail(
+    vendor_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """
+    Mengembalikan detail lengkap vendor berikut semua paket aktifnya.
+    Tersedia untuk semua user yang sudah login (guide, vendor, admin).
+    Komisi per pax dihitung dari split config aktif.
+    """
+    vendor = db.query(Vendor).filter(
+        Vendor.id == vendor_id,
+        Vendor.vendor_status == "approved",
+    ).first()
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor tidak ditemukan atau belum disetujui")
+
+    split = db.query(RevenueSplitConfig).filter(RevenueSplitConfig.is_active == True).first()  # noqa
+    guide_pct = float(split.guide_percent) if split else 0.0
+
+    active_pkgs = [p for p in vendor.packages if p.is_active]
+
+    cover = None
+    for p in active_pkgs:
+        if p.photo_urls:
+            cover = p.photo_urls[0]
+            break
+
+    packages_out = []
+    for p in active_pkgs:
+        commission = round(float(p.price_per_pax) * guide_pct / 100, 2)
+        packages_out.append(PackagePublic(
+            id=p.id,
+            package_name=p.package_name,
+            package_description=p.package_description,
+            price_per_pax=p.price_per_pax,
+            min_pax=p.min_pax,
+            max_pax=p.max_pax,
+            duration_hours=p.duration_hours,
+            photo_urls=p.photo_urls,
+            is_active=p.is_active,
+            guide_commission_per_pax=commission,
+        ))
+
+    return VendorDetail(
+        id=vendor.id,
+        vendor_business_name=vendor.vendor_business_name,
+        vendor_category=vendor.vendor_category,
+        vendor_area=vendor.vendor_area,
+        vendor_location=vendor.vendor_location,
+        vendor_contact_person=vendor.vendor_contact_person,
+        vendor_short_description=vendor.vendor_short_description,
+        vendor_opening_hours=vendor.vendor_opening_hours,
+        vendor_min_spend=vendor.vendor_min_spend,
+        vendor_cashback_percent=vendor.vendor_cashback_percent,
+        vendor_website=vendor.vendor_website,
+        allow_direct_booking=vendor.allow_direct_booking,
+        cover_photo=cover,
+        packages=packages_out,
+    )

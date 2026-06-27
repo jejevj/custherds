@@ -61,7 +61,7 @@ class VendorDepositInfo(BaseModel):
 
 
 class VendorPublic(BaseModel):
-    """Public vendor info visible to guides."""
+    """Public vendor info visible to guides — list view."""
     id: uuid.UUID
     vendor_business_name: str
     vendor_category: int
@@ -77,6 +77,45 @@ class VendorPublic(BaseModel):
     package_count: int = 0
     max_commission_per_pax: Optional[float] = None
     cover_photo: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class PackagePublic(BaseModel):
+    """Package info shown inside vendor detail page."""
+    id: uuid.UUID
+    package_name: str
+    package_description: Optional[str] = None
+    price_per_pax: Decimal
+    min_pax: Optional[int] = None
+    max_pax: Optional[int] = None
+    duration_hours: Optional[float] = None
+    photo_urls: Optional[List[str]] = None
+    is_active: bool
+    # computed
+    guide_commission_per_pax: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+
+class VendorDetail(BaseModel):
+    """Full vendor detail for guide — includes packages."""
+    id: uuid.UUID
+    vendor_business_name: str
+    vendor_category: int
+    vendor_area: int
+    vendor_location: Optional[str] = None
+    vendor_contact_person: Optional[str] = None
+    vendor_short_description: Optional[str] = None
+    vendor_opening_hours: Optional[str] = None
+    vendor_min_spend: Optional[Decimal] = None
+    vendor_cashback_percent: float
+    vendor_website: Optional[str] = None
+    allow_direct_booking: bool = True
+    cover_photo: Optional[str] = None
+    packages: List[PackagePublic] = []
 
     class Config:
         from_attributes = True
