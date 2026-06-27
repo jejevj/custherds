@@ -14,8 +14,8 @@ import {
   CreditCard, Banknote, ZoomIn, ChevronLeft, ChevronRight, X, Loader2,
 } from "lucide-react"
 
-const POLL_INTERVAL_MS  = 5000   // cek setiap 5 detik
-const POLL_MAX_ATTEMPTS = 60     // maksimal 5 menit (60 × 5s)
+const POLL_INTERVAL_MS  = 5000
+const POLL_MAX_ATTEMPTS = 60
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
   confirmed: "default",
@@ -179,9 +179,9 @@ export default function BookingDetailContent() {
     }
   }, [id])
 
-  // ── Polling logic: aktif saat TX status = payment_pending ──────────────
-  const startPolling = useCallback((bookingId: string, txId: string) => {
-    if (pollTimerRef.current) return // sudah berjalan
+  // ── Polling: aktif saat TX status = payment_pending ──────────────────────
+  const startPolling = useCallback((bookingId: string) => {
+    if (pollTimerRef.current) return
     setPolling(true)
     pollAttemptsRef.current = 0
 
@@ -194,10 +194,16 @@ export default function BookingDetailContent() {
 
       try {
         const latestTx = await transactionsService.getByBookingId(bookingId)
+
+        // null guard — tx mungkin belum ada saat polling awal
+        if (!latestTx) {
+          pollTimerRef.current = setTimeout(tick, POLL_INTERVAL_MS)
+          return
+        }
+
         setTx(latestTx)
 
         if (latestTx.status === "settled") {
-          // Pembayaran berhasil — refresh booking juga
           const latestBooking = await bookingsService.get(id)
           setBooking(latestBooking)
           stopPolling()
@@ -209,7 +215,6 @@ export default function BookingDetailContent() {
         }
 
         if (latestTx.status === "pending_vendor_approval") {
-          // Invoice expired, Xendit sudah reset TX
           const latestBooking = await bookingsService.get(id)
           setBooking(latestBooking)
           stopPolling()
@@ -231,10 +236,9 @@ export default function BookingDetailContent() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  // Mulai/stop polling berdasarkan status TX
   useEffect(() => {
     if (tx?.status === "payment_pending" && booking?.id) {
-      startPolling(booking.id, tx.id)
+      startPolling(booking.id)
     } else {
       stopPolling()
     }
@@ -361,7 +365,6 @@ export default function BookingDetailContent() {
         </Badge>
       </div>
 
-      {/* Banner polling saat menunggu konfirmasi Xendit */}
       {txPaymentPending && polling && (
         <div className="flex items-center gap-2.5 rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3 text-sm text-blue-300">
           <Loader2 size={14} className="animate-spin shrink-0" />
@@ -528,7 +531,6 @@ export default function BookingDetailContent() {
                 </div>
               </div>
 
-              {/* Banner menunggu bayar + link invoice */}
               {txPaymentPending && (invoiceUrl ?? tx!.xendit_invoice_url) && (
                 <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3 space-y-2">
                   <div className="flex items-center gap-2 text-xs text-blue-300">
