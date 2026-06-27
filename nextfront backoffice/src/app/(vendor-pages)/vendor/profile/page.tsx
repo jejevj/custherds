@@ -9,6 +9,10 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { ImagePlus, X, Loader2, Store, Images, Settings2 } from "lucide-react"
 
+// Shared glass class
+const glass = "rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md"
+const inputCls = "w-full border border-white/10 rounded-xl px-3 py-2 text-sm bg-white/5 backdrop-blur-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-colors"
+
 export default function VendorProfilePage() {
   const [profile,   setProfile]   = useState<VendorProfile | null>(null)
   const [loading,   setLoading]   = useState(true)
@@ -58,8 +62,8 @@ export default function VendorProfilePage() {
 
   if (loading) return (
     <div className="grid grid-cols-12 gap-6">
-      {[...Array(6)].map((_, i) => (
-        <div key={i} className="col-span-12 md:col-span-6 h-12 rounded-xl bg-white/5 animate-pulse" />
+      {[...Array(8)].map((_, i) => (
+        <div key={i} className="col-span-12 md:col-span-6 h-10 rounded-xl bg-white/5 animate-pulse" />
       ))}
     </div>
   )
@@ -72,41 +76,45 @@ export default function VendorProfilePage() {
           <h1 className="text-2xl font-bold tracking-tight">Store Profile</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Kelola informasi dan galeri toko kamu.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Status:</span>
-          <Badge variant={profile?.vendor_status === "approved" ? "default" : "secondary"} className="capitalize">
-            {profile?.vendor_status}
-          </Badge>
-        </div>
+        <Badge
+          variant={profile?.vendor_status === "approved" ? "default" : "secondary"}
+          className="capitalize mt-1"
+        >
+          {profile?.vendor_status}
+        </Badge>
       </div>
 
-      {error   && <p className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-2.5">{error}</p>}
-      {success && <p className="text-sm text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-4 py-2.5">Profil berhasil disimpan.</p>}
+      {error   && <p className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-4 py-2.5">{error}</p>}
+      {success && <p className="text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-2.5">✓ Profil berhasil disimpan.</p>}
 
-      {/* Grid 12 kolom */}
+      {/* Grid 12 */}
       <div className="grid grid-cols-12 gap-6">
 
-        {/* KIRI — col 1-8 */}
+        {/* KIRI col-8 */}
         <div className="col-span-12 lg:col-span-8 space-y-6">
 
-          <section className="rounded-2xl border bg-card p-6 space-y-5">
-            <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-              <Store size={15} /> Info Dasar
+          {/* Card Info Dasar */}
+          <section className={`${glass} p-6 space-y-5`}>
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground/70">
+              <Store size={13} /> Info Dasar
             </div>
 
+            {/* Nama Toko */}
             <div className="grid gap-1.5">
-              <Label>Nama Toko</Label>
+              <Label className="text-xs text-muted-foreground">Nama Toko</Label>
               <Input
                 value={profile?.vendor_business_name ?? ""}
                 onChange={e => setProfile(p => p ? { ...p, vendor_business_name: e.target.value } : p)}
                 placeholder="Nama toko / usaha"
+                className="bg-white/5 border-white/10 backdrop-blur-sm focus:border-primary/40 focus:ring-primary/20 rounded-xl"
               />
             </div>
 
+            {/* Deskripsi */}
             <div className="grid gap-1.5">
-              <Label>Deskripsi Singkat</Label>
+              <Label className="text-xs text-muted-foreground">Deskripsi Singkat</Label>
               <textarea
-                className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50 bg-background"
+                className={`${inputCls} resize-none`}
                 rows={3}
                 value={profile?.vendor_short_description ?? ""}
                 onChange={e => setProfile(p => p ? { ...p, vendor_short_description: e.target.value } : p)}
@@ -114,52 +122,57 @@ export default function VendorProfilePage() {
               />
             </div>
 
-            {/* Contact + Website — 2 kolom */}
+            {/* Contact + Website */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="grid gap-1.5">
-                <Label>Contact Person</Label>
+                <Label className="text-xs text-muted-foreground">Contact Person</Label>
                 <Input
                   value={profile?.vendor_contact_person ?? ""}
                   onChange={e => setProfile(p => p ? { ...p, vendor_contact_person: e.target.value } : p)}
                   placeholder="Nama PIC"
+                  className="bg-white/5 border-white/10 backdrop-blur-sm focus:border-primary/40 focus:ring-primary/20 rounded-xl"
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label>Website</Label>
+                <Label className="text-xs text-muted-foreground">Website</Label>
                 <Input
                   value={profile?.vendor_website ?? ""}
                   onChange={e => setProfile(p => p ? { ...p, vendor_website: e.target.value } : p)}
                   placeholder="https://"
+                  className="bg-white/5 border-white/10 backdrop-blur-sm focus:border-primary/40 focus:ring-primary/20 rounded-xl"
                 />
               </div>
             </div>
 
-            {/* Jam + Lokasi — 2 kolom */}
+            {/* Jam + Lokasi */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="grid gap-1.5">
-                <Label>Jam Operasional</Label>
+                <Label className="text-xs text-muted-foreground">Jam Operasional</Label>
                 <Input
                   value={profile?.vendor_opening_hours ?? ""}
                   onChange={e => setProfile(p => p ? { ...p, vendor_opening_hours: e.target.value } : p)}
                   placeholder="Senin–Jumat 09.00–17.00"
+                  className="bg-white/5 border-white/10 backdrop-blur-sm focus:border-primary/40 focus:ring-primary/20 rounded-xl"
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label>Alamat / Lokasi</Label>
+                <Label className="text-xs text-muted-foreground">Alamat / Lokasi</Label>
                 <Input
                   value={profile?.vendor_location ?? ""}
                   onChange={e => setProfile(p => p ? { ...p, vendor_location: e.target.value } : p)}
                   placeholder="Alamat lengkap toko / outlet"
+                  className="bg-white/5 border-white/10 backdrop-blur-sm focus:border-primary/40 focus:ring-primary/20 rounded-xl"
                 />
               </div>
             </div>
           </section>
 
-          <section className="rounded-2xl border bg-card p-6 space-y-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-              <Settings2 size={15} /> Pengaturan Booking
+          {/* Card Pengaturan Booking */}
+          <section className={`${glass} p-6 space-y-4`}>
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground/70">
+              <Settings2 size={13} /> Pengaturan Booking
             </div>
-            <div className="flex items-center justify-between rounded-xl border px-4 py-3 bg-muted/30">
+            <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3">
               <div>
                 <p className="text-sm font-medium">Izinkan Direct Booking</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -174,7 +187,7 @@ export default function VendorProfilePage() {
                 className={[
                   "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent",
                   "transition-colors focus-visible:outline-none",
-                  profile?.allow_direct_booking ? "bg-primary" : "bg-muted-foreground/30",
+                  profile?.allow_direct_booking ? "bg-primary" : "bg-white/20",
                 ].join(" ")}
               >
                 <span className={[
@@ -193,43 +206,46 @@ export default function VendorProfilePage() {
           </Button>
         </div>
 
-        {/* KANAN — col 9-12, sticky */}
+        {/* KANAN col-4 sticky */}
         <div className="col-span-12 lg:col-span-4">
-          <section className="rounded-2xl border bg-card p-6 space-y-4 sticky top-6">
+          <section className={`${glass} p-6 space-y-4 sticky top-6`}>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-                <Images size={15} /> Galeri Foto Tempat
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground/70">
+                <Images size={13} /> Galeri Foto
               </div>
               <span className="text-xs text-muted-foreground">
                 {profile?.gallery_urls?.length ?? 0} foto
               </span>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Foto suasana &amp; fasilitas tempat. Ditampilkan ke guide saat browse vendor.
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Foto suasana &amp; fasilitas. Ditampilkan ke guide saat browse vendor.
             </p>
 
+            {/* Preview grid */}
             {(profile?.gallery_urls?.length ?? 0) > 0 && (
               <div className="grid grid-cols-3 gap-1.5">
                 {profile!.gallery_urls.map((url, i) => (
-                  <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-white/10 group">
+                  <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-white/10 group">
                     <Image
                       src={resolveCoverPhoto(url)}
                       alt={`Foto ${i + 1}`}
                       fill
-                      className="object-cover"
+                      className="object-cover group-hover:scale-105 transition-transform duration-300"
                       unoptimized
                     />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
                     <button
                       onClick={() => removeGalleryPhoto(i)}
-                      className="absolute top-1 right-1 bg-black/60 hover:bg-red-600 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute top-1 right-1 bg-white/10 backdrop-blur-sm hover:bg-red-500/80 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-all"
                     >
-                      <X size={11} />
+                      <X size={10} />
                     </button>
                   </div>
                 ))}
               </div>
             )}
 
+            {/* Upload zone */}
             <input
               ref={fileRef}
               type="file"
@@ -242,16 +258,16 @@ export default function VendorProfilePage() {
               type="button"
               onClick={() => fileRef.current?.click()}
               disabled={uploading}
-              className="flex flex-col items-center justify-center gap-2 w-full py-6 rounded-xl border-2 border-dashed border-white/20 text-xs text-muted-foreground hover:border-primary/50 hover:text-foreground hover:bg-primary/5 transition-all disabled:opacity-50"
+              className="flex flex-col items-center justify-center gap-2 w-full py-7 rounded-xl border-2 border-dashed border-white/15 text-xs text-muted-foreground hover:border-primary/50 hover:bg-primary/5 hover:text-foreground transition-all disabled:opacity-40"
             >
               {uploading
-                ? <><Loader2 size={20} className="animate-spin" /><span>Mengupload...</span></>
-                : <><ImagePlus size={20} /><span>Klik atau drag foto ke sini</span><span className="text-[10px] opacity-60">JPG, PNG, WEBP • maks 10 MB</span></>
+                ? <><Loader2 size={18} className="animate-spin" /><span>Mengupload...</span></>
+                : <><ImagePlus size={18} /><span className="font-medium">Tambah Foto</span><span className="opacity-50">JPG · PNG · WEBP</span></>
               }
             </button>
 
-            <p className="text-[11px] text-muted-foreground/60 text-center">
-              Klik <strong>Simpan Perubahan</strong> setelah upload agar tersimpan.
+            <p className="text-[11px] text-center text-muted-foreground/50">
+              Klik <span className="text-muted-foreground">Simpan Perubahan</span> setelah upload.
             </p>
           </section>
         </div>
