@@ -20,8 +20,11 @@ import uuid
 
 router = APIRouter()
 
+# Field dokumen legal — hanya bisa diubah saat status incomplete / rejected
+LEGAL_FIELDS = {"vendor_npwp", "vendor_nib", "vendor_owner_id_card_url"}
 
-# ─── Vendor self-service ────────────────────────────────────────────────────
+
+# ── Vendor self-service ────────────────────────────────────────────────────
 
 @router.get("/me", response_model=VendorProfile, tags=["Vendors"])
 def get_vendor_profile(
@@ -43,9 +46,25 @@ def update_vendor_profile(
     vendor = db.query(Vendor).filter(Vendor.user_id == current_user.id).first()
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor profile not found")
-    if vendor.vendor_status not in ("incomplete", "rejected"):
-        raise HTTPException(status_code=400, detail=f"Profile cannot be edited when status is '{vendor.vendor_status}'")
-    for field, value in payload.dict(exclude_unset=True).items():
+
+    data = payload.dict(exclude_unset=True)
+
+    # Vendor approved: boleh update info operasional, tapi dokumen legal dikunci
+    if vendor.vendor_status == "approved":
+        blocked = LEGAL_FIELDS & data.keys()
+        if blocked:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Field {', '.join(blocked)} tidak dapat diubah saat vendor sudah approved."
+            )
+    elif vendor.vendor_status not in ("incomplete", "rejected"):
+        # status pending: tidak boleh edit sama sekali
+        raise HTTPException(
+            status_code=400,
+            detail=f"Profile tidak dapat diedit saat status '{vendor.vendor_status}'."
+        )
+
+    for field, value in data.items():
         setattr(vendor, field, value)
     db.commit()
     db.refresh(vendor)
@@ -85,7 +104,7 @@ def get_vendor_deposit(
     return vendor
 
 
-# ─── Public browse (for guides) ─────────────────────────────────────────────
+# ── Public browse (for guides) ─────────────────────────────────────────────
 
 @router.get(
     "/browse",
@@ -192,16 +211,15 @@ def get_vendor_detail(
     packages_out = []
     for p in active_pkgs:
         commission = round(float(p.price_per_pax) * guide_pct / 100, 2)
-        # duration_minutes → convert ke jam untuk display
         duration_hours = round(p.duration_minutes / 60, 1) if p.duration_minutes else None
         packages_out.append(PackagePublic(
             id=p.id,
-            package_name=p.name,                  # model pakai `name`
-            package_description=p.description,    # model pakai `description`
+            package_name=p.name,
+            package_description=p.description,
             price_per_pax=p.price_per_pax,
             min_pax=p.min_pax,
             max_pax=p.max_pax,
-            duration_hours=duration_hours,         # model pakai `duration_minutes`
+            duration_hours=duration_hours,
             photo_urls=p.photo_urls,
             is_active=p.is_active,
             guide_commission_per_pax=commission,
