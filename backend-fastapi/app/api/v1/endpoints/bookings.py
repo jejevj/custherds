@@ -74,12 +74,6 @@ def _get_active_split(db: Session) -> RevenueSplitConfig:
 
 
 def _inject_estimated_commission(booking: Booking, guide_percent: float) -> BookingResponse:
-    """
-    Build BookingResponse dan inject estimated_commission:
-      = subtotal_package × guide_percent / 100
-    Hanya berlaku untuk booking_type='package' yang belum selesai (belum ada tx).
-    Untuk direct booking atau yang sudah ada tx, field ini None.
-    """
     resp = BookingResponse.model_validate(booking)
     if booking.subtotal_package is not None:
         resp.estimated_commission = (
@@ -188,7 +182,6 @@ def list_bookings(
         q = q.filter(Booking.status == status)
     bookings = q.order_by(Booking.created_at.desc()).all()
 
-    # Inject estimated_commission hanya untuk guide
     if current_user.user_type == 1:
         try:
             split = _get_active_split(db)
@@ -304,6 +297,8 @@ async def submit_transaction(
     - File pertama disimpan di receipt_image (kolom utama).
     - File ke-2 dst disimpan, path-nya di-embed ke receipt_notes sebagai
       JSON tag [extra_photos:[...]] agar backward-compatible.
+    - Saat revisi (tx sebelumnya rejected), tx lama dibiarkan dengan status 'rejected',
+      booking boleh submit tx baru selama status booking == 'pending_receipt'.
     """
     guide = db.query(Guide).filter(Guide.user_id == current_user.id).first()
     if not guide:
@@ -320,8 +315,14 @@ async def submit_transaction(
             400,
             f"Submit transaksi hanya bisa saat status 'pending_receipt'. Status saat ini: {booking.status}"
         )
-    if db.query(Transaction).filter(Transaction.booking_id == booking.id).first():
-        raise HTTPException(400, "Transaksi untuk booking ini sudah ada")
+
+    # Cek apakah masih ada tx AKTIF (bukan rejected) untuk booking ini
+    existing_active_tx = db.query(Transaction).filter(
+        Transaction.booking_id == booking.id,
+        Transaction.status.notin_(["rejected"]),
+    ).first()
+    if existing_active_tx:
+        raise HTTPException(400, "Sudah ada transaksi aktif menunggu approval vendor.")
 
     if not receipt_files:
         raise HTTPException(400, "Minimal 1 file bukti kunjungan wajib diupload.")
@@ -343,8 +344,8 @@ async def submit_transaction(
         filename = _save_upload(content, ufile.filename or f"receipt_{idx}")
         saved_paths.append(f"/api/v1/uploads/{filename}")
 
-    receipt_path = saved_paths[0]  # foto utama
-    extra_paths  = saved_paths[1:]  # foto tambahan
+    receipt_path = saved_paths[0]
+    extra_paths  = saved_paths[1:]
 
     # ── Gabungkan extra_photos ke receipt_notes ─────────────────────────────────
     final_notes = receipt_notes or ""
@@ -370,7 +371,7 @@ async def submit_transaction(
     guide_comm    = (gross * Decimal(str(split.guide_percent))    / 100).quantize(Decimal("0.01"))
     platform_fee  = (gross * Decimal(str(split.platform_percent)) / 100).quantize(Decimal("0.01"))
 
-    # ── Buat Transaction ────────────────────────────────────────────────────────
+    # ── Buat Transaction baru ───────────────────────────────────────────────────
     tx = Transaction(
         transaction_code=_generate_tx_code(db),
         booking_id=booking.id,

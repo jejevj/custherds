@@ -78,7 +78,7 @@ function InfoRow({ icon, label, value, mono, highlight }: {
   )
 }
 
-// ── Attempt Badge ─────────────────────────────────────────────────────────────
+// ── Attempt Banner ────────────────────────────────────────────────────────────
 function TxAttemptBanner({ attempt, max }: { attempt: number; max: number }) {
   if (attempt === 0) return null
   const remaining = max - attempt
@@ -205,8 +205,17 @@ export default function GuideBookingDetailContent() {
     try {
       const b = await bookingsService.get(id)
       setBooking(b)
-      if (["pending_completion", "completed"].includes(b.status)) {
-        try { setTx(await transactionsService.getByBookingId(b.id)) } catch { /* no tx yet */ }
+      // Fetch tx untuk semua status yang relevan:
+      // - pending_completion / completed  : tx aktif
+      // - pending_receipt (setelah reject) : tx rejected terbaru (untuk tampil foto lama)
+      const needTx = ["pending_completion", "completed", "pending_receipt"].includes(b.status)
+      if (needTx) {
+        try {
+          const found = await transactionsService.getByBookingId(b.id)
+          setTx(found)
+        } catch { setTx(null) }
+      } else {
+        setTx(null)
       }
     } catch {
       setError("Gagal memuat detail booking.")
@@ -287,19 +296,19 @@ export default function GuideBookingDetailContent() {
     ...extraPhotos.map(p => resolveReceiptUrl(p)),
   ]
 
+  // Panel tx kanan: tampil jika ada tx (aktif atau rejected untuk foto referensi)
   const showTxPanel = ["pending_completion", "completed"].includes(booking.status)
+  // Foto lama (dari tx rejected) tampil di bawah warning saat pending_receipt
+  const showRejectedTxPhotos = booking.status === "pending_receipt" && tx?.status === "rejected" && allReceiptPhotos.length > 0
 
-  // Komisi: pakai guide_commission dari tx (real) jika sudah ada, fallback ke estimated_commission
-  const komisiBadge = tx?.guide_commission
+  const komisiBadge = tx?.guide_commission && tx.status !== "rejected"
     ? { label: "Komisi Kamu", value: formatRupiah(tx.guide_commission), real: true }
     : booking.estimated_commission
     ? { label: "Estimasi Komisi", value: formatRupiah(booking.estimated_commission), real: false }
     : null
 
-  // Info percobaan revisi
   const txAttempt    = booking.tx_attempt ?? 0
   const txAttemptMax = booking.tx_attempt_max ?? 3
-  // Apakah booking ini rejected karena 3x gagal (bukan rejection booking biasa)
   const isRejectedByTx = booking.status === "rejected" && txAttempt >= txAttemptMax
 
   return (
@@ -327,13 +336,13 @@ export default function GuideBookingDetailContent() {
         </Badge>
       </div>
 
-      {/* Banner percobaan revisi — tampil jika sudah pernah ditolak */}
+      {/* Banner percobaan */}
       <TxAttemptBanner attempt={txAttempt} max={txAttemptMax} />
 
       {/* Content Grid */}
       <div className={`grid gap-6 ${ showTxPanel ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1" }`}>
 
-        {/* Kolom Kiri: Info Booking */}
+        {/* Kolom Kiri */}
         <div className="space-y-5">
           <div className="rounded-xl border bg-card shadow-sm divide-y text-sm">
             <InfoRow icon={<FileText size={12}/>}     label="Kode Booking"   value={booking.booking_code} mono />
@@ -358,15 +367,11 @@ export default function GuideBookingDetailContent() {
           {/* Komisi card */}
           {komisiBadge && !showTxPanel && (
             <div className={`rounded-xl border px-4 py-3 ${
-              komisiBadge.real
-                ? "border-emerald-500/40 bg-emerald-500/5"
-                : "border-emerald-500/20 bg-emerald-500/5"
+              komisiBadge.real ? "border-emerald-500/40 bg-emerald-500/5" : "border-emerald-500/20 bg-emerald-500/5"
             }`}>
               <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
                 <TrendingUp size={11} /> {komisiBadge.label}
-                {!komisiBadge.real && (
-                  <span className="ml-1 text-amber-400/80">(estimasi, final setelah tx dikonfirmasi)</span>
-                )}
+                {!komisiBadge.real && <span className="ml-1 text-amber-400/80">(estimasi, final setelah tx dikonfirmasi)</span>}
               </p>
               <p className={`text-lg font-bold ${ komisiBadge.real ? "text-emerald-400" : "text-emerald-300" }`}>
                 {komisiBadge.value}
@@ -374,7 +379,6 @@ export default function GuideBookingDetailContent() {
             </div>
           )}
 
-          {/* Instruksi checkin */}
           {booking.status === "confirmed" && (
             <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 px-4 py-3 text-sm">
               <p className="font-medium text-blue-400 mb-1">📋 Instruksi Checkin</p>
@@ -386,16 +390,41 @@ export default function GuideBookingDetailContent() {
             </div>
           )}
 
-          {/* Tx ditolak — bisa submit ulang */}
+          {/* Pending receipt setelah reject: warning + foto lama sebagai referensi */}
           {booking.status === "pending_receipt" && txAttempt > 0 && (
             <div className="rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3 text-sm flex items-start gap-2">
               <AlertTriangle size={14} className="text-orange-400 mt-0.5 shrink-0" />
-              <div>
+              <div className="flex-1">
                 <p className="font-medium text-orange-400">Transaksi Ditolak Vendor</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Silakan submit ulang transaksi dengan bukti yang lebih jelas.
+                {tx?.vendor_rejection_reason && (
+                  <p className="text-xs text-orange-300/80 mt-0.5 italic">"{tx.vendor_rejection_reason}"</p>
+                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  Silakan submit ulang dengan bukti yang lebih jelas.
                   Sisa percobaan: <span className="font-semibold text-orange-300">{txAttemptMax - txAttempt}x</span>
                 </p>
+
+                {/* Foto lama dari tx rejected */}
+                {showRejectedTxPhotos && (
+                  <div className="mt-3">
+                    <p className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
+                      <ImageIcon2 size={11} /> Foto yang ditolak (referensi):
+                    </p>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {allReceiptPhotos.map((src, i) => (
+                        <button key={i} type="button"
+                          onClick={() => { setLightboxImages(allReceiptPhotos); setLightboxIndex(i) }}
+                          className="relative rounded-md overflow-hidden border border-orange-500/30 aspect-square hover:opacity-90 transition group">
+                          <img src={src} alt={`foto-lama-${i+1}`} className="w-full h-full object-cover"
+                            onError={e => { (e.target as HTMLImageElement).style.display="none" }} />
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                            <ZoomIn size={14} className="text-white opacity-0 group-hover:opacity-100 drop-shadow" />
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -410,12 +439,9 @@ export default function GuideBookingDetailContent() {
             </div>
           )}
 
-          {/* Rejected karena 3x gagal */}
           {isRejectedByTx && (
             <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm">
-              <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-                <AlertCircle size={11} /> Booking Ditutup
-              </p>
+              <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><AlertCircle size={11} /> Booking Ditutup</p>
               <p className="text-red-400 font-medium">Transaksi ditolak 3x oleh vendor.</p>
               {booking.vendor_rejection_reason && (
                 <p className="text-xs text-muted-foreground mt-1">{booking.vendor_rejection_reason}</p>
@@ -423,7 +449,6 @@ export default function GuideBookingDetailContent() {
             </div>
           )}
 
-          {/* Rejected biasa (bukan karena tx) */}
           {booking.status === "rejected" && !isRejectedByTx && booking.vendor_rejection_reason && (
             <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm">
               <p className="text-xs text-muted-foreground mb-1">Alasan Penolakan</p>
@@ -437,6 +462,7 @@ export default function GuideBookingDetailContent() {
               <p className="text-orange-400">{booking.cancelled_reason}</p>
             </div>
           )}
+
           {booking.notes && (
             <div className="text-sm">
               <p className="text-muted-foreground text-xs mb-1">Catatan</p>
@@ -460,7 +486,7 @@ export default function GuideBookingDetailContent() {
           </div>
         </div>
 
-        {/* Kolom Kanan: Detail Transaksi */}
+        {/* Kolom Kanan: Detail Transaksi aktif */}
         {showTxPanel && (
           <div className="space-y-5">
             <h2 className="text-base font-semibold flex items-center gap-1.5 text-muted-foreground">

@@ -57,10 +57,21 @@ export const transactionsService = {
   get: (id: string) =>
     api.get<Transaction>(`/transactions/${id}`),
 
-  /** Ambil transaksi by booking_id dari list */
+  /**
+   * Ambil transaksi aktif (non-rejected) berdasarkan booking_id.
+   * Jika tidak ada tx aktif, kembalikan tx rejected terbaru (untuk tampilkan foto lama saat revisi).
+   */
   getByBookingId: async (bookingId: string): Promise<Transaction | null> => {
     const list = await api.get<Transaction[]>('/transactions')
-    return list.find(t => t.booking_id === bookingId) ?? null
+    const byBooking = list.filter(t => t.booking_id === bookingId)
+    if (byBooking.length === 0) return null
+    // Prioritaskan tx aktif (non-rejected)
+    const active = byBooking.find(t => t.status !== 'rejected')
+    if (active) return active
+    // Fallback: tx rejected terbaru (untuk tampilkan foto lama saat revisi)
+    return byBooking.sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )[0]
   },
 
   /**
