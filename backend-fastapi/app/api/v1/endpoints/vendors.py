@@ -1,7 +1,6 @@
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from app.db.session import get_db
 from app.core.deps import get_current_user, require_user_type
 from app.models.user import User
@@ -95,11 +94,11 @@ def get_vendor_deposit(
     tags=["Vendors – Browse"],
 )
 def browse_vendors(
-    area: Optional[int] = Query(None, description="Filter by area code"),
-    category: Optional[int] = Query(None, description="Filter by category code"),
-    search: Optional[str] = Query(None, description="Search by business name"),
-    allow_direct: Optional[bool] = Query(None, description="Filter hanya vendor yg allow direct booking"),
-    sort: Optional[str] = Query("name", description="name | commission_desc | packages_desc"),
+    area: Optional[int] = Query(None),
+    category: Optional[int] = Query(None),
+    search: Optional[str] = Query(None),
+    allow_direct: Optional[bool] = Query(None),
+    sort: Optional[str] = Query("name"),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -134,7 +133,7 @@ def browse_vendors(
                 cover = p.photo_urls[0]
                 break
 
-        item = VendorPublic(
+        result.append(VendorPublic(
             id=v.id,
             vendor_business_name=v.vendor_business_name,
             vendor_category=v.vendor_category,
@@ -149,8 +148,7 @@ def browse_vendors(
             package_count=package_count,
             max_commission_per_pax=max_commission,
             cover_photo=cover,
-        )
-        result.append(item)
+        ))
 
     if sort == "commission_desc":
         result.sort(key=lambda x: x.max_commission_per_pax or 0, reverse=True)
@@ -173,11 +171,6 @@ def get_vendor_detail(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Any:
-    """
-    Mengembalikan detail lengkap vendor berikut semua paket aktifnya.
-    Tersedia untuk semua user yang sudah login (guide, vendor, admin).
-    Komisi per pax dihitung dari split config aktif.
-    """
     vendor = db.query(Vendor).filter(
         Vendor.id == vendor_id,
         Vendor.vendor_status == "approved",
@@ -199,14 +192,16 @@ def get_vendor_detail(
     packages_out = []
     for p in active_pkgs:
         commission = round(float(p.price_per_pax) * guide_pct / 100, 2)
+        # duration_minutes → convert ke jam untuk display
+        duration_hours = round(p.duration_minutes / 60, 1) if p.duration_minutes else None
         packages_out.append(PackagePublic(
             id=p.id,
-            package_name=p.package_name,
-            package_description=p.package_description,
+            package_name=p.name,                  # model pakai `name`
+            package_description=p.description,    # model pakai `description`
             price_per_pax=p.price_per_pax,
             min_pax=p.min_pax,
             max_pax=p.max_pax,
-            duration_hours=p.duration_hours,
+            duration_hours=duration_hours,         # model pakai `duration_minutes`
             photo_urls=p.photo_urls,
             is_active=p.is_active,
             guide_commission_per_pax=commission,
