@@ -1,14 +1,14 @@
 """add xendit_disbursement_id to transactions
 
 Revision ID: a1f3c8d92e04
-Revises: 8152fd5b3533
+Revises: b2e4d1f30002
 Create Date: 2026-06-27 17:15:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = 'a1f3c8d92e04'
-down_revision = '8152fd5b3533'
+down_revision = 'b2e4d1f30002'
 branch_labels = None
 depends_on = None
 
