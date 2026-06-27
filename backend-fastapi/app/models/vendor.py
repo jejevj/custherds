@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy import Column, String, Integer, Float, Numeric, Text, DateTime, ForeignKey, Boolean
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.base_class import Base
@@ -21,6 +21,9 @@ class Vendor(Base):
     allow_direct_booking:
       True  -> Guide boleh booking langsung tanpa memilih package (booking_type="direct")
       False -> Guide WAJIB memilih package; direct booking ditolak oleh API
+
+    gallery_urls:
+      Array URL foto tempat/galeri vendor. Ditampilkan ke guide saat browse detail.
     """
     __tablename__ = "vendors"
 
@@ -51,14 +54,15 @@ class Vendor(Base):
     vendor_cashback_percent     = Column(Float, nullable=False)
     vendor_know_from            = Column(Text, nullable=True)
 
+    # --- Galeri foto tempat ---
+    gallery_urls                = Column(JSONB, nullable=True, default=list)
+
     # --- Keuangan ---
     deposit_balance             = Column(Numeric(15, 2), default=0, nullable=False)
     deposit_minimum             = Column(Numeric(15, 2), nullable=True)
 
     # --- Pengaturan booking ---
     allow_direct_booking        = Column(Boolean, default=True, nullable=False)
-    # True  = guide boleh booking tanpa package (direct)
-    # False = guide wajib pilih package; direct booking ditolak
 
     created_at                  = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at                  = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

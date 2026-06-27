@@ -20,7 +20,6 @@ import uuid
 
 router = APIRouter()
 
-# Field dokumen legal — hanya bisa diubah saat status incomplete / rejected
 LEGAL_FIELDS = {"vendor_npwp", "vendor_nib", "vendor_owner_id_card_url"}
 
 
@@ -49,7 +48,6 @@ def update_vendor_profile(
 
     data = payload.dict(exclude_unset=True)
 
-    # Vendor approved: boleh update info operasional, tapi dokumen legal dikunci
     if vendor.vendor_status == "approved":
         blocked = LEGAL_FIELDS & data.keys()
         if blocked:
@@ -58,7 +56,6 @@ def update_vendor_profile(
                 detail=f"Field {', '.join(blocked)} tidak dapat diubah saat vendor sudah approved."
             )
     elif vendor.vendor_status not in ("incomplete", "rejected"):
-        # status pending: tidak boleh edit sama sekali
         raise HTTPException(
             status_code=400,
             detail=f"Profile tidak dapat diedit saat status '{vendor.vendor_status}'."
@@ -146,11 +143,11 @@ def browse_vendors(
         if active_pkgs:
             max_price = max(float(p.price_per_pax) for p in active_pkgs)
             max_commission = round(max_price * guide_pct / 100, 2)
-        cover = None
-        for p in active_pkgs:
-            if p.photo_urls:
-                cover = p.photo_urls[0]
-                break
+
+        # cover: coba dari gallery dulu, fallback ke foto package
+        cover = (v.gallery_urls[0] if v.gallery_urls else None) or next(
+            (p.photo_urls[0] for p in active_pkgs if p.photo_urls), None
+        )
 
         result.append(VendorPublic(
             id=v.id,
@@ -182,7 +179,7 @@ def browse_vendors(
 @router.get(
     "/browse/{vendor_id}",
     response_model=VendorDetail,
-    summary="Detail vendor + daftar paket (Guide)",
+    summary="Detail vendor + galeri + daftar paket (Guide)",
     tags=["Vendors – Browse"],
 )
 def get_vendor_detail(
@@ -202,11 +199,10 @@ def get_vendor_detail(
 
     active_pkgs = [p for p in vendor.packages if p.is_active]
 
-    cover = None
-    for p in active_pkgs:
-        if p.photo_urls:
-            cover = p.photo_urls[0]
-            break
+    # cover: gallery utama, fallback ke foto package pertama
+    cover = (vendor.gallery_urls[0] if vendor.gallery_urls else None) or next(
+        (p.photo_urls[0] for p in active_pkgs if p.photo_urls), None
+    )
 
     packages_out = []
     for p in active_pkgs:
@@ -239,5 +235,6 @@ def get_vendor_detail(
         vendor_website=vendor.vendor_website,
         allow_direct_booking=vendor.allow_direct_booking,
         cover_photo=cover,
+        gallery_urls=vendor.gallery_urls or [],
         packages=packages_out,
     )

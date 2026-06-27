@@ -22,6 +22,8 @@ class VendorProfile(BaseModel):
     vendor_min_spend: Optional[Decimal] = None
     vendor_cashback_percent: float
     deposit_balance: Decimal
+    gallery_urls: Optional[List[str]] = []
+    allow_direct_booking: bool = True
 
     class Config:
         from_attributes = True
@@ -38,6 +40,8 @@ class VendorUpdateRequest(BaseModel):
     vendor_npwp: Optional[str] = None
     vendor_nib: Optional[str] = None
     vendor_owner_id_card_url: Optional[str] = None
+    allow_direct_booking: Optional[bool] = None
+    gallery_urls: Optional[List[str]] = None
 
 
 class VendorSubmitRequest(BaseModel):
@@ -73,7 +77,6 @@ class VendorPublic(BaseModel):
     vendor_cashback_percent: float
     vendor_website: Optional[str] = None
     allow_direct_booking: bool = True
-    # computed fields
     package_count: int = 0
     max_commission_per_pax: Optional[float] = None
     cover_photo: Optional[str] = None
@@ -93,7 +96,6 @@ class PackagePublic(BaseModel):
     duration_hours: Optional[float] = None
     photo_urls: Optional[List[str]] = None
     is_active: bool
-    # computed
     guide_commission_per_pax: Optional[float] = None
 
     class Config:
@@ -101,7 +103,7 @@ class PackagePublic(BaseModel):
 
 
 class VendorDetail(BaseModel):
-    """Full vendor detail for guide — includes packages."""
+    """Full vendor detail for guide — includes gallery + packages."""
     id: uuid.UUID
     vendor_business_name: str
     vendor_category: int
@@ -115,6 +117,7 @@ class VendorDetail(BaseModel):
     vendor_website: Optional[str] = None
     allow_direct_booking: bool = True
     cover_photo: Optional[str] = None
+    gallery_urls: List[str] = []
     packages: List[PackagePublic] = []
 
     class Config:

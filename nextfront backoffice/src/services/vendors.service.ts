@@ -23,6 +23,7 @@ export interface VendorProfile {
   vendor_cashback_percent: number
   deposit_balance: string
   allow_direct_booking: boolean
+  gallery_urls: string[]
 }
 
 export interface VendorUpdatePayload {
@@ -37,6 +38,7 @@ export interface VendorUpdatePayload {
   vendor_nib?: string | null
   vendor_owner_id_card_url?: string | null
   allow_direct_booking?: boolean
+  gallery_urls?: string[]
 }
 
 export interface VendorSubmitPayload {
@@ -111,6 +113,7 @@ export interface VendorDetail {
   vendor_website: string | null
   allow_direct_booking: boolean
   cover_photo: string | null
+  gallery_urls: string[]
   packages: PackagePublic[]
 }
 
