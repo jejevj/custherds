@@ -1,7 +1,7 @@
 """add gallery_urls to vendors
 
 Revision ID: 0004_vendor_gallery_urls
-Revises: 0003
+Revises: a1f3c8d92e04
 Create Date: 2026-06-27
 """
 from alembic import op
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
 revision = '0004_vendor_gallery_urls'
-down_revision = None   # ganti dengan revision ID migrasi sebelumnya
+down_revision = 'a1f3c8d92e04'
 branch_labels = None
 depends_on = None
 
