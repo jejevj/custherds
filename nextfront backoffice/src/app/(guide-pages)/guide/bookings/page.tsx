@@ -48,7 +48,6 @@ function formatRupiah(n?: number | string | null) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num)
 }
 
-/** Parse extra_photos array dari receipt_notes tanpa /s flag */
 function parseExtraPhotos(notes: string | null | undefined): string[] {
   if (!notes) return []
   const tag = "[extra_photos:"
@@ -57,7 +56,7 @@ function parseExtraPhotos(notes: string | null | undefined): string[] {
   const jsonStart = start + tag.length
   const end = notes.indexOf("]}", jsonStart)
   const jsonStr = end !== -1
-    ? notes.slice(jsonStart, end + 2)   // include closing ]}
+    ? notes.slice(jsonStart, end + 2)
     : notes.slice(jsonStart, notes.lastIndexOf("]") + 1)
   try { return JSON.parse(jsonStr) as string[] } catch { return [] }
 }
@@ -88,19 +87,16 @@ export default function GuideBookingsPage() {
 
   const { query, setQuery, filtered } = useTableSearch(bookings)
 
-  // Detail modal
   const [detailBook,   setDetailBook]   = useState<Booking | null>(null)
   const [detailTx,     setDetailTx]     = useState<Transaction | null>(null)
   const [detailTxLoad, setDetailTxLoad] = useState(false)
   const [lightboxSrc,  setLightboxSrc]  = useState<string | null>(null)
 
-  // Cancel
   const [cancelTarget, setCancelTarget] = useState<string | null>(null)
   const [cancelReason, setCancelReason] = useState("")
   const [cancelError,  setCancelError]  = useState("")
   const [viewReason,   setViewReason]   = useState<string | null>(null)
 
-  // Submit Transaksi
   const [txTarget,     setTxTarget]     = useState<Booking | null>(null)
   const [txFiles,      setTxFiles]      = useState<FilePreview[]>([])
   const [txGross,      setTxGross]      = useState("")
@@ -208,11 +204,10 @@ export default function GuideBookingsPage() {
 
   const isPackage = txTarget?.booking_type === "package"
   const extraPhotos = parseExtraPhotos(detailTx?.receipt_notes)
-
-  // Potensi komisi untuk detail modal (sebelum TX terbentuk)
-  // Hanya bisa estimasi jika booking package & ada subtotal
-  // Percent tidak diketahui sebelum TX → tampilkan subtotal saja + note
   const hasTxComission = detailTx && Number(detailTx.guide_commission) > 0
+
+  // class modal besar — override sm:max-w-sm bawaan DialogContent
+  const modalLg = "sm:max-w-[800px] w-full p-0 overflow-hidden"
 
   return (
     <div className="space-y-6">
@@ -286,7 +281,7 @@ export default function GuideBookingsPage() {
 
       {/* ===== DETAIL BOOKING MODAL ===== */}
       <Dialog open={!!detailBook} onOpenChange={open => { if (!open) setDetailBook(null) }}>
-        <DialogContent style={{ maxWidth: "800px", width: "100%" }} className="p-0 overflow-hidden">
+        <DialogContent className={modalLg}>
           <div className="flex items-center justify-between px-6 py-4 border-b bg-card">
             <h5 className="text-lg font-semibold flex items-center gap-2">
               <FileText className="w-5 h-5" /> Detail Booking
@@ -304,8 +299,7 @@ export default function GuideBookingsPage() {
                 <div className={`grid gap-5 ${
                   ["pending_completion","completed"].includes(detailBook.status) ? "grid-cols-2" : "grid-cols-1"
                 }`}>
-
-                  {/* Kolom kiri: Info Booking */}
+                  {/* Kolom kiri */}
                   <div className="space-y-4">
                     <div className="rounded-lg border bg-muted/20 divide-y text-sm">
                       <InfoRow icon={<FileText size={12}/>}     label="Kode Booking"   value={detailBook.booking_code} mono />
@@ -318,7 +312,6 @@ export default function GuideBookingsPage() {
                       {detailBook.completed_at && <InfoRow icon={<CheckCircle2 size={12}/>} label="Selesai pada" value={new Date(detailBook.completed_at).toLocaleString("id-ID")} />}
                     </div>
 
-                    {/* Potensi Komisi — tampil jika ada subtotal_package & belum ada TX */}
                     {detailBook.subtotal_package && !hasTxComission && ![
                       "pending_completion", "completed"
                     ].includes(detailBook.status) && (
@@ -336,7 +329,6 @@ export default function GuideBookingsPage() {
                       </div>
                     )}
 
-                    {/* Status-based info cards */}
                     {detailBook.status === "confirmed" && (
                       <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3 text-sm">
                         <p className="font-medium text-blue-400 mb-1">📋 Instruksi Checkin</p>
@@ -373,7 +365,6 @@ export default function GuideBookingsPage() {
                       <h6 className="text-sm font-semibold flex items-center gap-1.5 text-muted-foreground">
                         <Receipt size={14} /> Detail Transaksi
                       </h6>
-
                       {detailTxLoad ? (
                         <div className="flex items-center justify-center py-10 text-muted-foreground text-sm gap-2">
                           <Clock size={16} className="animate-spin" /> Memuat transaksi...
@@ -381,26 +372,15 @@ export default function GuideBookingsPage() {
                       ) : detailTx ? (
                         <>
                           <div className="rounded-lg border bg-muted/20 divide-y text-sm">
-                            <InfoRow icon={<FileText size={12}/>}     label="Kode Transaksi"  value={detailTx.transaction_code} mono />
-                            <InfoRow icon={<Banknote size={12}/>}     label="Gross Total"      value={formatRupiah(detailTx.gross_amount)} />
+                            <InfoRow icon={<FileText size={12}/>} label="Kode Transaksi" value={detailTx.transaction_code} mono />
+                            <InfoRow icon={<Banknote size={12}/>} label="Gross Total"    value={formatRupiah(detailTx.gross_amount)} />
                             {detailTx.extra_amount && Number(detailTx.extra_amount) > 0 && (
                               <InfoRow label="Biaya Tambahan" value={formatRupiah(detailTx.extra_amount)} />
                             )}
-                            {detailTx.extra_notes && (
-                              <InfoRow label="Ket. Extra" value={detailTx.extra_notes} />
-                            )}
-                            <InfoRow
-                              icon={<TrendingUp size={12}/>}
-                              label="Komisi Kamu"
-                              value={formatRupiah(detailTx.guide_commission)}
-                              highlight="green"
-                            />
+                            {detailTx.extra_notes && <InfoRow label="Ket. Extra" value={detailTx.extra_notes} />}
+                            <InfoRow icon={<TrendingUp size={12}/>} label="Komisi Kamu" value={formatRupiah(detailTx.guide_commission)} highlight="green" />
                             {Number(detailTx.guide_percent_snapshot) > 0 && (
-                              <InfoRow
-                                label="Persentase Komisi"
-                                value={`${Number(detailTx.guide_percent_snapshot)}%`}
-                                highlight="amber"
-                              />
+                              <InfoRow label="Persentase Komisi" value={`${Number(detailTx.guide_percent_snapshot)}%`} highlight="amber" />
                             )}
                           </div>
 
@@ -408,8 +388,7 @@ export default function GuideBookingsPage() {
                             <span className="text-xs text-muted-foreground">Status transaksi:</span>
                             <Badge variant={
                               detailTx.status === "settled" ? "default"
-                              : detailTx.status === "rejected" ? "destructive"
-                              : "secondary"
+                              : detailTx.status === "rejected" ? "destructive" : "secondary"
                             } className="text-xs">
                               {detailTx.status === "pending_vendor_approval" ? "Menunggu Konfirmasi Vendor"
                                 : detailTx.status === "payment_pending" ? "Menunggu Pembayaran"
@@ -493,14 +472,14 @@ export default function GuideBookingsPage() {
 
       {/* Lightbox */}
       <Dialog open={!!lightboxSrc} onOpenChange={open => { if (!open) setLightboxSrc(null) }}>
-        <DialogContent style={{ maxWidth: "90vw", width: "auto" }} className="p-2 bg-black/90 border-0">
+        <DialogContent className="sm:max-w-[90vw] w-auto p-2 bg-black/90 border-0">
           {lightboxSrc && <img src={lightboxSrc} alt="Preview" className="max-h-[85vh] max-w-[85vw] mx-auto rounded-lg object-contain" />}
         </DialogContent>
       </Dialog>
 
       {/* ===== Submit Transaksi Dialog ===== */}
       <Dialog open={!!txTarget} onOpenChange={open => { if (!open) setTxTarget(null) }}>
-        <DialogContent style={{ maxWidth: "800px", width: "100%" }} className="p-0 overflow-hidden">
+        <DialogContent className={modalLg}>
           <div className="flex items-center justify-between px-6 py-4 border-b bg-card">
             <h5 className="text-lg font-semibold flex items-center gap-2">
               <Receipt className="w-5 h-5 text-amber-500" /> Submit Transaksi
