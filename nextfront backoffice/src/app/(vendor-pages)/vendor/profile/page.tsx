@@ -1,9 +1,8 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
 import Image from "next/image"
-import { vendorsService, VendorProfile } from "@/services/vendors.service"
-import { uploadsService } from "@/services/uploads.service"
-import { resolveCoverPhoto } from "@/services/vendors.service"
+import { vendorsService, VendorProfile, resolveCoverPhoto } from "@/services/vendors.service"
+import { uploadPhotos } from "@/services/uploads.service"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -48,11 +47,8 @@ export default function VendorProfilePage() {
     if (!files.length) return
     setUploading(true)
     try {
-      const urls: string[] = []
-      for (const file of files) {
-        const url = await uploadsService.uploadFile(file)
-        urls.push(url)
-      }
+      // uploadPhotos = batch upload ke /uploads/batch, return string[] URL
+      const urls = await uploadPhotos(files)
       setProfile(p => p ? { ...p, gallery_urls: [...(p.gallery_urls ?? []), ...urls] } : p)
     } catch { setError("Gagal upload foto.") }
     finally { setUploading(false); if (fileRef.current) fileRef.current.value = '' }
@@ -140,7 +136,7 @@ export default function VendorProfilePage() {
           />
         </div>
 
-        {/* ── Galeri Foto Tempat ────────────────────────────────────────── */}
+        {/* ── Galeri Foto Tempat ─────────────────────────────────────────── */}
         <div className="grid gap-2.5">
           <div className="flex items-center justify-between">
             <Label>Galeri Foto Tempat</Label>
@@ -150,14 +146,13 @@ export default function VendorProfilePage() {
             Foto tempat, suasana, atau fasilitas yang akan dilihat guide sebelum booking.
           </p>
 
-          {/* Preview grid */}
           {(profile?.gallery_urls?.length ?? 0) > 0 && (
             <div className="grid grid-cols-3 gap-2">
               {profile!.gallery_urls.map((url, i) => (
                 <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-white/10 group">
                   <Image
                     src={resolveCoverPhoto(url)}
-                    alt={`Foto ${i+1}`}
+                    alt={`Foto ${i + 1}`}
                     fill
                     className="object-cover"
                     unoptimized
@@ -173,7 +168,6 @@ export default function VendorProfilePage() {
             </div>
           )}
 
-          {/* Upload button */}
           <input
             ref={fileRef}
             type="file"
@@ -188,11 +182,14 @@ export default function VendorProfilePage() {
             disabled={uploading}
             className="flex items-center justify-center gap-2 w-full py-3 rounded-lg border border-dashed border-white/20 text-xs text-muted-foreground hover:border-white/40 hover:text-foreground transition-colors disabled:opacity-50"
           >
-            {uploading ? <><Loader2 size={14} className="animate-spin" /> Mengupload...</> : <><ImagePlus size={14} /> Tambah Foto</>}
+            {uploading
+              ? <><Loader2 size={14} className="animate-spin" /> Mengupload...</>
+              : <><ImagePlus size={14} /> Tambah Foto</>
+            }
           </button>
         </div>
 
-        {/* ── Toggle Direct Booking ────────────────────────────────────────── */}
+        {/* ── Toggle Direct Booking ─────────────────────────────────────── */}
         <div className="flex items-center justify-between rounded-lg border px-4 py-3 bg-muted/30">
           <div>
             <p className="text-sm font-medium">Izinkan Direct Booking</p>
