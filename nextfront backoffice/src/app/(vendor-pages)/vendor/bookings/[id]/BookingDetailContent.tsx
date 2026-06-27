@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import {
   ArrowLeft, FileText, CalendarDays, Users, Package, MapPin,
   Upload, CheckCircle, XCircle, CheckCircle2, Receipt, AlertCircle,
-  CreditCard, Banknote, ZoomIn,
+  CreditCard, Banknote, ZoomIn, ChevronLeft, ChevronRight, X,
 } from "lucide-react"
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
@@ -40,66 +40,120 @@ function formatRupiah(n?: number | string | null) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num)
 }
 
-function parseExtraPhotos(notes: string | null): string[] {
+/**
+ * Parse extra_photos dari receipt_notes.
+ * Format DB: [extra_photos:["/api/v1/uploads/xxx.jpg","/api/v1/uploads/yyy.png"]]
+ * Gunakan JSON.parse agar path yang mengandung karakter khusus tetap aman.
+ */
+function parseExtraPhotos(notes: string | null | undefined): string[] {
   if (!notes) return []
-  const match = notes.match(/\[extra_photos:\[(.+?)\]/)
-  if (!match) return []
-  return match[1].split(",").map(s => s.trim()).filter(Boolean)
+  const tag = "[extra_photos:"
+  const start = notes.indexOf(tag)
+  if (start === -1) return []
+  const jsonStart = start + tag.length
+  // Cari penutup: closing ] dari array JSON, lalu ] dari tag
+  // Strategi: ambil substring dari jsonStart, parse JSON array secara greedy
+  const sub = notes.slice(jsonStart)
+  // sub dimulai dengan '["..."]
+  const end = sub.indexOf("]")
+  if (end === -1) return []
+  try {
+    return JSON.parse(sub.slice(0, end + 1)) as string[]
+  } catch {
+    return []
+  }
 }
 
-// ── Simple Lightbox ────────────────────────────────────────────────────────
-function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
+// ── Multi-image Lightbox ───────────────────────────────────────────────────
+function Lightbox({ images, initialIndex, onClose }: { images: string[]; initialIndex: number; onClose: () => void }) {
+  const [idx, setIdx] = useState(initialIndex)
+
+  const prev = () => setIdx(i => (i - 1 + images.length) % images.length)
+  const next = () => setIdx(i => (i + 1) % images.length)
+
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.stopPropagation(); e.preventDefault(); onClose() }
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape")     { e.stopPropagation(); e.preventDefault(); onClose() }
+      if (e.key === "ArrowLeft")  { e.stopPropagation(); prev() }
+      if (e.key === "ArrowRight") { e.stopPropagation(); next() }
     }
-    window.addEventListener("keydown", handler, true)
-    return () => window.removeEventListener("keydown", handler, true)
-  }, [onClose])
+    window.addEventListener("keydown", h, true)
+    return () => window.removeEventListener("keydown", h, true)
+  }, [onClose]) // eslint-disable-line
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <img
-        src={src}
-        alt="Preview"
-        className="max-h-[90vh] max-w-[90vw] rounded-lg shadow-2xl object-contain"
-        onClick={e => e.stopPropagation()}
-      />
-      <button
-        className="absolute top-4 right-4 text-white bg-black/50 rounded-full p-2 hover:bg-black/80 transition"
-        onClick={onClose}
-      >
-        <XCircle size={22} />
-      </button>
+    <div className="fixed inset-0 z-50 flex flex-col bg-black/90 backdrop-blur-sm" onClick={onClose}>
+      <div className="flex items-center justify-between px-4 py-3 shrink-0" onClick={e => e.stopPropagation()}>
+        <span className="text-white/60 text-sm">{idx + 1} / {images.length}</span>
+        <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10">
+          <X size={20} />
+        </button>
+      </div>
+      <div className="flex-1 flex items-center justify-center relative" onClick={e => e.stopPropagation()}>
+        {images.length > 1 && (
+          <button onClick={prev} className="absolute left-3 z-10 bg-black/50 hover:bg-black/80 text-white rounded-full p-2">
+            <ChevronLeft size={22} />
+          </button>
+        )}
+        <img
+          key={images[idx]}
+          src={images[idx]}
+          alt={`Foto ${idx + 1}`}
+          className="max-h-[80vh] max-w-[85vw] object-contain rounded-lg shadow-2xl"
+        />
+        {images.length > 1 && (
+          <button onClick={next} className="absolute right-3 z-10 bg-black/50 hover:bg-black/80 text-white rounded-full p-2">
+            <ChevronRight size={22} />
+          </button>
+        )}
+      </div>
+      {images.length > 1 && (
+        <div className="flex gap-2 justify-center px-4 py-3 shrink-0 overflow-x-auto" onClick={e => e.stopPropagation()}>
+          {images.map((src, i) => (
+            <button key={i} onClick={() => setIdx(i)}
+              className={`w-14 h-14 rounded-lg overflow-hidden border-2 shrink-0 transition-all ${
+                i === idx ? "border-white scale-110" : "border-white/20 opacity-50 hover:opacity-80"
+              }`}>
+              <img src={src} alt={`thumb-${i}`} className="w-full h-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
 // ── Photo Grid ────────────────────────────────────────────────────────────
 function PhotoGrid({ urls, label }: { urls: string[]; label: string }) {
-  const [lightbox, setLightbox] = useState<string | null>(null)
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null)
   if (!urls.length) return null
   return (
     <>
-      {lightbox && <Lightbox src={lightbox} onClose={() => setLightbox(null)} />}
+      {lightboxIdx !== null && (
+        <Lightbox images={urls} initialIndex={lightboxIdx} onClose={() => setLightboxIdx(null)} />
+      )}
       <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-3">
         <p className="text-xs font-medium text-amber-400 mb-2 flex items-center gap-1">
           <Upload size={12} /> {label}
+          <span className="ml-1 text-white/40 font-normal">({urls.length} foto — klik untuk lihat)</span>
         </p>
         <div className="grid grid-cols-3 gap-2">
           {urls.map((url, i) => (
             <button
               key={i}
               className="relative group rounded-md overflow-hidden bg-black/10 aspect-square"
-              onClick={() => setLightbox(url)}
+              onClick={() => setLightboxIdx(i)}
             >
-              <img src={url} alt={`foto-${i + 1}`} className="w-full h-full object-cover" />
+              <img
+                src={url}
+                alt={`foto-${i + 1}`}
+                className="w-full h-full object-cover"
+                onError={e => { (e.target as HTMLImageElement).style.display = "none" }}
+              />
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                 <ZoomIn size={20} className="text-white" />
               </div>
+              <div className="absolute bottom-1 right-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">{i + 1}</div>
             </button>
           ))}
         </div>
@@ -213,10 +267,7 @@ export default function BookingDetailContent() {
   const isNeedTxReview    = booking.status === "pending_completion"
   const txPendingApproval = tx?.status === "pending_vendor_approval"
 
-  const checkinPhotos: string[] = booking.receipt_url
-    ? [resolveReceiptUrl(booking.receipt_url)]
-    : []
-
+  // Semua foto bukti: receipt_image (foto utama) + extra_photos dari receipt_notes
   const txPhotos: string[] = tx
     ? [
         ...(tx.receipt_image ? [resolveReceiptUrl(tx.receipt_image)] : []),
@@ -253,7 +304,7 @@ export default function BookingDetailContent() {
       {/* Grid utama — 2 kolom di layar besar, 1 kolom di mobile */}
       <div className={`grid gap-6 items-start ${hasTxPanel ? "lg:grid-cols-2" : "grid-cols-1"}`}>
 
-        {/* ── Kolom Kiri: Info Booking ── */}
+        {/* ── Kolom Kiri: Info Booking + Foto Bukti ── */}
         <div className="space-y-5">
           <div className="rounded-xl border bg-card shadow-sm divide-y text-sm">
             <InfoRow icon={<CalendarDays size={13} />} label="Tanggal" value={new Date(booking.booking_date).toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })} />
@@ -274,10 +325,9 @@ export default function BookingDetailContent() {
             )}
           </div>
 
-          {/* Foto Bukti Kunjungan */}
-          <PhotoGrid urls={checkinPhotos} label="Bukti Kunjungan dari Guide" />
+          {/* Foto bukti kunjungan — tampil di kolom kiri saat ada tx */}
+          <PhotoGrid urls={txPhotos} label="Bukti Kunjungan dari Guide" />
 
-          {/* Catatan */}
           {booking.notes && (
             <div className="text-sm">
               <p className="text-muted-foreground text-xs mb-1">Catatan dari Guide</p>
@@ -367,15 +417,12 @@ export default function BookingDetailContent() {
           </div>
         </div>
 
-        {/* ── Kolom Kanan: Detail Transaksi (hanya muncul jika ada tx) ── */}
+        {/* ── Kolom Kanan: Detail Transaksi (tanpa duplikat foto) ── */}
         {hasTxPanel && (
           <div className="space-y-5">
             <h2 className="text-base font-semibold flex items-center gap-1.5 text-muted-foreground">
               <Receipt size={16} /> Detail Transaksi
             </h2>
-
-            {/* Foto Receipt */}
-            <PhotoGrid urls={txPhotos} label="Bukti Transaksi dari Guide" />
 
             <div className="rounded-xl border bg-card shadow-sm p-4 space-y-4">
               <div className="flex items-center gap-2">
@@ -442,7 +489,6 @@ export default function BookingDetailContent() {
           </div>
         )}
 
-        {/* Tx panel belum tersedia */}
         {(isNeedTxReview || booking.status === "completed") && !tx && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <AlertCircle size={14} /> Data transaksi belum tersedia.
