@@ -2,6 +2,8 @@
 import { useEffect, useState, useRef } from "react"
 import { bookingsService, Booking } from "@/services/bookings.service"
 import { transactionsService, resolveReceiptUrl } from "@/services/transactions.service"
+import { API_BASE_URL } from "@/lib/constants"
+import { getTokens } from "@/services/api"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -13,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import {
   AlertTriangle, Upload, Eye, CalendarDays, Users, FileText,
-  MapPin, CheckCircle2, ImageIcon, Receipt, DollarSign,
+  MapPin, CheckCircle2, ImageIcon, Receipt, X, Plus,
 } from "lucide-react"
 import { useTableSearch } from "@/hooks/useTableSearch"
 import { TableSearchInput } from "@/components/ui/TableSearchInput"
@@ -54,6 +56,11 @@ function Row({ icon, label, value, mono }: { icon?: React.ReactNode; label: stri
   )
 }
 
+interface FilePreview {
+  file: File
+  url: string
+}
+
 export default function GuideBookingsPage() {
   const [bookings,   setBookings]   = useState<Booking[]>([])
   const [loading,    setLoading]    = useState(true)
@@ -69,14 +76,13 @@ export default function GuideBookingsPage() {
   const [viewReason,   setViewReason]   = useState<string | null>(null)
 
   // Submit Transaksi state
-  const [txTarget,      setTxTarget]      = useState<Booking | null>(null)
-  const [txFile,        setTxFile]        = useState<File | null>(null)
-  const [txFilePreview, setTxFilePreview] = useState<string | null>(null)
-  const [txGross,       setTxGross]       = useState("")
-  const [txExtra,       setTxExtra]       = useState("")
-  const [txExtraNotes,  setTxExtraNotes]  = useState("")
-  const [txNotes,       setTxNotes]       = useState("")
-  const [txError,       setTxError]       = useState("")
+  const [txTarget,     setTxTarget]     = useState<Booking | null>(null)
+  const [txFiles,      setTxFiles]      = useState<FilePreview[]>([])   // multi-file
+  const [txGross,      setTxGross]      = useState("")
+  const [txExtra,      setTxExtra]      = useState("")
+  const [txExtraNotes, setTxExtraNotes] = useState("")
+  const [txNotes,      setTxNotes]      = useState("")
+  const [txError,      setTxError]      = useState("")
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -88,25 +94,43 @@ export default function GuideBookingsPage() {
 
   const openTxDialog = (b: Booking) => {
     setTxTarget(b)
-    setTxFile(null); setTxFilePreview(null)
+    setTxFiles([])
     setTxGross(b.subtotal_package ? String(Number(b.subtotal_package)) : "")
     setTxExtra(""); setTxExtraNotes(""); setTxNotes(""); setTxError("")
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] ?? null
-    setTxFile(file)
-    setTxFilePreview(file ? URL.createObjectURL(file) : null)
+  const handleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? [])
+    const previews: FilePreview[] = picked.map(f => ({ file: f, url: URL.createObjectURL(f) }))
+    setTxFiles(prev => [...prev, ...previews])
     setTxError("")
+    // reset input so same file can be picked again if needed
+    e.target.value = ""
   }
 
+  const removeFile = (idx: number) => {
+    setTxFiles(prev => {
+      URL.revokeObjectURL(prev[idx].url)
+      return prev.filter((_, i) => i !== idx)
+    })
+  }
+
+  /**
+   * Submit: kirim file-file sebagai batch upload dulu ke /uploads/batch,
+   * kumpulkan path API, lalu POST /bookings/{id}/submit-transaction
+   * dengan file pertama sebagai receipt_file dan sisanya di receipt_notes.
+   * Pendekatan ini menghindari perubahan backend.
+   *
+   * Karena backend hanya terima 1 file per transaksi, upload semua ke /uploads/batch
+   * terlebih dahulu, simpan semua path di receipt_notes (JSON), lalu kirim
+   * file pertama sebagai receipt_file utama.
+   */
   const submitTransaction = async () => {
     if (!txTarget) return
-    if (!txFile)  { setTxError("File bukti kunjungan wajib diupload."); return }
+    if (txFiles.length === 0) { setTxError("Minimal 1 foto bukti kunjungan wajib diupload."); return }
     const gross = parseFloat(txGross)
     if (!txGross || isNaN(gross) || gross <= 0) { setTxError("Nominal transaksi wajib diisi dan harus > 0."); return }
 
-    // Untuk package: validasi gross = subtotal + extra
     if (txTarget.booking_type === "package" && txTarget.subtotal_package) {
       const extra = parseFloat(txExtra) || 0
       const expected = Number(txTarget.subtotal_package) + extra
@@ -118,14 +142,37 @@ export default function GuideBookingsPage() {
 
     setSubmitting(true)
     try {
+      // Upload semua file extra (index 1+) ke /uploads/batch jika lebih dari 1
+      let allPaths: string[] = []
+      if (txFiles.length > 1) {
+        const { access } = getTokens()
+        const form = new FormData()
+        txFiles.slice(1).forEach(fp => form.append('files', fp.file))
+        const res = await fetch(`${API_BASE_URL}/uploads/batch`, {
+          method: 'POST',
+          headers: access ? { Authorization: `Bearer ${access}` } : {},
+          body: form,
+        })
+        if (res.ok) {
+          const data = await res.json() as { uploaded: { url: string }[] }
+          allPaths = data.uploaded.map(u => u.url)
+        }
+      }
+
+      // Gabung receipt_notes: catatan user + path foto extra
+      const extraPhotosNote = allPaths.length > 0
+        ? `\n[extra_photos:${JSON.stringify(allPaths)}]`
+        : ""
+      const finalNotes = (txNotes || "") + extraPhotosNote || undefined
+
       await transactionsService.submitTransaction(txTarget.id, {
-        receiptFile: txFile,
-        grossAmount: gross,
-        extraAmount: txExtra ? parseFloat(txExtra) : undefined,
-        extraNotes:  txExtraNotes || undefined,
-        receiptNotes: txNotes || undefined,
+        receiptFile:  txFiles[0].file,
+        grossAmount:  gross,
+        extraAmount:  txExtra ? parseFloat(txExtra) : undefined,
+        extraNotes:   txExtraNotes || undefined,
+        receiptNotes: finalNotes,
       })
-      // Update booking status lokal
+
       setBookings(prev => prev.map(b =>
         b.id === txTarget.id ? { ...b, status: "pending_completion" } : b
       ))
@@ -231,7 +278,7 @@ export default function GuideBookingsPage() {
 
       {/* Detail Modal */}
       <Dialog open={!!detailBook} onOpenChange={open => { if (!open) setDetailBook(null) }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText size={17} /> Detail Booking
@@ -307,18 +354,19 @@ export default function GuideBookingsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Submit Transaksi Dialog */}
+      {/* ===== Submit Transaksi Dialog (LEBAR) ===== */}
       <Dialog open={!!txTarget} onOpenChange={open => { if (!open) setTxTarget(null) }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl w-full">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Receipt className="w-5 h-5 text-amber-500" /> Submit Transaksi
             </DialogTitle>
           </DialogHeader>
-          <div className="py-2 space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+
+          <div className="py-2 space-y-5 max-h-[75vh] overflow-y-auto pr-1">
 
             {/* Info package */}
-            {isPackage && txTarget.subtotal_package && (
+            {isPackage && txTarget?.subtotal_package && (
               <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3 text-sm">
                 <p className="text-xs text-muted-foreground mb-1">Subtotal Package</p>
                 <p className="font-bold text-blue-400 text-base">{formatRupiah(txTarget.subtotal_package)}</p>
@@ -329,85 +377,122 @@ export default function GuideBookingsPage() {
               </div>
             )}
 
-            {/* File upload */}
+            {/* ===== MULTI-FOTO UPLOAD ===== */}
             <div className="space-y-2">
-              <Label>Bukti Kunjungan <span className="text-red-500">*</span></Label>
-              <div
-                className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-amber-400 transition-colors"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {txFilePreview ? (
-                  <img src={txFilePreview} alt="Preview" className="mx-auto max-h-40 rounded-md object-contain" />
-                ) : (
-                  <div className="text-muted-foreground">
-                    <ImageIcon className="mx-auto mb-2" size={28} />
-                    <p className="text-sm">Klik untuk pilih foto / PDF</p>
-                    <p className="text-xs mt-1">JPG, PNG, WebP, PDF — maks 5MB</p>
-                  </div>
-                )}
-              </div>
+              <Label>Foto Bukti Kunjungan <span className="text-red-500">*</span>
+                <span className="text-muted-foreground text-xs font-normal ml-1">(bisa lebih dari 1, JPG/PNG/WebP/PDF, maks 5MB per file)</span>
+              </Label>
+
+              {/* Grid preview foto yang sudah dipilih */}
+              {txFiles.length > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {txFiles.map((fp, idx) => (
+                    <div key={idx} className="relative group rounded-lg overflow-hidden border bg-muted/20 aspect-square">
+                      {fp.file.type === "application/pdf" ? (
+                        <div className="w-full h-full flex flex-col items-center justify-center text-xs text-muted-foreground p-2">
+                          <FileText size={24} className="mb-1" />
+                          <span className="truncate w-full text-center">{fp.file.name}</span>
+                        </div>
+                      ) : (
+                        <img src={fp.url} alt={`foto-${idx+1}`}
+                          className="w-full h-full object-cover" />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeFile(idx)}
+                        className="absolute top-1 right-1 bg-black/60 hover:bg-red-600 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X size={12} />
+                      </button>
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/40 text-white text-[10px] px-1 py-0.5 truncate">
+                        {fp.file.name}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Tombol tambah foto */}
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border-2 border-dashed rounded-lg aspect-square flex flex-col items-center justify-center text-muted-foreground hover:border-amber-400 hover:text-amber-400 transition-colors"
+                  >
+                    <Plus size={20} className="mb-1" />
+                    <span className="text-xs">Tambah</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Drop zone awal (hanya tampil jika belum ada foto) */}
+              {txFiles.length === 0 && (
+                <div
+                  className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-amber-400 transition-colors"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <ImageIcon className="mx-auto mb-2 text-muted-foreground" size={32} />
+                  <p className="text-sm text-muted-foreground">Klik untuk pilih foto / PDF</p>
+                  <p className="text-xs text-muted-foreground mt-1">Bisa memilih lebih dari 1 file sekaligus</p>
+                </div>
+              )}
+
               <input
                 ref={fileInputRef}
                 type="file"
                 accept="image/jpeg,image/png,image/webp,application/pdf"
+                multiple
                 className="hidden"
-                onChange={handleFileChange}
+                onChange={handleFilesChange}
               />
-              {txFile && (
-                <p className="text-xs text-muted-foreground">
-                  {txFile.name} ({(txFile.size / 1024 / 1024).toFixed(2)} MB)
-                  <button className="ml-2 text-red-400 hover:underline" onClick={() => { setTxFile(null); setTxFilePreview(null) }}>Hapus</button>
-                </p>
-              )}
             </div>
 
-            {/* Nominal */}
-            <div className="space-y-1">
-              <Label htmlFor="tx-gross">Total Nominal Transaksi <span className="text-red-500">*</span></Label>
-              <div className="relative">
-                <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">Rp</span>
-                <Input
-                  id="tx-gross"
-                  type="number"
-                  min="0"
-                  placeholder="0"
-                  className="pl-9"
-                  value={txGross}
-                  onChange={e => { setTxGross(e.target.value); setTxError("") }}
-                  readOnly={isPackage && !txExtra}  /* package: otomatis dari subtotal+extra */
-                />
+            {/* Layout 2 kolom untuk nominal */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Nominal gross */}
+              <div className="space-y-1">
+                <Label htmlFor="tx-gross">Total Nominal Transaksi <span className="text-red-500">*</span></Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">Rp</span>
+                  <Input
+                    id="tx-gross"
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    className="pl-9"
+                    value={txGross}
+                    onChange={e => { setTxGross(e.target.value); setTxError("") }}
+                    readOnly={isPackage && !txExtra}
+                  />
+                </div>
+                {isPackage && (
+                  <p className="text-xs text-muted-foreground">Otomatis = subtotal + extra</p>
+                )}
               </div>
-              {isPackage && (
-                <p className="text-xs text-muted-foreground">Package: otomatis = subtotal + extra amount</p>
-              )}
-            </div>
 
-            {/* Extra amount (opsional) */}
-            <div className="space-y-1">
-              <Label htmlFor="tx-extra">Biaya Tambahan di Luar Package <span className="text-muted-foreground text-xs">(opsional)</span></Label>
-              <div className="relative">
-                <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">Rp</span>
-                <Input
-                  id="tx-extra"
-                  type="number"
-                  min="0"
-                  placeholder="0"
-                  className="pl-9"
-                  value={txExtra}
-                  onChange={e => {
-                    setTxExtra(e.target.value)
-                    setTxError("")
-                    // Auto-update gross untuk package
-                    if (isPackage && txTarget?.subtotal_package) {
-                      const extra = parseFloat(e.target.value) || 0
-                      setTxGross(String(Number(txTarget.subtotal_package) + extra))
-                    }
-                  }}
-                />
+              {/* Extra amount */}
+              <div className="space-y-1">
+                <Label htmlFor="tx-extra">Biaya Tambahan <span className="text-muted-foreground text-xs font-normal">(opsional)</span></Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">Rp</span>
+                  <Input
+                    id="tx-extra"
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    className="pl-9"
+                    value={txExtra}
+                    onChange={e => {
+                      setTxExtra(e.target.value)
+                      setTxError("")
+                      if (isPackage && txTarget?.subtotal_package) {
+                        const extra = parseFloat(e.target.value) || 0
+                        setTxGross(String(Number(txTarget.subtotal_package) + extra))
+                      }
+                    }}
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Extra notes */}
+            {/* Keterangan extra (muncul jika ada extra) */}
             {txExtra && parseFloat(txExtra) > 0 && (
               <div className="space-y-1">
                 <Label htmlFor="tx-extra-notes">Keterangan Biaya Tambahan</Label>
@@ -418,25 +503,18 @@ export default function GuideBookingsPage() {
 
             {/* Catatan */}
             <div className="space-y-1">
-              <Label htmlFor="tx-notes">Catatan Tambahan <span className="text-muted-foreground text-xs">(opsional)</span></Label>
+              <Label htmlFor="tx-notes">Catatan <span className="text-muted-foreground text-xs font-normal">(opsional)</span></Label>
               <Textarea id="tx-notes" placeholder="Catatan untuk vendor..." rows={2}
                 value={txNotes} onChange={e => setTxNotes(e.target.value)} />
             </div>
 
-            {/* Total preview */}
-            {txGross && !isNaN(parseFloat(txGross)) && parseFloat(txGross) > 0 && (
-              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 flex justify-between items-center">
-                <span className="text-sm font-medium flex items-center gap-1"><DollarSign size={14} /> Total Transaksi</span>
-                <span className="text-lg font-bold text-emerald-400">{formatRupiah(txGross)}</span>
-              </div>
-            )}
-
             {txError && <p className="text-sm text-red-500">{txError}</p>}
           </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setTxTarget(null)} disabled={submitting}>Batal</Button>
             <Button onClick={submitTransaction} disabled={submitting} className="bg-amber-500 hover:bg-amber-600 text-white">
-              <Receipt size={14} className="mr-1" />{submitting ? "Mengupload..." : "Submit Transaksi"}
+              <Receipt size={14} className="mr-1" />{submitting ? "Mengupload..." : `Submit Transaksi${txFiles.length > 0 ? ` (${txFiles.length} foto)` : ""}`}
             </Button>
           </DialogFooter>
         </DialogContent>
