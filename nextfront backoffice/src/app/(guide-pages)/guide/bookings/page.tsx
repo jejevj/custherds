@@ -42,6 +42,16 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled:          "Dibatalkan",
 }
 
+/**
+ * Booking bisa dibatalkan HANYA jika:
+ * 1. Status masih pending_vendor / confirmed / pending_receipt
+ * 2. Belum ada checkin_at (belum checkin)
+ */
+function canCancel(b: Booking): boolean {
+  const cancellableStatuses = ["pending_vendor", "confirmed", "pending_receipt"]
+  return cancellableStatuses.includes(b.status) && !b.checkin_at
+}
+
 function formatRupiah(n?: number | string | null) {
   if (n == null || n === "") return "-"
   const num = Number(n)
@@ -86,14 +96,13 @@ function Lightbox({
   initialIndex: number
   onClose: () => void
 }) {
-  const [idx, setIdx]     = useState(initialIndex)
-  const [zoom, setZoom]   = useState(1)
-  const touchStartX = useRef<number | null>(null)
+  const [idx, setIdx]   = useState(initialIndex)
+  const [zoom, setZoom] = useState(1)
+  const touchStartX     = useRef<number | null>(null)
 
   const prev = useCallback(() => { setIdx(i => (i - 1 + images.length) % images.length); setZoom(1) }, [images.length])
   const next = useCallback(() => { setIdx(i => (i + 1) % images.length); setZoom(1) }, [images.length])
 
-  // Keyboard nav
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft")  prev()
@@ -104,10 +113,8 @@ function Lightbox({
     return () => window.removeEventListener("keydown", handler)
   }, [prev, next, onClose])
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX
-  }
-  const handleTouchEnd = (e: React.TouchEvent) => {
+  const handleTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX }
+  const handleTouchEnd   = (e: React.TouchEvent) => {
     if (touchStartX.current === null) return
     const diff = touchStartX.current - e.changedTouches[0].clientX
     if (Math.abs(diff) > 50) diff > 0 ? next() : prev()
@@ -120,47 +127,20 @@ function Lightbox({
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-3 shrink-0">
-        <span className="text-white/70 text-sm">
-          {idx + 1} / {images.length}
-        </span>
+        <span className="text-white/70 text-sm">{idx + 1} / {images.length}</span>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setZoom(z => Math.max(1, z - 0.5))}
-            className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors"
-            title="Zoom out"
-          >
-            <ZoomOut size={18} />
-          </button>
+          <button onClick={() => setZoom(z => Math.max(1, z - 0.5))} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors"><ZoomOut size={18} /></button>
           <span className="text-white/70 text-xs w-10 text-center">{Math.round(zoom * 100)}%</span>
-          <button
-            onClick={() => setZoom(z => Math.min(4, z + 0.5))}
-            className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors"
-            title="Zoom in"
-          >
-            <ZoomIn size={18} />
-          </button>
-          <button
-            onClick={onClose}
-            className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors ml-2"
-          >
-            <X size={20} />
-          </button>
+          <button onClick={() => setZoom(z => Math.min(4, z + 0.5))} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors"><ZoomIn size={18} /></button>
+          <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors ml-2"><X size={20} /></button>
         </div>
       </div>
 
-      {/* Image area */}
       <div className="flex-1 flex items-center justify-center relative overflow-hidden">
         {images.length > 1 && (
-          <button
-            onClick={prev}
-            className="absolute left-3 z-10 bg-black/50 hover:bg-black/80 text-white rounded-full p-2 transition-colors"
-          >
-            <ChevronLeft size={24} />
-          </button>
+          <button onClick={prev} className="absolute left-3 z-10 bg-black/50 hover:bg-black/80 text-white rounded-full p-2 transition-colors"><ChevronLeft size={24} /></button>
         )}
-
         <div className="overflow-auto max-w-full max-h-full flex items-center justify-center">
           <img
             key={images[idx]}
@@ -171,28 +151,18 @@ function Lightbox({
             draggable={false}
           />
         </div>
-
         {images.length > 1 && (
-          <button
-            onClick={next}
-            className="absolute right-3 z-10 bg-black/50 hover:bg-black/80 text-white rounded-full p-2 transition-colors"
-          >
-            <ChevronRight size={24} />
-          </button>
+          <button onClick={next} className="absolute right-3 z-10 bg-black/50 hover:bg-black/80 text-white rounded-full p-2 transition-colors"><ChevronRight size={24} /></button>
         )}
       </div>
 
-      {/* Thumbnail strip */}
       {images.length > 1 && (
         <div className="flex gap-2 justify-center px-4 py-3 shrink-0 overflow-x-auto">
           {images.map((src, i) => (
-            <button
-              key={i}
-              onClick={() => { setIdx(i); setZoom(1) }}
+            <button key={i} onClick={() => { setIdx(i); setZoom(1) }}
               className={`w-14 h-14 rounded-lg overflow-hidden border-2 shrink-0 transition-all ${
                 i === idx ? "border-white scale-110" : "border-white/20 opacity-50 hover:opacity-80"
-              }`}
-            >
+              }`}>
               <img src={src} alt={`thumb-${i}`} className="w-full h-full object-cover" />
             </button>
           ))}
@@ -216,7 +186,6 @@ export default function GuideBookingsPage() {
   const [detailTx,     setDetailTx]     = useState<Transaction | null>(null)
   const [detailTxLoad, setDetailTxLoad] = useState(false)
 
-  // Lightbox: semua URL foto + index yang diklik
   const [lightboxImages, setLightboxImages] = useState<string[]>([])
   const [lightboxIndex,  setLightboxIndex]  = useState(0)
 
@@ -334,7 +303,6 @@ export default function GuideBookingsPage() {
   const extraPhotos = parseExtraPhotos(detailTx?.receipt_notes)
   const hasTxComission = detailTx && Number(detailTx.guide_commission) > 0
 
-  // Kumpulkan semua URL foto untuk lightbox
   const allReceiptPhotos: string[] = [
     ...(detailTx?.receipt_image ? [resolveReceiptUrl(detailTx.receipt_image)] : []),
     ...extraPhotos.map(p => resolveReceiptUrl(p)),
@@ -349,13 +317,8 @@ export default function GuideBookingsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Lightbox — rendered outside dialog stack */}
       {lightboxImages.length > 0 && (
-        <Lightbox
-          images={lightboxImages}
-          initialIndex={lightboxIndex}
-          onClose={() => setLightboxImages([])}
-        />
+        <Lightbox images={lightboxImages} initialIndex={lightboxIndex} onClose={() => setLightboxImages([])} />
       )}
 
       <div className="flex items-start justify-between gap-4">
@@ -412,7 +375,8 @@ export default function GuideBookingsPage() {
                         <Receipt size={13} className="mr-1" /> Submit Transaksi
                       </Button>
                     )}
-                    {["pending_vendor","confirmed","pending_receipt","pending_completion"].includes(b.status) && (
+                    {/* Batalkan: hanya sebelum checkin & status pre-checkin */}
+                    {canCancel(b) && (
                       <Button size="sm" variant="outline" className="text-red-500 border-red-300 hover:bg-red-50"
                         onClick={() => { setCancelTarget(b.id); setCancelReason(""); setCancelError("") }}>
                         Batalkan
@@ -446,11 +410,10 @@ export default function GuideBookingsPage() {
                 <div className={`grid gap-5 ${
                   ["pending_completion","completed"].includes(detailBook.status) ? "grid-cols-2" : "grid-cols-1"
                 }`}>
-                  {/* Kolom kiri */}
                   <div className="space-y-4">
                     <div className="rounded-lg border bg-muted/20 divide-y text-sm">
-                      <InfoRow icon={<FileText size={12}/>}     label="Kode Booking"   value={detailBook.booking_code} mono />
-                      <InfoRow icon={<CalendarDays size={12}/>} label="Tanggal"         value={new Date(detailBook.booking_date).toLocaleDateString("id-ID", { weekday:"long", year:"numeric", month:"long", day:"numeric" })} />
+                      <InfoRow icon={<FileText size={12}/>}     label="Kode Booking" value={detailBook.booking_code} mono />
+                      <InfoRow icon={<CalendarDays size={12}/>} label="Tanggal"       value={new Date(detailBook.booking_date).toLocaleDateString("id-ID", { weekday:"long", year:"numeric", month:"long", day:"numeric" })} />
                       {detailBook.booking_time && <InfoRow label="Waktu" value={detailBook.booking_time} />}
                       <InfoRow icon={<Users size={12}/>} label="Jumlah Pax" value={`${detailBook.pax_count} orang`} />
                       {detailBook.tourist_nationality && <InfoRow label="Kewarganegaraan" value={detailBook.tourist_nationality} />}
@@ -506,7 +469,6 @@ export default function GuideBookingsPage() {
                     )}
                   </div>
 
-                  {/* Kolom kanan: Detail Transaksi */}
                   {["pending_completion","completed"].includes(detailBook.status) && (
                     <div className="space-y-4">
                       <h6 className="text-sm font-semibold flex items-center gap-1.5 text-muted-foreground">
@@ -545,7 +507,6 @@ export default function GuideBookingsPage() {
                             </Badge>
                           </div>
 
-                          {/* Foto grid — klik buka lightbox */}
                           {allReceiptPhotos.length > 0 && (
                             <div className="space-y-2">
                               <p className="text-xs text-muted-foreground flex items-center gap-1">
@@ -554,24 +515,14 @@ export default function GuideBookingsPage() {
                               </p>
                               <div className="grid grid-cols-3 gap-2">
                                 {allReceiptPhotos.map((src, i) => (
-                                  <button
-                                    key={i}
-                                    type="button"
-                                    onClick={() => openLightbox(i)}
-                                    className="relative rounded-lg overflow-hidden border aspect-square hover:opacity-90 hover:ring-2 hover:ring-white/40 transition-all group"
-                                  >
-                                    <img
-                                      src={src}
-                                      alt={`Bukti ${i + 1}`}
-                                      className="w-full h-full object-cover"
-                                      onError={e => { (e.target as HTMLImageElement).style.display='none' }}
-                                    />
+                                  <button key={i} type="button" onClick={() => openLightbox(i)}
+                                    className="relative rounded-lg overflow-hidden border aspect-square hover:opacity-90 hover:ring-2 hover:ring-white/40 transition-all group">
+                                    <img src={src} alt={`Bukti ${i + 1}`} className="w-full h-full object-cover"
+                                      onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
                                       <ZoomIn size={20} className="text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
                                     </div>
-                                    <div className="absolute bottom-1 right-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
-                                      {i + 1}
-                                    </div>
+                                    <div className="absolute bottom-1 right-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">{i + 1}</div>
                                   </button>
                                 ))}
                               </div>
@@ -615,6 +566,13 @@ export default function GuideBookingsPage() {
               <Button className="bg-amber-500 hover:bg-amber-600 text-white"
                 onClick={() => { openTxDialog(detailBook); setDetailBook(null) }}>
                 <Receipt size={14} className="mr-1" /> Submit Transaksi
+              </Button>
+            )}
+            {/* Batalkan dari dalam modal — juga pakai canCancel */}
+            {detailBook && canCancel(detailBook) && (
+              <Button variant="outline" className="text-red-500 border-red-300 hover:bg-red-50"
+                onClick={() => { setCancelTarget(detailBook.id); setCancelReason(""); setCancelError(""); setDetailBook(null) }}>
+                Batalkan Booking
               </Button>
             )}
           </div>
@@ -770,7 +728,6 @@ export default function GuideBookingsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* View Rejection Reason */}
       <Dialog open={!!viewReason} onOpenChange={open => { if (!open) setViewReason(null) }}>
         <DialogContent>
           <div className="px-6 pt-6 pb-2">
