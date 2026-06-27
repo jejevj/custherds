@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Request, Header, Depends
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 from datetime import datetime, timezone
+from decimal import Decimal
 import xendit
 from sqlalchemy.orm import Session
 from app.core.config import settings
@@ -247,11 +248,9 @@ async def webhook_invoice(
     external_id: str = body.get("external_id", "")
     xendit_invoice_id: str = body.get("id", "")
 
-    # Hanya proses jika PAID
     if status != "PAID":
         return {"status": "ok", "message": f"Status {status} diabaikan"}
 
-    # external_id harus format CUSTHERDS-TX-{tx_code}
     if not external_id.startswith("CUSTHERDS-TX-"):
         logger.warning(f"[Webhook/invoice] external_id tidak dikenali: {external_id}")
         return {"status": "ok", "message": "external_id tidak dikenali"}
@@ -277,12 +276,13 @@ async def webhook_invoice(
     tx.settled_at        = now
     tx.xendit_invoice_id = xendit_invoice_id
 
-    # 2. Kredit wallet guide
+    # 2. Kredit wallet guide — pakai Decimal agar tipe konsisten dengan kolom NUMERIC
     guide = db.query(Guide).filter(Guide.id == tx.guide_id).first()
     if guide:
-        guide.wallet_balance = (guide.wallet_balance or 0) + float(tx.guide_commission)
-        guide.total_earnings = (guide.total_earnings or 0) + float(tx.guide_commission)
-        logger.info(f"[Webhook/invoice] Guide {guide.id} wallet +{tx.guide_commission}")
+        commission = Decimal(str(tx.guide_commission))
+        guide.wallet_balance = (guide.wallet_balance or Decimal(0)) + commission
+        guide.total_earnings = (guide.total_earnings or Decimal(0)) + commission
+        logger.info(f"[Webhook/invoice] Guide {guide.id} wallet +{commission}")
 
     # 3. Booking → completed
     booking = db.query(Booking).filter(Booking.id == tx.booking_id).first()
@@ -308,24 +308,12 @@ async def webhook_fva(
     return {"status": "ok", "event": "fva", "fva_event": body.get("event", body.get("status", "UNKNOWN")), "external_id": body.get("external_id")}
 
 
-# ---------------------------------------------------------------------------
-# W3. Disbursement Webhook — WIRED ke DB
-# URL: /api/v1/payments/webhook/disbursement
-# Xendit kirim callback setelah transfer guide berhasil / gagal
-# external_id format: CUSTHERDS-WD-{withdrawal.id}
-# ---------------------------------------------------------------------------
 @router.post("/webhook/disbursement", summary="[Webhook] Disbursement — Auto update withdrawal guide")
 async def webhook_disbursement(
     request: Request,
     db: Session = Depends(get_db),
     x_callback_token: Optional[str] = Header(None),
 ):
-    """
-    Xendit memanggil endpoint ini setelah proses transfer dana ke rekening guide selesai.
-
-    - Status **COMPLETED** → withdrawal di-update ke `completed`
-    - Status **FAILED** → withdrawal di-update ke `failed`, saldo dikembalikan ke wallet guide
-    """
     _verify_webhook(x_callback_token)
     body = await request.json()
     logger.info(f"Xendit disbursement webhook: {body}")
@@ -334,7 +322,6 @@ async def webhook_disbursement(
     xendit_disbursement_id: str = body.get("id", "")
     external_id: str = body.get("external_id", "")
 
-    # external_id format: CUSTHERDS-WD-{uuid}
     if not external_id.startswith("CUSTHERDS-WD-"):
         logger.warning(f"external_id tidak dikenali: {external_id}")
         return {"status": "ok", "message": "external_id tidak dikenali, diabaikan"}
@@ -351,7 +338,6 @@ async def webhook_disbursement(
         logger.error(f"Withdrawal tidak ditemukan: {withdrawal_id}")
         return {"status": "ok", "message": "Withdrawal tidak ditemukan"}
 
-    # Simpan xendit_disbursement_id jika belum ada
     if not withdrawal.xendit_disbursement_id:
         withdrawal.xendit_disbursement_id = xendit_disbursement_id
 
@@ -368,7 +354,6 @@ async def webhook_disbursement(
             withdrawal.status = "failed"
             withdrawal.processed_at = datetime.now(timezone.utc)
             withdrawal.notes = (withdrawal.notes or "") + f" | Xendit FAILED: {body.get('failure_code', 'unknown')}"
-            # Kembalikan saldo ke wallet guide
             guide = db.query(Guide).filter(Guide.id == withdrawal.guide_id).first()
             if guide:
                 guide.wallet_balance += withdrawal.amount
