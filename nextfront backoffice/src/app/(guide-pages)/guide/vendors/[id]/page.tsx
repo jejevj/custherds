@@ -1,5 +1,10 @@
 import GuideVendorDetailContent from './GuideVendorDetailContent'
 
-export default function GuideVendorDetailPage({ params }: { params: { id: string } }) {
-  return <GuideVendorDetailContent vendorId={params.id} />
+export default async function GuideVendorDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
+  const { id } = await params
+  return <GuideVendorDetailContent vendorId={id} />
 }
