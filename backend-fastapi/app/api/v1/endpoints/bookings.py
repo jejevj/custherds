@@ -22,6 +22,7 @@ from app.schemas.bookings import (
 from app.schemas.transactions import TransactionResponse
 from app.api.v1.endpoints.uploads import _save_upload, ALLOWED_CONTENT_TYPES, MAX_SIZE_BYTES
 from datetime import datetime, timezone
+import json
 
 router = APIRouter()
 
@@ -224,11 +225,6 @@ def vendor_checkin(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user_type(2)),
 ) -> Any:
-    """
-    Petugas vendor menerima guide yang datang dan meng-approve checkin.
-    Status: confirmed → pending_receipt
-    Setelah checkin, guide wajib submit transaksi (upload file + nominal).
-    """
     vendor = db.query(Vendor).filter(Vendor.user_id == current_user.id).first()
     if not vendor:
         raise HTTPException(404, "Profil vendor tidak ditemukan")
@@ -250,13 +246,13 @@ def vendor_checkin(
     return booking
 
 
-# ─────────────────────── GUIDE SUBMIT TRANSAKSI (file + nominal) ───────────────
+# ─────────────────────── GUIDE SUBMIT TRANSAKSI (multi-file) ───────────────────
 
 @router.post(
     "/{booking_id}/submit-transaction",
     response_model=TransactionResponse,
     status_code=201,
-    summary="Guide submit transaksi: upload bukti (file) + nominal. pending_receipt → pending_completion"
+    summary="Guide submit transaksi: upload 1–N bukti foto + nominal"
 )
 async def submit_transaction(
     booking_id: uuid.UUID,
@@ -264,18 +260,15 @@ async def submit_transaction(
     extra_amount: Optional[Decimal] = Form(None, description="Biaya tambahan di luar package (opsional)"),
     extra_notes: Optional[str] = Form(None, description="Keterangan biaya tambahan"),
     receipt_notes: Optional[str] = Form(None, description="Catatan tambahan bukti"),
-    receipt_file: UploadFile = File(..., description="File bukti kunjungan (jpg/png/webp/pdf, maks 5MB)"),
+    receipt_files: List[UploadFile] = File(..., description="Satu atau lebih file bukti kunjungan (jpg/png/webp/pdf, maks 5MB/file)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user_type(1)),
 ) -> Any:
     """
-    Guide mengupload file bukti kunjungan dan menginput nominal transaksi.
-    Backend:
-    1. Validasi file (tipe & ukuran)
-    2. Simpan file ke storage, hasilkan path API /api/v1/uploads/<filename>
-    3. Buat record Transaction dengan split otomatis
-    4. Update booking pending_receipt → pending_completion
-    5. Simpan receipt_url (path API) ke booking untuk referensi cepat
+    Guide mengupload 1 atau lebih file bukti kunjungan dan menginput nominal transaksi.
+    - File pertama disimpan di receipt_image (kolom utama).
+    - File ke-2 dst disimpan, path-nya di-embed ke receipt_notes sebagai
+      JSON tag [extra_photos:[...]] agar backward-compatible.
     """
     guide = db.query(Guide).filter(Guide.user_id == current_user.id).first()
     if not guide:
@@ -295,14 +288,34 @@ async def submit_transaction(
     if db.query(Transaction).filter(Transaction.booking_id == booking.id).first():
         raise HTTPException(400, "Transaksi untuk booking ini sudah ada")
 
-    # ── Validasi & simpan file ──────────────────────────────────────────────────
-    if receipt_file.content_type not in ALLOWED_CONTENT_TYPES:
-        raise HTTPException(415, f"Tipe file tidak diizinkan: {receipt_file.content_type}. Gunakan jpg/png/webp/pdf.")
-    content = await receipt_file.read()
-    if len(content) > MAX_SIZE_BYTES:
-        raise HTTPException(413, "File terlalu besar. Maksimal 5 MB.")
-    filename = _save_upload(content, receipt_file.filename or "receipt")
-    receipt_path = f"/api/v1/uploads/{filename}"  # path API — bukan URL eksternal
+    if not receipt_files:
+        raise HTTPException(400, "Minimal 1 file bukti kunjungan wajib diupload.")
+
+    # ── Validasi & simpan semua file ────────────────────────────────────────────
+    saved_paths: List[str] = []
+    for idx, ufile in enumerate(receipt_files):
+        if ufile.content_type not in ALLOWED_CONTENT_TYPES:
+            raise HTTPException(
+                415,
+                f"File #{idx + 1} ({ufile.filename}): tipe tidak diizinkan ({ufile.content_type}). Gunakan jpg/png/webp/pdf."
+            )
+        content = await ufile.read()
+        if len(content) > MAX_SIZE_BYTES:
+            raise HTTPException(
+                413,
+                f"File #{idx + 1} ({ufile.filename}) terlalu besar. Maksimal 5 MB per file."
+            )
+        filename = _save_upload(content, ufile.filename or f"receipt_{idx}")
+        saved_paths.append(f"/api/v1/uploads/{filename}")
+
+    receipt_path = saved_paths[0]  # foto utama
+    extra_paths  = saved_paths[1:]  # foto tambahan
+
+    # ── Gabungkan extra_photos ke receipt_notes ─────────────────────────────────
+    final_notes = receipt_notes or ""
+    if extra_paths:
+        final_notes = final_notes.rstrip() + f"\n[extra_photos:{json.dumps(extra_paths)}]"
+    final_notes = final_notes.strip() or None
 
     # ── Validasi gross_amount untuk package booking ─────────────────────────────
     if booking.booking_type == "package" and booking.subtotal_package:
@@ -332,7 +345,7 @@ async def submit_transaction(
         extra_amount=extra_amount,
         extra_notes=extra_notes,
         receipt_image=receipt_path,
-        receipt_notes=receipt_notes,
+        receipt_notes=final_notes,
         split_config_id=split.id,
         vendor_percent_snapshot=split.vendor_percent,
         guide_percent_snapshot=split.guide_percent,
@@ -362,10 +375,6 @@ def complete_booking(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user_type(2)),
 ) -> Any:
-    """
-    Vendor mengkonfirmasi bahwa kunjungan sudah selesai setelah approve transaksi.
-    Status: pending_completion → completed
-    """
     vendor = db.query(Vendor).filter(Vendor.user_id == current_user.id).first()
     booking = db.query(Booking).filter(
         Booking.id == booking_id,

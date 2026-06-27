@@ -42,14 +42,8 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled:          "Dibatalkan",
 }
 
-/**
- * Booking bisa dibatalkan HANYA jika:
- * 1. Status masih pending_vendor / confirmed / pending_receipt
- * 2. Belum ada checkin_at (belum checkin)
- */
 function canCancel(b: Booking): boolean {
-  const cancellableStatuses = ["pending_vendor", "confirmed", "pending_receipt"]
-  return cancellableStatuses.includes(b.status) && !b.checkin_at
+  return ["pending_vendor", "confirmed", "pending_receipt"].includes(b.status) && !b.checkin_at
 }
 
 function formatRupiah(n?: number | string | null) {
@@ -88,14 +82,8 @@ function InfoRow({ icon, label, value, mono, highlight }: {
   )
 }
 
-// ===== Lightbox Component =====
-function Lightbox({
-  images, initialIndex, onClose,
-}: {
-  images: string[]
-  initialIndex: number
-  onClose: () => void
-}) {
+// ===== Lightbox =====
+function Lightbox({ images, initialIndex, onClose }: { images: string[]; initialIndex: number; onClose: () => void }) {
   const [idx, setIdx]   = useState(initialIndex)
   const [zoom, setZoom] = useState(1)
   const touchStartX     = useRef<number | null>(null)
@@ -104,58 +92,42 @@ function Lightbox({
   const next = useCallback(() => { setIdx(i => (i + 1) % images.length); setZoom(1) }, [images.length])
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft")  prev()
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") prev()
       if (e.key === "ArrowRight") next()
-      if (e.key === "Escape")     onClose()
+      if (e.key === "Escape") onClose()
     }
-    window.addEventListener("keydown", handler)
-    return () => window.removeEventListener("keydown", handler)
+    window.addEventListener("keydown", h)
+    return () => window.removeEventListener("keydown", h)
   }, [prev, next, onClose])
 
-  const handleTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX }
-  const handleTouchEnd   = (e: React.TouchEvent) => {
-    if (touchStartX.current === null) return
-    const diff = touchStartX.current - e.changedTouches[0].clientX
-    if (Math.abs(diff) > 50) diff > 0 ? next() : prev()
-    touchStartX.current = null
-  }
-
   return (
-    <div
-      className="fixed inset-0 z-[100] bg-black/95 flex flex-col"
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-    >
+    <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col"
+      onTouchStart={e => { touchStartX.current = e.touches[0].clientX }}
+      onTouchEnd={e => {
+        if (touchStartX.current === null) return
+        const diff = touchStartX.current - e.changedTouches[0].clientX
+        if (Math.abs(diff) > 50) diff > 0 ? next() : prev()
+        touchStartX.current = null
+      }}>
       <div className="flex items-center justify-between px-4 py-3 shrink-0">
         <span className="text-white/70 text-sm">{idx + 1} / {images.length}</span>
         <div className="flex items-center gap-2">
-          <button onClick={() => setZoom(z => Math.max(1, z - 0.5))} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors"><ZoomOut size={18} /></button>
+          <button onClick={() => setZoom(z => Math.max(1, z - 0.5))} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10"><ZoomOut size={18} /></button>
           <span className="text-white/70 text-xs w-10 text-center">{Math.round(zoom * 100)}%</span>
-          <button onClick={() => setZoom(z => Math.min(4, z + 0.5))} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors"><ZoomIn size={18} /></button>
-          <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors ml-2"><X size={20} /></button>
+          <button onClick={() => setZoom(z => Math.min(4, z + 0.5))} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10"><ZoomIn size={18} /></button>
+          <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 ml-2"><X size={20} /></button>
         </div>
       </div>
-
       <div className="flex-1 flex items-center justify-center relative overflow-hidden">
-        {images.length > 1 && (
-          <button onClick={prev} className="absolute left-3 z-10 bg-black/50 hover:bg-black/80 text-white rounded-full p-2 transition-colors"><ChevronLeft size={24} /></button>
-        )}
+        {images.length > 1 && <button onClick={prev} className="absolute left-3 z-10 bg-black/50 hover:bg-black/80 text-white rounded-full p-2"><ChevronLeft size={24} /></button>}
         <div className="overflow-auto max-w-full max-h-full flex items-center justify-center">
-          <img
-            key={images[idx]}
-            src={images[idx]}
-            alt={`Foto ${idx + 1}`}
+          <img key={images[idx]} src={images[idx]} alt={`Foto ${idx + 1}`}
             style={{ transform: `scale(${zoom})`, transformOrigin: "center", transition: "transform 0.2s" }}
-            className="max-h-[75vh] max-w-[80vw] object-contain rounded select-none"
-            draggable={false}
-          />
+            className="max-h-[75vh] max-w-[80vw] object-contain rounded select-none" draggable={false} />
         </div>
-        {images.length > 1 && (
-          <button onClick={next} className="absolute right-3 z-10 bg-black/50 hover:bg-black/80 text-white rounded-full p-2 transition-colors"><ChevronRight size={24} /></button>
-        )}
+        {images.length > 1 && <button onClick={next} className="absolute right-3 z-10 bg-black/50 hover:bg-black/80 text-white rounded-full p-2"><ChevronRight size={24} /></button>}
       </div>
-
       {images.length > 1 && (
         <div className="flex gap-2 justify-center px-4 py-3 shrink-0 overflow-x-auto">
           {images.map((src, i) => (
@@ -256,27 +228,13 @@ export default function GuideBookingsPage() {
     }
     setSubmitting(true)
     try {
-      let allPaths: string[] = []
-      if (txFiles.length > 1) {
-        const { access } = getTokens()
-        const form = new FormData()
-        txFiles.slice(1).forEach(fp => form.append('files', fp.file))
-        const res = await fetch(`${API_BASE_URL}/uploads/batch`, {
-          method: 'POST',
-          headers: access ? { Authorization: `Bearer ${access}` } : {},
-          body: form,
-        })
-        if (res.ok) {
-          const data = await res.json() as { uploaded: { url: string }[] }
-          allPaths = data.uploaded.map(u => u.url)
-        }
-      }
-      const extraPhotosNote = allPaths.length > 0 ? `\n[extra_photos:${JSON.stringify(allPaths)}]` : ""
-      const finalNotes = ((txNotes || "") + extraPhotosNote) || undefined
+      // Kirim SEMUA file sekaligus — backend handle split foto utama vs extra
       await transactionsService.submitTransaction(txTarget.id, {
-        receiptFile: txFiles[0].file, grossAmount: grossNum,
+        receiptFiles: txFiles.map(fp => fp.file),
+        grossAmount: grossNum,
         extraAmount: txExtra ? extraNum : undefined,
-        extraNotes: txExtraNotes || undefined, receiptNotes: finalNotes,
+        extraNotes: txExtraNotes || undefined,
+        receiptNotes: txNotes || undefined,
       })
       setBookings(prev => prev.map(b => b.id === txTarget.id ? { ...b, status: "pending_completion" } : b))
       setTxTarget(null)
@@ -375,7 +333,6 @@ export default function GuideBookingsPage() {
                         <Receipt size={13} className="mr-1" /> Submit Transaksi
                       </Button>
                     )}
-                    {/* Batalkan: hanya sebelum checkin & status pre-checkin */}
                     {canCancel(b) && (
                       <Button size="sm" variant="outline" className="text-red-500 border-red-300 hover:bg-red-50"
                         onClick={() => { setCancelTarget(b.id); setCancelReason(""); setCancelError("") }}>
@@ -422,28 +379,21 @@ export default function GuideBookingsPage() {
                       {detailBook.completed_at && <InfoRow icon={<CheckCircle2 size={12}/>} label="Selesai pada" value={new Date(detailBook.completed_at).toLocaleString("id-ID")} />}
                     </div>
 
-                    {detailBook.subtotal_package && !hasTxComission && ![
-                      "pending_completion", "completed"
-                    ].includes(detailBook.status) && (
+                    {detailBook.subtotal_package && !hasTxComission && !["pending_completion","completed"].includes(detailBook.status) && (
                       <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3">
-                        <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
-                          <TrendingUp size={11} /> Potensi Komisi
-                        </p>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1"><TrendingUp size={11} /> Potensi Komisi</p>
                         <p className="text-sm font-bold text-emerald-400">
                           {formatRupiah(detailBook.subtotal_package)}
                           <span className="text-xs font-normal text-muted-foreground ml-1">subtotal package</span>
                         </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Komisi final dihitung setelah transaksi dikonfirmasi vendor.
-                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">Komisi final dihitung setelah transaksi dikonfirmasi vendor.</p>
                       </div>
                     )}
 
                     {detailBook.status === "confirmed" && (
                       <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3 text-sm">
                         <p className="font-medium text-blue-400 mb-1">📋 Instruksi Checkin</p>
-                        <p className="text-muted-foreground text-xs">
-                          Tunjukkan kode booking
+                        <p className="text-muted-foreground text-xs">Tunjukkan kode booking
                           <span className="font-mono font-bold text-foreground mx-1">{detailBook.booking_code}</span>
                           ke petugas vendor saat tiba.
                         </p>
@@ -550,9 +500,7 @@ export default function GuideBookingsPage() {
                     <Clock size={14} className="text-amber-400 mt-0.5 shrink-0" />
                     <div>
                       <p className="font-medium text-amber-400">Menunggu Konfirmasi Vendor</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Transaksi sudah disubmit. Vendor sedang memverifikasi bukti kunjungan.
-                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Transaksi sudah disubmit. Vendor sedang memverifikasi bukti kunjungan.</p>
                     </div>
                   </div>
                 )}
@@ -568,7 +516,6 @@ export default function GuideBookingsPage() {
                 <Receipt size={14} className="mr-1" /> Submit Transaksi
               </Button>
             )}
-            {/* Batalkan dari dalam modal — juga pakai canCancel */}
             {detailBook && canCancel(detailBook) && (
               <Button variant="outline" className="text-red-500 border-red-300 hover:bg-red-50"
                 onClick={() => { setCancelTarget(detailBook.id); setCancelReason(""); setCancelError(""); setDetailBook(null) }}>
@@ -603,7 +550,7 @@ export default function GuideBookingsPage() {
             <div className="space-y-2">
               <Label className="text-sm font-medium">
                 Foto Bukti Kunjungan <span className="text-red-500">*</span>
-                <span className="text-muted-foreground text-xs font-normal ml-1">(bisa lebih dari 1 — JPG/PNG/WebP/PDF, maks 5MB)</span>
+                <span className="text-muted-foreground text-xs font-normal ml-1">(bisa lebih dari 1 — JPG/PNG/WebP/PDF, maks 5MB/file)</span>
               </Label>
               {txFiles.length > 0 ? (
                 <div className="grid grid-cols-4 gap-2">

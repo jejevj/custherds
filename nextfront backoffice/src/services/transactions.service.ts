@@ -65,13 +65,14 @@ export const transactionsService = {
 
   /**
    * Guide submit transaksi via multipart/form-data.
-   * Endpoint: POST /bookings/{id}/submit-transaction
-   * File di-upload langsung, tidak melalui /uploads terpisah.
+   * Semua file dikirim sekaligus sebagai receipt_files[] ke satu endpoint.
+   * Backend menyimpan file[0] sebagai receipt_image,
+   * file[1..N] path-nya di-embed ke receipt_notes sebagai [extra_photos:[...]].
    */
   submitTransaction: async (
     bookingId: string,
     params: {
-      receiptFile: File
+      receiptFiles: File[]      // semua file — minimal 1
       grossAmount: number
       extraAmount?: number
       extraNotes?: string
@@ -80,10 +81,13 @@ export const transactionsService = {
   ): Promise<Transaction> => {
     const { access } = getTokens()
     const form = new FormData()
-    form.append('receipt_file', params.receiptFile)
+
+    // Kirim semua file dengan key yang sama: receipt_files
+    params.receiptFiles.forEach(f => form.append('receipt_files', f))
+
     form.append('gross_amount', String(params.grossAmount))
     if (params.extraAmount != null) form.append('extra_amount', String(params.extraAmount))
-    if (params.extraNotes)  form.append('extra_notes',   params.extraNotes)
+    if (params.extraNotes)   form.append('extra_notes',   params.extraNotes)
     if (params.receiptNotes) form.append('receipt_notes', params.receiptNotes)
 
     const res = await fetch(`${API_BASE_URL}/bookings/${bookingId}/submit-transaction`, {
