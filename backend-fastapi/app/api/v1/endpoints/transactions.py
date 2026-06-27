@@ -56,7 +56,6 @@ def create_transaction(
     if booking.status != "pending_receipt":
         raise HTTPException(400, f"Booking belum siap submit transaksi, status: {booking.status}")
 
-    # Cek apakah masih ada tx aktif (pending_vendor_approval) untuk booking ini
     existing_active_tx = db.query(Transaction).filter(
         Transaction.booking_id == booking.id,
         Transaction.status == "pending_vendor_approval",
@@ -64,7 +63,6 @@ def create_transaction(
     if existing_active_tx:
         raise HTTPException(400, "Sudah ada transaksi aktif menunggu approval vendor.")
 
-    # Validasi gross_amount untuk package booking
     if booking.booking_type == "package" and booking.subtotal_package:
         extra = payload.extra_amount or Decimal("0")
         expected_gross = booking.subtotal_package + extra
@@ -172,13 +170,20 @@ async def vendor_approve_transaction(
     if tx.status != "pending_vendor_approval":
         raise HTTPException(400, f"Transaksi tidak bisa diproses, status saat ini: {tx.status}")
 
+    # Tagihan ke vendor = Komisi Guide + Fee Platform
+    # (vendor sudah menerima 100% gross dari tamu di lapangan,
+    #  yang harus dibayarkan ke platform hanya bagian non-vendor)
+    tagihan = tx.guide_commission + tx.platform_fee
+
     if payload.payment_method == "deposit":
-        if vendor.deposit_balance < tx.vendor_amount:
+        if vendor.deposit_balance < tagihan:
             raise HTTPException(
                 400,
-                f"Saldo deposit tidak cukup. Saldo: {vendor.deposit_balance}, Tagihan: {tx.vendor_amount}"
+                f"Saldo deposit tidak cukup. "
+                f"Saldo: {vendor.deposit_balance}, "
+                f"Tagihan (Komisi Guide + Fee Platform): {tagihan}"
             )
-        vendor.deposit_balance -= tx.vendor_amount
+        vendor.deposit_balance -= tagihan
         tx.status = "settled"
         tx.payment_method = "deposit"
         tx.paid_at = datetime.now(timezone.utc)
@@ -205,11 +210,14 @@ async def vendor_approve_transaction(
     elif payload.payment_method == "pay_as_you_go":
         vendor_user = db.query(User).filter(User.id == vendor.user_id).first()
         external_id = f"CUSTHERDS-TX-{tx.transaction_code}"
-        description = f"Tagihan Custherds - Transaksi {tx.transaction_code} | Vendor: {vendor.vendor_business_name}"
+        description = (
+            f"Tagihan Custherds - Komisi Guide + Fee Platform | "
+            f"Transaksi {tx.transaction_code} | Vendor: {vendor.vendor_business_name}"
+        )
         try:
             xendit_response = await create_invoice(
                 external_id=external_id,
-                amount=float(tx.vendor_amount),
+                amount=float(tagihan),   # ✅ hanya komisi guide + fee platform
                 payer_email=vendor_user.user_email if vendor_user else "vendor@custherds.com",
                 description=description,
             )
@@ -247,24 +255,20 @@ def vendor_reject_transaction(
     if tx.status != "pending_vendor_approval":
         raise HTTPException(400, f"Status tidak bisa diproses: {tx.status}")
 
-    # Reject tx ini
     tx.status = "rejected"
     tx.vendor_rejection_reason = payload.reason
     tx.vendor_reviewed_at = datetime.now(timezone.utc)
 
-    # Update booking: increment tx_attempt
     booking = db.query(Booking).filter(Booking.id == tx.booking_id).first()
     if booking:
         booking.tx_attempt = (booking.tx_attempt or 0) + 1
         if booking.tx_attempt >= TX_MAX_ATTEMPT:
-            # Sudah 3x ditolak — booking rejected final
             booking.status = "rejected"
             booking.vendor_rejection_reason = (
                 f"Transaksi ditolak {TX_MAX_ATTEMPT}x oleh vendor. "
                 f"Alasan terakhir: {payload.reason}"
             )
         else:
-            # Masih bisa revisi — kembalikan ke pending_receipt
             booking.status = "pending_receipt"
 
     db.commit()
