@@ -78,7 +78,7 @@ function InfoRow({ icon, label, value, mono, highlight }: {
   )
 }
 
-// ── Lightbox (no Radix) ─────────────────────────────────────────────
+// ── Lightbox ──────────────────────────────────────────────────────────────────
 function Lightbox({ images, initialIndex, onClose }: { images: string[]; initialIndex: number; onClose: () => void }) {
   const [idx, setIdx]   = useState(initialIndex)
   const [zoom, setZoom] = useState(1)
@@ -147,21 +147,19 @@ export default function GuideBookingDetailContent() {
   const { id } = useParams<{ id: string }>()
   const router  = useRouter()
 
-  const [booking,     setBooking]     = useState<Booking | null>(null)
-  const [tx,          setTx]          = useState<Transaction | null>(null)
-  const [loading,     setLoading]     = useState(true)
-  const [error,       setError]       = useState("")
-  const [submitting,  setSubmitting]  = useState(false)
+  const [booking,    setBooking]   = useState<Booking | null>(null)
+  const [tx,         setTx]        = useState<Transaction | null>(null)
+  const [loading,    setLoading]   = useState(true)
+  const [error,      setError]     = useState("")
+  const [submitting, setSubmitting] = useState(false)
 
   const [lightboxImages, setLightboxImages] = useState<string[]>([])
   const [lightboxIndex,  setLightboxIndex]  = useState(0)
 
-  // Cancel state
-  const [showCancel,   setShowCancel]  = useState(false)
+  const [showCancel,   setShowCancel]   = useState(false)
   const [cancelReason, setCancelReason] = useState("")
   const [cancelError,  setCancelError]  = useState("")
 
-  // Submit Transaksi state
   const [showTxForm,   setShowTxForm]   = useState(false)
   const [txFiles,      setTxFiles]      = useState<FilePreview[]>([])
   const [txGross,      setTxGross]      = useState("")
@@ -176,10 +174,7 @@ export default function GuideBookingDetailContent() {
       const b = await bookingsService.get(id)
       setBooking(b)
       if (["pending_completion", "completed"].includes(b.status)) {
-        try {
-          const t = await transactionsService.getByBookingId(b.id)
-          setTx(t)
-        } catch { /* no tx yet */ }
+        try { setTx(await transactionsService.getByBookingId(b.id)) } catch { /* no tx yet */ }
       }
     } catch {
       setError("Gagal memuat detail booking.")
@@ -208,8 +203,8 @@ export default function GuideBookingDetailContent() {
     setTxFiles(prev => { URL.revokeObjectURL(prev[i].url); return prev.filter((_, j) => j !== i) })
   }
 
-  const grossNum = parseFloat(txGross) || 0
-  const extraNum = parseFloat(txExtra)  || 0
+  const grossNum  = parseFloat(txGross) || 0
+  const extraNum  = parseFloat(txExtra) || 0
   const isPackage = booking?.booking_type === "package"
 
   const submitTransaction = async () => {
@@ -260,17 +255,22 @@ export default function GuideBookingDetailContent() {
     ...extraPhotos.map(p => resolveReceiptUrl(p)),
   ]
 
-  const hasTxComission = tx && Number(tx.guide_commission) > 0
   const showTxPanel = ["pending_completion", "completed"].includes(booking.status)
+
+  // Komisi: pakai guide_commission dari tx (real) jika sudah ada, fallback ke estimated_commission
+  const komisiBadge = tx?.guide_commission
+    ? { label: "Komisi Kamu", value: formatRupiah(tx.guide_commission), real: true }
+    : booking.estimated_commission
+    ? { label: "Estimasi Komisi", value: formatRupiah(booking.estimated_commission), real: false }
+    : null
 
   return (
     <div className="space-y-6">
-      {/* Lightbox */}
       {lightboxImages.length > 0 && (
         <Lightbox images={lightboxImages} initialIndex={lightboxIndex} onClose={() => setLightboxImages([])} />
       )}
 
-      {/* Back + Header */}
+      {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <button
@@ -295,10 +295,10 @@ export default function GuideBookingDetailContent() {
         {/* Kolom Kiri: Info Booking */}
         <div className="space-y-5">
           <div className="rounded-xl border bg-card shadow-sm divide-y text-sm">
-            <InfoRow icon={<FileText size={12}/>}     label="Kode Booking"     value={booking.booking_code} mono />
-            <InfoRow icon={<CalendarDays size={12}/>} label="Tanggal"           value={new Date(booking.booking_date).toLocaleDateString("id-ID", { weekday:"long", year:"numeric", month:"long", day:"numeric" })} />
+            <InfoRow icon={<FileText size={12}/>}     label="Kode Booking"   value={booking.booking_code} mono />
+            <InfoRow icon={<CalendarDays size={12}/>} label="Tanggal"         value={new Date(booking.booking_date).toLocaleDateString("id-ID", { weekday:"long", year:"numeric", month:"long", day:"numeric" })} />
             {booking.booking_time && <InfoRow label="Waktu" value={booking.booking_time} />}
-            <InfoRow icon={<Users size={12}/>}        label="Jumlah Pax"       value={`${booking.pax_count} orang`} />
+            <InfoRow icon={<Users size={12}/>}        label="Jumlah Pax"     value={`${booking.pax_count} orang`} />
             {booking.tourist_nationality && <InfoRow label="Kewarganegaraan" value={booking.tourist_nationality} />}
             {booking.booking_type === "package" && booking.package_price_snapshot && (
               <InfoRow icon={<Package size={12}/>} label="Harga / Pax" value={formatRupiah(booking.package_price_snapshot)} />
@@ -314,15 +314,22 @@ export default function GuideBookingDetailContent() {
             )}
           </div>
 
-          {/* Potensi komisi */}
-          {booking.subtotal_package && !hasTxComission && !showTxPanel && (
-            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-3">
-              <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1"><TrendingUp size={11} /> Potensi Komisi</p>
-              <p className="text-sm font-bold text-emerald-400">
-                {formatRupiah(booking.subtotal_package)}
-                <span className="text-xs font-normal text-muted-foreground ml-1">subtotal package</span>
+          {/* Komisi card — estimasi atau real */}
+          {komisiBadge && !showTxPanel && (
+            <div className={`rounded-xl border px-4 py-3 ${
+              komisiBadge.real
+                ? "border-emerald-500/40 bg-emerald-500/5"
+                : "border-emerald-500/20 bg-emerald-500/5"
+            }`}>
+              <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
+                <TrendingUp size={11} /> {komisiBadge.label}
+                {!komisiBadge.real && (
+                  <span className="ml-1 text-amber-400/80">(estimasi, final setelah tx dikonfirmasi)</span>
+                )}
               </p>
-              <p className="text-xs text-muted-foreground mt-1">Komisi final dihitung setelah transaksi dikonfirmasi vendor.</p>
+              <p className={`text-lg font-bold ${ komisiBadge.real ? "text-emerald-400" : "text-emerald-300" }`}>
+                {komisiBadge.value}
+              </p>
             </div>
           )}
 
@@ -338,7 +345,6 @@ export default function GuideBookingDetailContent() {
             </div>
           )}
 
-          {/* Status pending_completion info */}
           {booking.status === "pending_completion" && (
             <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm flex items-start gap-2">
               <Clock size={14} className="text-amber-400 mt-0.5 shrink-0" />
@@ -349,7 +355,6 @@ export default function GuideBookingDetailContent() {
             </div>
           )}
 
-          {/* Alasan tolak / cancel */}
           {booking.status === "rejected" && booking.vendor_rejection_reason && (
             <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm">
               <p className="text-xs text-muted-foreground mb-1">Alasan Penolakan</p>
@@ -369,7 +374,6 @@ export default function GuideBookingDetailContent() {
             </div>
           )}
 
-          {/* Action Buttons */}
           <div className="flex gap-3 flex-wrap">
             {booking.status === "pending_receipt" && (
               <Button className="bg-amber-500 hover:bg-amber-600 text-white" onClick={openTxForm}>
@@ -385,7 +389,7 @@ export default function GuideBookingDetailContent() {
           </div>
         </div>
 
-        {/* Kolom Kanan: Detail Transaksi (hanya jika ada tx) */}
+        {/* Kolom Kanan: Detail Transaksi */}
         {showTxPanel && (
           <div className="space-y-5">
             <h2 className="text-base font-semibold flex items-center gap-1.5 text-muted-foreground">
@@ -394,13 +398,13 @@ export default function GuideBookingDetailContent() {
             {tx ? (
               <>
                 <div className="rounded-xl border bg-card shadow-sm divide-y text-sm">
-                  <InfoRow icon={<FileText size={12}/>}    label="Kode Transaksi"   value={tx.transaction_code} mono />
-                  <InfoRow icon={<Banknote size={12}/>}    label="Gross Total"      value={formatRupiah(tx.gross_amount)} />
+                  <InfoRow icon={<FileText size={12}/>}   label="Kode Transaksi" value={tx.transaction_code} mono />
+                  <InfoRow icon={<Banknote size={12}/>}   label="Gross Total"    value={formatRupiah(tx.gross_amount)} />
                   {tx.extra_amount && Number(tx.extra_amount) > 0 && (
                     <InfoRow label="Biaya Tambahan" value={formatRupiah(tx.extra_amount)} />
                   )}
                   {tx.extra_notes && <InfoRow label="Ket. Extra" value={tx.extra_notes} />}
-                  <InfoRow icon={<TrendingUp size={12}/>}  label="Komisi Kamu"      value={formatRupiah(tx.guide_commission)} highlight="green" />
+                  <InfoRow icon={<TrendingUp size={12}/>} label="Komisi Kamu"    value={formatRupiah(tx.guide_commission)} highlight="green" />
                   {Number(tx.guide_percent_snapshot) > 0 && (
                     <InfoRow label="Persentase Komisi" value={`${Number(tx.guide_percent_snapshot)}%`} highlight="amber" />
                   )}
@@ -420,7 +424,6 @@ export default function GuideBookingDetailContent() {
                   </Badge>
                 </div>
 
-                {/* Grid foto */}
                 {allReceiptPhotos.length > 0 && (
                   <div className="space-y-2">
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
@@ -429,7 +432,8 @@ export default function GuideBookingDetailContent() {
                     </p>
                     <div className="grid grid-cols-3 gap-2">
                       {allReceiptPhotos.map((src, i) => (
-                        <button key={i} type="button" onClick={() => { setLightboxImages(allReceiptPhotos); setLightboxIndex(i) }}
+                        <button key={i} type="button"
+                          onClick={() => { setLightboxImages(allReceiptPhotos); setLightboxIndex(i) }}
                           className="relative rounded-lg overflow-hidden border aspect-square hover:opacity-90 hover:ring-2 hover:ring-white/40 transition-all group">
                           <img src={src} alt={`Bukti ${i + 1}`} className="w-full h-full object-cover"
                             onError={e => { (e.target as HTMLImageElement).style.display="none" }} />
@@ -459,7 +463,7 @@ export default function GuideBookingDetailContent() {
         )}
       </div>
 
-      {/* ===== Submit Transaksi Dialog ===== */}
+      {/* Submit Transaksi Dialog */}
       <Dialog open={showTxForm} onOpenChange={open => { if (!open) setShowTxForm(false) }}>
         <DialogContent className="sm:max-w-[700px] w-full p-0 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b bg-card">
@@ -472,6 +476,11 @@ export default function GuideBookingDetailContent() {
               <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3 text-sm">
                 <p className="text-xs text-muted-foreground mb-1">Subtotal Package</p>
                 <p className="font-bold text-blue-400 text-base">{formatRupiah(booking.subtotal_package)}</p>
+                {booking.estimated_commission && (
+                  <p className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
+                    <TrendingUp size={10} /> Estimasi komisi kamu: {formatRupiah(booking.estimated_commission)}
+                  </p>
+                )}
                 <p className="text-xs text-muted-foreground mt-1">
                   {booking.pax_count} pax × {formatRupiah(booking.package_price_snapshot)}
                   {" — Tambahkan extra di bawah jika ada biaya di luar package"}
@@ -587,7 +596,7 @@ export default function GuideBookingDetailContent() {
         </DialogContent>
       </Dialog>
 
-      {/* ===== Cancel Dialog ===== */}
+      {/* Cancel Dialog */}
       <Dialog open={showCancel} onOpenChange={open => { if (!open) setShowCancel(false) }}>
         <DialogContent>
           <div className="px-6 pt-6 pb-2">

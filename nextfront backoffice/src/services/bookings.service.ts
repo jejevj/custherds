@@ -19,6 +19,12 @@ export interface Booking {
    * Dikirim sebagai Decimal string dari Python → gunakan Number() sebelum format.
    */
   total_price: string | null
+  /**
+   * Estimasi komisi guide = subtotal_package × guide_percent (dari active split config) / 100.
+   * Hanya ada jika booking_type="package" dan user adalah guide.
+   * Null untuk direct booking atau dari sisi vendor.
+   */
+  estimated_commission: string | null
   tourist_names: string | null
   tourist_nationality: string | null
   notes: string | null

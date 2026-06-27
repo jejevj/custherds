@@ -68,6 +68,10 @@ class BookingResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    # Estimasi komisi guide: subtotal_package x guide_percent / 100
+    # Di-inject dari endpoint sebelum return (bukan computed_field DB)
+    estimated_commission: Optional[Decimal] = None
+
     @computed_field
     @property
     def total_price(self) -> Optional[Decimal]:

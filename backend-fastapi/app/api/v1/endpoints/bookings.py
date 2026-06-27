@@ -73,6 +73,23 @@ def _get_active_split(db: Session) -> RevenueSplitConfig:
     return config
 
 
+def _inject_estimated_commission(booking: Booking, guide_percent: float) -> BookingResponse:
+    """
+    Build BookingResponse dan inject estimated_commission:
+      = subtotal_package × guide_percent / 100
+    Hanya berlaku untuk booking_type='package' yang belum selesai (belum ada tx).
+    Untuk direct booking atau yang sudah ada tx, field ini None.
+    """
+    resp = BookingResponse.model_validate(booking)
+    if booking.subtotal_package is not None:
+        resp.estimated_commission = (
+            Decimal(str(booking.subtotal_package))
+            * Decimal(str(guide_percent))
+            / Decimal("100")
+        ).quantize(Decimal("0.01"))
+    return resp
+
+
 # ─────────────────────────────── CREATE BOOKING ────────────────────────────────
 
 @router.post("", response_model=BookingResponse, status_code=201, summary="Guide buat booking (direct atau package)")
@@ -146,7 +163,9 @@ def create_booking(
     db.add(booking)
     db.commit()
     db.refresh(booking)
-    return booking
+
+    split = _get_active_split(db)
+    return _inject_estimated_commission(booking, split.guide_percent)
 
 
 # ─────────────────────────────── LIST & DETAIL ─────────────────────────────────
@@ -167,7 +186,16 @@ def list_bookings(
         q = db.query(Booking)
     if status:
         q = q.filter(Booking.status == status)
-    return q.order_by(Booking.created_at.desc()).all()
+    bookings = q.order_by(Booking.created_at.desc()).all()
+
+    # Inject estimated_commission hanya untuk guide
+    if current_user.user_type == 1:
+        try:
+            split = _get_active_split(db)
+            return [_inject_estimated_commission(b, split.guide_percent) for b in bookings]
+        except Exception:
+            pass
+    return bookings
 
 
 @router.get("/{booking_id}", response_model=BookingResponse, summary="Detail booking")
@@ -179,6 +207,13 @@ def get_booking(
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(404, "Booking tidak ditemukan")
+
+    if current_user.user_type == 1:
+        try:
+            split = _get_active_split(db)
+            return _inject_estimated_commission(booking, split.guide_percent)
+        except Exception:
+            pass
     return booking
 
 
