@@ -23,6 +23,9 @@ class Booking(Base):
 
     Dari pending_vendor  : bisa → rejected
     Dari confirmed/pending_receipt/pending_completion : bisa → cancelled
+
+    tx_attempt: jumlah berapa kali vendor reject transaksi guide.
+    Jika tx_attempt >= 3 maka booking otomatis rejected.
     """
     __tablename__ = "bookings"
 
@@ -58,6 +61,9 @@ class Booking(Base):
     receipt_url             = Column(String(500), nullable=True)               # URL bukti kunjungan yang diupload guide
     receipt_uploaded_at     = Column(DateTime(timezone=True), nullable=True)   # saat guide upload receipt (pending_receipt → pending_completion)
     completed_at            = Column(DateTime(timezone=True), nullable=True)   # saat vendor mark completed (pending_completion → completed)
+
+    # Revisi transaksi: berapa kali vendor reject tx guide (max 3)
+    tx_attempt              = Column(Integer, default=0, nullable=False)
 
     created_at              = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at              = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
