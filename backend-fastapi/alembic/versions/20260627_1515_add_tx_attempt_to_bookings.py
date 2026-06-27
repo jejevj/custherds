@@ -1,14 +1,14 @@
 """add tx_attempt to bookings
 
 Revision ID: a1f3c9e20001
-Revises: 20260627_0516_add_checkin_receipt_fields_to_bookings
+Revises: f7c3b9d21e04
 Create Date: 2026-06-27 15:15:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = 'a1f3c9e20001'
-down_revision = '20260627_0516'
+down_revision = 'f7c3b9d21e04'
 branch_labels = None
 depends_on = None
 
