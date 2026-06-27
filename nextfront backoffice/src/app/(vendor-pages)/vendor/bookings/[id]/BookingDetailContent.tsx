@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { bookingsService, Booking } from "@/services/bookings.service"
 import { transactionsService, Transaction, resolveReceiptUrl } from "@/services/transactions.service"
@@ -11,8 +11,11 @@ import { toast } from "sonner"
 import {
   ArrowLeft, FileText, CalendarDays, Users, Package, MapPin,
   Upload, CheckCircle, XCircle, CheckCircle2, Receipt, AlertCircle,
-  CreditCard, Banknote, ZoomIn, ChevronLeft, ChevronRight, X,
+  CreditCard, Banknote, ZoomIn, ChevronLeft, ChevronRight, X, Loader2,
 } from "lucide-react"
+
+const POLL_INTERVAL_MS  = 5000   // cek setiap 5 detik
+const POLL_MAX_ATTEMPTS = 60     // maksimal 5 menit (60 × 5s)
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
   confirmed: "default",
@@ -49,19 +52,15 @@ function parseExtraPhotos(notes: string | null | undefined): string[] {
   const sub = notes.slice(start + tag.length)
   const end = sub.indexOf("]")
   if (end === -1) return []
-  try {
-    return JSON.parse(sub.slice(0, end + 1)) as string[]
-  } catch {
-    return []
-  }
+  try { return JSON.parse(sub.slice(0, end + 1)) as string[] }
+  catch { return [] }
 }
 
-// ── Multi-image Lightbox ───────────────────────────────────────────────────
+// ── Lightbox ──────────────────────────────────────────────────────────────
 function Lightbox({ images, initialIndex, onClose }: { images: string[]; initialIndex: number; onClose: () => void }) {
   const [idx, setIdx] = useState(initialIndex)
   const prev = () => setIdx(i => (i - 1 + images.length) % images.length)
   const next = () => setIdx(i => (i + 1) % images.length)
-
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.key === "Escape")     { e.stopPropagation(); e.preventDefault(); onClose() }
@@ -71,27 +70,19 @@ function Lightbox({ images, initialIndex, onClose }: { images: string[]; initial
     window.addEventListener("keydown", h, true)
     return () => window.removeEventListener("keydown", h, true)
   }, [onClose]) // eslint-disable-line
-
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black/90 backdrop-blur-sm" onClick={onClose}>
       <div className="flex items-center justify-between px-4 py-3 shrink-0" onClick={e => e.stopPropagation()}>
         <span className="text-white/60 text-sm">{idx + 1} / {images.length}</span>
-        <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10">
-          <X size={20} />
-        </button>
+        <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10"><X size={20} /></button>
       </div>
       <div className="flex-1 flex items-center justify-center relative" onClick={e => e.stopPropagation()}>
         {images.length > 1 && (
-          <button onClick={prev} className="absolute left-3 z-10 bg-black/50 hover:bg-black/80 text-white rounded-full p-2">
-            <ChevronLeft size={22} />
-          </button>
+          <button onClick={prev} className="absolute left-3 z-10 bg-black/50 hover:bg-black/80 text-white rounded-full p-2"><ChevronLeft size={22} /></button>
         )}
-        <img key={images[idx]} src={images[idx]} alt={`Foto ${idx + 1}`}
-          className="max-h-[80vh] max-w-[85vw] object-contain rounded-lg shadow-2xl" />
+        <img key={images[idx]} src={images[idx]} alt={`Foto ${idx + 1}`} className="max-h-[80vh] max-w-[85vw] object-contain rounded-lg shadow-2xl" />
         {images.length > 1 && (
-          <button onClick={next} className="absolute right-3 z-10 bg-black/50 hover:bg-black/80 text-white rounded-full p-2">
-            <ChevronRight size={22} />
-          </button>
+          <button onClick={next} className="absolute right-3 z-10 bg-black/50 hover:bg-black/80 text-white rounded-full p-2"><ChevronRight size={22} /></button>
         )}
       </div>
       {images.length > 1 && (
@@ -126,8 +117,7 @@ function PhotoGrid({ urls, label }: { urls: string[]; label: string }) {
         </p>
         <div className="grid grid-cols-3 gap-2">
           {urls.map((url, i) => (
-            <button key={i} className="relative group rounded-md overflow-hidden bg-black/10 aspect-square"
-              onClick={() => setLightboxIdx(i)}>
+            <button key={i} className="relative group rounded-md overflow-hidden bg-black/10 aspect-square" onClick={() => setLightboxIdx(i)}>
               <img src={url} alt={`foto-${i + 1}`} className="w-full h-full object-cover"
                 onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
@@ -145,23 +135,34 @@ function PhotoGrid({ urls, label }: { urls: string[]; label: string }) {
 // ── Main Component ──────────────────────────────────────────────────────────
 export default function BookingDetailContent() {
   const { id } = useParams<{ id: string }>()
-  const router = useRouter()
+  const router  = useRouter()
 
-  const [booking, setBooking]     = useState<Booking | null>(null)
-  const [tx, setTx]               = useState<Transaction | null>(null)
-  const [loading, setLoading]     = useState(true)
-  const [error, setError]         = useState("")
-  const [submitting, setSubmitting] = useState(false)
+  const [booking, setBooking]         = useState<Booking | null>(null)
+  const [tx, setTx]                   = useState<Transaction | null>(null)
+  const [loading, setLoading]         = useState(true)
+  const [error, setError]             = useState("")
+  const [submitting, setSubmitting]   = useState(false)
   const [actionError, setActionError] = useState("")
+  const [polling, setPolling]         = useState(false)
 
-  const [showReject, setShowReject]     = useState(false)
-  const [rejectReason, setRejectReason] = useState("")
-  const [showTxReject, setShowTxReject]   = useState(false)
-  const [txRejectReason, setTxRejectReason] = useState("")
-  const [showPayMethod, setShowPayMethod] = useState(false)
-  const [invoiceUrl, setInvoiceUrl]       = useState<string | null>(null)
+  const [showReject, setShowReject]           = useState(false)
+  const [rejectReason, setRejectReason]       = useState("")
+  const [showTxReject, setShowTxReject]       = useState(false)
+  const [txRejectReason, setTxRejectReason]   = useState("")
+  const [showPayMethod, setShowPayMethod]     = useState(false)
+  const [invoiceUrl, setInvoiceUrl]           = useState<string | null>(null)
 
-  const fetchData = useCallback(async () => {
+  const pollTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pollAttemptsRef = useRef(0)
+
+  const stopPolling = useCallback(() => {
+    if (pollTimerRef.current) clearTimeout(pollTimerRef.current)
+    pollTimerRef.current = null
+    setPolling(false)
+    pollAttemptsRef.current = 0
+  }, [])
+
+  const fetchData = useCallback(async (silent = false) => {
     try {
       const b = await bookingsService.get(id)
       setBooking(b)
@@ -172,13 +173,73 @@ export default function BookingDetailContent() {
         } catch { /* tx belum ada */ }
       }
     } catch {
-      setError("Gagal memuat detail booking.")
+      if (!silent) setError("Gagal memuat detail booking.")
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [id])
 
+  // ── Polling logic: aktif saat TX status = payment_pending ──────────────
+  const startPolling = useCallback((bookingId: string, txId: string) => {
+    if (pollTimerRef.current) return // sudah berjalan
+    setPolling(true)
+    pollAttemptsRef.current = 0
+
+    const tick = async () => {
+      if (pollAttemptsRef.current >= POLL_MAX_ATTEMPTS) {
+        stopPolling()
+        return
+      }
+      pollAttemptsRef.current++
+
+      try {
+        const latestTx = await transactionsService.getByBookingId(bookingId)
+        setTx(latestTx)
+
+        if (latestTx.status === "settled") {
+          // Pembayaran berhasil — refresh booking juga
+          const latestBooking = await bookingsService.get(id)
+          setBooking(latestBooking)
+          stopPolling()
+          toast.success("Pembayaran berhasil!", {
+            description: "Transaksi telah settled dan booking selesai.",
+            duration: 6000,
+          })
+          return
+        }
+
+        if (latestTx.status === "pending_vendor_approval") {
+          // Invoice expired, Xendit sudah reset TX
+          const latestBooking = await bookingsService.get(id)
+          setBooking(latestBooking)
+          stopPolling()
+          toast.error("Invoice kedaluwarsa", {
+            description: "Invoice Xendit sudah expired. Silakan pilih metode pembayaran kembali.",
+            duration: 8000,
+          })
+          return
+        }
+      } catch {
+        // silent — lanjut polling
+      }
+
+      pollTimerRef.current = setTimeout(tick, POLL_INTERVAL_MS)
+    }
+
+    pollTimerRef.current = setTimeout(tick, POLL_INTERVAL_MS)
+  }, [id, stopPolling]) // eslint-disable-line
+
   useEffect(() => { fetchData() }, [fetchData])
+
+  // Mulai/stop polling berdasarkan status TX
+  useEffect(() => {
+    if (tx?.status === "payment_pending" && booking?.id) {
+      startPolling(booking.id, tx.id)
+    } else {
+      stopPolling()
+    }
+    return () => { stopPolling() }
+  }, [tx?.status, booking?.id]) // eslint-disable-line
 
   const handleApprove = async () => {
     if (!booking) return
@@ -222,23 +283,18 @@ export default function BookingDetailContent() {
       setShowPayMethod(false)
     } catch (err: unknown) {
       const detail = (err as { detail?: string })?.detail ?? ""
-
       if (detail.toLowerCase().includes("saldo deposit tidak cukup")) {
-        // Parse "Rp X.XXX.XXX" dari pesan backend
         const amounts = detail.match(/Rp\s?[\d.]+/g) ?? []
-        const saldo   = amounts[0] ?? "-"
-        const tagihan = amounts[1] ?? "-"
-
         toast.error("Saldo Deposit Tidak Cukup", {
           description: (
             <div className="mt-1 space-y-1.5 text-sm">
               <div className="flex justify-between gap-6">
                 <span className="text-muted-foreground">Saldo kamu</span>
-                <span className="font-semibold text-red-400">{saldo}</span>
+                <span className="font-semibold text-red-400">{amounts[0] ?? "-"}</span>
               </div>
               <div className="flex justify-between gap-6">
                 <span className="text-muted-foreground">Tagihan</span>
-                <span className="font-semibold">{tagihan}</span>
+                <span className="font-semibold">{amounts[1] ?? "-"}</span>
               </div>
               <p className="pt-1 border-t border-white/10 text-xs text-muted-foreground">
                 Top-up deposit terlebih dahulu atau gunakan Pay As You Go.
@@ -270,10 +326,11 @@ export default function BookingDetailContent() {
   if (loading) return <div className="p-8 text-muted-foreground">Memuat...</div>
   if (error || !booking) return <div className="p-8 text-red-400">{error || "Booking tidak ditemukan."}</div>
 
-  const isPending          = booking.status === "pending_vendor"
-  const isConfirmed        = booking.status === "confirmed"
-  const isNeedTxReview     = booking.status === "pending_completion"
-  const txPendingApproval  = tx?.status === "pending_vendor_approval"
+  const isPending         = booking.status === "pending_vendor"
+  const isConfirmed       = booking.status === "confirmed"
+  const isNeedTxReview    = booking.status === "pending_completion"
+  const txPendingApproval = tx?.status === "pending_vendor_approval"
+  const txPaymentPending  = tx?.status === "payment_pending"
 
   const txPhotos: string[] = tx
     ? [
@@ -303,6 +360,14 @@ export default function BookingDetailContent() {
           {STATUS_LABEL[booking.status] ?? booking.status}
         </Badge>
       </div>
+
+      {/* Banner polling saat menunggu konfirmasi Xendit */}
+      {txPaymentPending && polling && (
+        <div className="flex items-center gap-2.5 rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3 text-sm text-blue-300">
+          <Loader2 size={14} className="animate-spin shrink-0" />
+          <span>Menunggu konfirmasi pembayaran dari Xendit… halaman akan otomatis diperbarui.</span>
+        </div>
+      )}
 
       <div className={`grid gap-6 items-start ${hasTxPanel ? "lg:grid-cols-2" : "grid-cols-1"}`}>
 
@@ -354,9 +419,7 @@ export default function BookingDetailContent() {
           <div className="flex flex-wrap gap-3">
             {isPending && !showReject && (
               <>
-                <Button variant="destructive" onClick={() => setShowReject(true)}>
-                  <XCircle size={14} className="mr-1" /> Tolak
-                </Button>
+                <Button variant="destructive" onClick={() => setShowReject(true)}><XCircle size={14} className="mr-1" /> Tolak</Button>
                 <Button onClick={handleApprove} disabled={submitting}>
                   <CheckCircle size={14} className="mr-1" />{submitting ? "Menyetujui..." : "Setujui"}
                 </Button>
@@ -365,13 +428,10 @@ export default function BookingDetailContent() {
             {isPending && showReject && (
               <div className="w-full space-y-2">
                 <Label>Alasan Penolakan <span className="text-red-500">*</span></Label>
-                <Textarea value={rejectReason} onChange={e => { setRejectReason(e.target.value); setActionError("") }}
-                  rows={3} placeholder="Tuliskan alasan..." />
+                <Textarea value={rejectReason} onChange={e => { setRejectReason(e.target.value); setActionError("") }} rows={3} placeholder="Tuliskan alasan..." />
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={() => setShowReject(false)}>Batal</Button>
-                  <Button variant="destructive" onClick={handleReject} disabled={submitting}>
-                    {submitting ? "Menolak..." : "Konfirmasi Tolak"}
-                  </Button>
+                  <Button variant="destructive" onClick={handleReject} disabled={submitting}>{submitting ? "Menolak..." : "Konfirmasi Tolak"}</Button>
                 </div>
               </div>
             )}
@@ -382,11 +442,8 @@ export default function BookingDetailContent() {
             )}
             {isNeedTxReview && txPendingApproval && !showPayMethod && !showTxReject && (
               <>
-                <Button variant="destructive" onClick={() => setShowTxReject(true)} disabled={submitting}>
-                  <XCircle size={14} className="mr-1" /> Tolak Transaksi
-                </Button>
-                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                  onClick={() => setShowPayMethod(true)} disabled={submitting}>
+                <Button variant="destructive" onClick={() => setShowTxReject(true)} disabled={submitting}><XCircle size={14} className="mr-1" /> Tolak Transaksi</Button>
+                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => setShowPayMethod(true)} disabled={submitting}>
                   <CheckCircle2 size={14} className="mr-1" /> Approve Transaksi
                 </Button>
               </>
@@ -395,12 +452,10 @@ export default function BookingDetailContent() {
               <div className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 space-y-3">
                 <p className="text-sm font-medium">Pilih Metode Pembayaran</p>
                 <div className="flex gap-3 flex-wrap">
-                  <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-                    onClick={() => handleTxApprove("deposit")} disabled={submitting}>
+                  <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleTxApprove("deposit")} disabled={submitting}>
                     <Banknote size={14} className="mr-1" /> Potong Deposit
                   </Button>
-                  <Button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-                    onClick={() => handleTxApprove("pay_as_you_go")} disabled={submitting}>
+                  <Button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleTxApprove("pay_as_you_go")} disabled={submitting}>
                     <CreditCard size={14} className="mr-1" /> Pay As You Go
                   </Button>
                 </div>
@@ -410,13 +465,10 @@ export default function BookingDetailContent() {
             {isNeedTxReview && txPendingApproval && showTxReject && (
               <div className="w-full space-y-2">
                 <Label>Alasan Penolakan Transaksi <span className="text-red-500">*</span></Label>
-                <Textarea value={txRejectReason} onChange={e => { setTxRejectReason(e.target.value); setActionError("") }}
-                  rows={3} placeholder="Tuliskan alasan..." />
+                <Textarea value={txRejectReason} onChange={e => { setTxRejectReason(e.target.value); setActionError("") }} rows={3} placeholder="Tuliskan alasan..." />
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={() => setShowTxReject(false)}>Batal</Button>
-                  <Button variant="destructive" onClick={handleTxReject} disabled={submitting}>
-                    {submitting ? "Menolak..." : "Konfirmasi Tolak"}
-                  </Button>
+                  <Button variant="destructive" onClick={handleTxReject} disabled={submitting}>{submitting ? "Menolak..." : "Konfirmasi Tolak"}</Button>
                 </div>
               </div>
             )}
@@ -435,9 +487,9 @@ export default function BookingDetailContent() {
                 <span className="text-sm font-semibold">#{tx!.transaction_code}</span>
                 <Badge variant="secondary" className="ml-auto text-xs">
                   {tx!.status === "pending_vendor_approval" ? "Menunggu Approval" :
-                   tx!.status === "settled"          ? "Settled" :
-                   tx!.status === "payment_pending"  ? "Menunggu Bayar" :
-                   tx!.status === "rejected"         ? "Ditolak" : tx!.status}
+                   tx!.status === "settled"         ? "Settled" :
+                   tx!.status === "payment_pending" ? "Menunggu Bayar" :
+                   tx!.status === "rejected"        ? "Ditolak" : tx!.status}
                 </Badge>
               </div>
 
@@ -476,7 +528,21 @@ export default function BookingDetailContent() {
                 </div>
               </div>
 
-              {invoiceUrl && (
+              {/* Banner menunggu bayar + link invoice */}
+              {txPaymentPending && (invoiceUrl ?? tx!.xendit_invoice_url) && (
+                <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3 space-y-2">
+                  <div className="flex items-center gap-2 text-xs text-blue-300">
+                    {polling && <Loader2 size={12} className="animate-spin" />}
+                    <span>Menunggu pembayaran — halaman otomatis update setelah lunas.</span>
+                  </div>
+                  <a href={invoiceUrl ?? tx!.xendit_invoice_url!} target="_blank" rel="noopener noreferrer"
+                    className="text-sm text-blue-400 hover:underline break-all">
+                    {invoiceUrl ?? tx!.xendit_invoice_url}
+                  </a>
+                </div>
+              )}
+
+              {tx!.status === "settled" && invoiceUrl && (
                 <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3">
                   <p className="text-xs text-muted-foreground mb-2">Link Pembayaran</p>
                   <a href={invoiceUrl} target="_blank" rel="noopener noreferrer"

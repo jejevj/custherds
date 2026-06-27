@@ -11,19 +11,6 @@ class Transaction(Base):
     """
     Nota transaksi disubmit Guide setelah kunjungan selesai.
 
-    Untuk package booking:
-      gross_amount = subtotal_package + extra_amount
-      extra_amount  = tambahan order di luar package (nullable)
-
-    Untuk direct booking:
-      gross_amount = nominal total yang guide input
-      extra_amount = None
-
-    Split revenue:
-      vendor_amount    = gross_amount × vendor_percent / 100
-      guide_commission = gross_amount × guide_percent  / 100
-      platform_fee     = gross_amount × platform_percent / 100
-
     Status lifecycle:
       pending_vendor_approval
         → approved (vendor approve, pilih metode bayar)
@@ -40,9 +27,9 @@ class Transaction(Base):
     guide_id                    = Column(UUID(as_uuid=True), ForeignKey("guides.id", ondelete="RESTRICT"), nullable=False, index=True)
 
     # Nominal
-    gross_amount                = Column(Numeric(15, 2), nullable=False)   # total akhir
-    extra_amount                = Column(Numeric(15, 2), nullable=True)    # tambahan di luar package
-    extra_notes                 = Column(Text, nullable=True)              # keterangan extra
+    gross_amount                = Column(Numeric(15, 2), nullable=False)
+    extra_amount                = Column(Numeric(15, 2), nullable=True)
+    extra_notes                 = Column(Text, nullable=True)
 
     # Bukti
     receipt_image               = Column(String(500), nullable=True)
@@ -63,6 +50,7 @@ class Transaction(Base):
     payment_method              = Column(String(20), nullable=True)        # "deposit" | "pay_as_you_go"
     xendit_invoice_id           = Column(String(255), nullable=True)
     xendit_invoice_url          = Column(String(500), nullable=True)
+    xendit_disbursement_id      = Column(String(255), nullable=True)       # ID disbursement komisi guide
     vendor_rejection_reason     = Column(Text, nullable=True)
 
     # Status
