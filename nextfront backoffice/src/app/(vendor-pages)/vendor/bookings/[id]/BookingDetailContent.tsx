@@ -40,7 +40,6 @@ function formatRupiah(n?: number | string | null) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num)
 }
 
-/** Parse extra photos dari receipt_notes: "[extra_photos:[path1,path2]]" */
 function parseExtraPhotos(notes: string | null): string[] {
   if (!notes) return []
   const match = notes.match(/\[extra_photos:\[(.+?)\]/)
@@ -214,12 +213,10 @@ export default function BookingDetailContent() {
   const isNeedTxReview    = booking.status === "pending_completion"
   const txPendingApproval = tx?.status === "pending_vendor_approval"
 
-  // Foto bukti kunjungan (dari booking.receipt_url)
   const checkinPhotos: string[] = booking.receipt_url
     ? [resolveReceiptUrl(booking.receipt_url)]
     : []
 
-  // Foto receipt dari transaksi: receipt_image (utama) + extra_photos di receipt_notes
   const txPhotos: string[] = tx
     ? [
         ...(tx.receipt_image ? [resolveReceiptUrl(tx.receipt_image)] : []),
@@ -227,8 +224,11 @@ export default function BookingDetailContent() {
       ]
     : []
 
+  const hasTxPanel = (isNeedTxReview || booking.status === "completed") && !!tx
+
   return (
-    <div className="max-w-2xl mx-auto space-y-6 py-6 px-4">
+    <div className="w-full space-y-5 py-6 px-4">
+
       {/* Back */}
       <button
         onClick={() => router.push("/vendor/bookings")}
@@ -238,7 +238,7 @@ export default function BookingDetailContent() {
       </button>
 
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
             <FileText size={18} /> Detail Booking
@@ -250,188 +250,202 @@ export default function BookingDetailContent() {
         </Badge>
       </div>
 
-      {/* Info Booking */}
-      <div className="rounded-xl border bg-card shadow-sm divide-y text-sm">
-        <InfoRow icon={<CalendarDays size={13} />} label="Tanggal" value={new Date(booking.booking_date).toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })} />
-        {booking.booking_time && <InfoRow label="Waktu" value={booking.booking_time} />}
-        <InfoRow icon={<Users size={13} />} label="Jumlah Pax" value={`${booking.pax_count} orang`} />
-        {booking.tourist_nationality && <InfoRow label="Kewarganegaraan" value={booking.tourist_nationality} />}
-        {booking.booking_type === "package" && booking.package_price_snapshot && (
-          <InfoRow icon={<Package size={13} />} label="Harga / Pax" value={formatRupiah(booking.package_price_snapshot)} />
-        )}
-        {booking.checkin_at && (
-          <InfoRow icon={<MapPin size={13} />} label="Checkin" value={new Date(booking.checkin_at).toLocaleString("id-ID")} />
-        )}
-        {booking.receipt_uploaded_at && (
-          <InfoRow icon={<Upload size={13} />} label="Transaksi disubmit" value={new Date(booking.receipt_uploaded_at).toLocaleString("id-ID")} />
-        )}
-      </div>
+      {/* Grid utama — 2 kolom di layar besar, 1 kolom di mobile */}
+      <div className={`grid gap-6 items-start ${hasTxPanel ? "lg:grid-cols-2" : "grid-cols-1"}`}>
 
-      {/* Foto Bukti Kunjungan */}
-      <PhotoGrid urls={checkinPhotos} label="Bukti Kunjungan dari Guide" />
+        {/* ── Kolom Kiri: Info Booking ── */}
+        <div className="space-y-5">
+          <div className="rounded-xl border bg-card shadow-sm divide-y text-sm">
+            <InfoRow icon={<CalendarDays size={13} />} label="Tanggal" value={new Date(booking.booking_date).toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })} />
+            {booking.booking_time && <InfoRow label="Waktu" value={booking.booking_time} />}
+            <InfoRow icon={<Users size={13} />} label="Jumlah Pax" value={`${booking.pax_count} orang`} />
+            {booking.tourist_nationality && <InfoRow label="Kewarganegaraan" value={booking.tourist_nationality} />}
+            {booking.booking_type === "package" && booking.package_price_snapshot && (
+              <InfoRow icon={<Package size={13} />} label="Harga / Pax" value={formatRupiah(booking.package_price_snapshot)} />
+            )}
+            {booking.booking_type === "package" && booking.subtotal_package && (
+              <InfoRow icon={<Package size={13} />} label="Subtotal Package" value={formatRupiah(booking.subtotal_package)} />
+            )}
+            {booking.checkin_at && (
+              <InfoRow icon={<MapPin size={13} />} label="Checkin" value={new Date(booking.checkin_at).toLocaleString("id-ID")} />
+            )}
+            {booking.receipt_uploaded_at && (
+              <InfoRow icon={<Upload size={13} />} label="Transaksi disubmit" value={new Date(booking.receipt_uploaded_at).toLocaleString("id-ID")} />
+            )}
+          </div>
 
-      {/* Foto Receipt Transaksi */}
-      {txPhotos.length > 0 && (
-        <PhotoGrid urls={txPhotos} label="Bukti Transaksi dari Guide" />
-      )}
+          {/* Foto Bukti Kunjungan */}
+          <PhotoGrid urls={checkinPhotos} label="Bukti Kunjungan dari Guide" />
 
-      {/* Panel Transaksi */}
-      {(isNeedTxReview || booking.status === "completed") && (
-        tx ? (
-          <div className="rounded-xl border bg-card shadow-sm p-4 space-y-4">
-            <div className="flex items-center gap-2">
-              <Receipt size={15} className="text-emerald-400" />
-              <span className="text-sm font-semibold">Transaksi #{tx.transaction_code}</span>
-              <Badge variant="secondary" className="ml-auto text-xs">
-                {tx.status === "pending_vendor_approval" ? "Menunggu Approval" :
-                 tx.status === "settled" ? "Settled" :
-                 tx.status === "payment_pending" ? "Menunggu Bayar" :
-                 tx.status === "rejected" ? "Ditolak" : tx.status}
-              </Badge>
+          {/* Catatan */}
+          {booking.notes && (
+            <div className="text-sm">
+              <p className="text-muted-foreground text-xs mb-1">Catatan dari Guide</p>
+              <p className="bg-muted/30 rounded-lg px-3 py-2">{booking.notes}</p>
             </div>
+          )}
+          {booking.status === "rejected" && booking.vendor_rejection_reason && (
+            <div className="text-sm">
+              <p className="text-muted-foreground text-xs mb-1">Alasan Penolakan Booking</p>
+              <p className="bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 text-red-400">{booking.vendor_rejection_reason}</p>
+            </div>
+          )}
+          {booking.status === "cancelled" && booking.cancelled_reason && (
+            <div className="text-sm">
+              <p className="text-muted-foreground text-xs mb-1">Alasan Pembatalan</p>
+              <p className="bg-orange-500/10 border border-orange-500/20 rounded-lg px-3 py-2 text-orange-400">{booking.cancelled_reason}</p>
+            </div>
+          )}
 
-            <div className="rounded-lg border bg-muted/20 divide-y text-sm">
-              <div className="px-3 py-2 flex justify-between">
-                <span className="text-muted-foreground">Gross Total</span>
-                <span className="font-bold">{formatRupiah(tx.gross_amount)}</span>
+          {actionError && <p className="text-xs text-red-500">{actionError}</p>}
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-3">
+            {isPending && !showReject && (
+              <>
+                <Button variant="destructive" onClick={() => setShowReject(true)}>
+                  <XCircle size={14} className="mr-1" /> Tolak
+                </Button>
+                <Button onClick={handleApprove} disabled={submitting}>
+                  <CheckCircle size={14} className="mr-1" />{submitting ? "Menyetujui..." : "Setujui"}
+                </Button>
+              </>
+            )}
+            {isPending && showReject && (
+              <div className="w-full space-y-2">
+                <Label>Alasan Penolakan <span className="text-red-500">*</span></Label>
+                <Textarea value={rejectReason} onChange={e => { setRejectReason(e.target.value); setActionError("") }} rows={3} placeholder="Tuliskan alasan..." />
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setShowReject(false)}>Batal</Button>
+                  <Button variant="destructive" onClick={handleReject} disabled={submitting}>
+                    {submitting ? "Menolak..." : "Konfirmasi Tolak"}
+                  </Button>
+                </div>
               </div>
-              {tx.extra_amount && Number(tx.extra_amount) > 0 && (
+            )}
+            {isConfirmed && (
+              <Button onClick={handleCheckin} disabled={submitting} className="bg-blue-600 hover:bg-blue-700 text-white">
+                <MapPin size={14} className="mr-1" />{submitting ? "Memproses..." : "Checkin Guide"}
+              </Button>
+            )}
+            {isNeedTxReview && txPendingApproval && !showPayMethod && !showTxReject && (
+              <>
+                <Button variant="destructive" onClick={() => setShowTxReject(true)} disabled={submitting}>
+                  <XCircle size={14} className="mr-1" /> Tolak Transaksi
+                </Button>
+                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => setShowPayMethod(true)} disabled={submitting}>
+                  <CheckCircle2 size={14} className="mr-1" /> Approve Transaksi
+                </Button>
+              </>
+            )}
+            {isNeedTxReview && txPendingApproval && showPayMethod && (
+              <div className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 space-y-3">
+                <p className="text-sm font-medium">Pilih Metode Pembayaran</p>
+                <div className="flex gap-3 flex-wrap">
+                  <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleTxApprove("deposit")} disabled={submitting}>
+                    <Banknote size={14} className="mr-1" /> Potong Deposit
+                  </Button>
+                  <Button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleTxApprove("pay_as_you_go")} disabled={submitting}>
+                    <CreditCard size={14} className="mr-1" /> Pay As You Go
+                  </Button>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setShowPayMethod(false)}>Batal</Button>
+              </div>
+            )}
+            {isNeedTxReview && txPendingApproval && showTxReject && (
+              <div className="w-full space-y-2">
+                <Label>Alasan Penolakan Transaksi <span className="text-red-500">*</span></Label>
+                <Textarea value={txRejectReason} onChange={e => { setTxRejectReason(e.target.value); setActionError("") }} rows={3} placeholder="Tuliskan alasan..." />
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setShowTxReject(false)}>Batal</Button>
+                  <Button variant="destructive" onClick={handleTxReject} disabled={submitting}>
+                    {submitting ? "Menolak..." : "Konfirmasi Tolak"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Kolom Kanan: Detail Transaksi (hanya muncul jika ada tx) ── */}
+        {hasTxPanel && (
+          <div className="space-y-5">
+            <h2 className="text-base font-semibold flex items-center gap-1.5 text-muted-foreground">
+              <Receipt size={16} /> Detail Transaksi
+            </h2>
+
+            {/* Foto Receipt */}
+            <PhotoGrid urls={txPhotos} label="Bukti Transaksi dari Guide" />
+
+            <div className="rounded-xl border bg-card shadow-sm p-4 space-y-4">
+              <div className="flex items-center gap-2">
+                <Receipt size={15} className="text-emerald-400" />
+                <span className="text-sm font-semibold">#{tx!.transaction_code}</span>
+                <Badge variant="secondary" className="ml-auto text-xs">
+                  {tx!.status === "pending_vendor_approval" ? "Menunggu Approval" :
+                   tx!.status === "settled" ? "Settled" :
+                   tx!.status === "payment_pending" ? "Menunggu Bayar" :
+                   tx!.status === "rejected" ? "Ditolak" : tx!.status}
+                </Badge>
+              </div>
+
+              <div className="rounded-lg border bg-muted/20 divide-y text-sm">
                 <div className="px-3 py-2 flex justify-between">
-                  <span className="text-muted-foreground">↳ Extra ({tx.extra_notes || "tambahan"})</span>
-                  <span>{formatRupiah(tx.extra_amount)}</span>
+                  <span className="text-muted-foreground">Gross Total</span>
+                  <span className="font-bold">{formatRupiah(tx!.gross_amount)}</span>
+                </div>
+                {tx!.extra_amount && Number(tx!.extra_amount) > 0 && (
+                  <div className="px-3 py-2 flex justify-between">
+                    <span className="text-muted-foreground">↳ Extra ({tx!.extra_notes || "tambahan"})</span>
+                    <span>{formatRupiah(tx!.extra_amount)}</span>
+                  </div>
+                )}
+                <div className="px-3 py-2 flex justify-between">
+                  <span className="text-muted-foreground">Bagian Vendor ({tx!.vendor_percent_snapshot}%)</span>
+                  <span className="text-blue-400 font-medium">{formatRupiah(tx!.vendor_amount)}</span>
+                </div>
+                <div className="px-3 py-2 flex justify-between">
+                  <span className="text-muted-foreground">Komisi Guide ({tx!.guide_percent_snapshot}%)</span>
+                  <span>{formatRupiah(tx!.guide_commission)}</span>
+                </div>
+                <div className="px-3 py-2 flex justify-between">
+                  <span className="text-muted-foreground">Fee Platform ({tx!.platform_percent_snapshot}%)</span>
+                  <span>{formatRupiah(tx!.platform_fee)}</span>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-orange-500/40 bg-orange-500/5 px-4 py-3">
+                <p className="text-xs text-muted-foreground mb-1">Tagihan ke Vendor</p>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm">Komisi Guide + Fee Platform</span>
+                  <span className="text-lg font-bold text-orange-400">
+                    {formatRupiah(Number(tx!.guide_commission) + Number(tx!.platform_fee))}
+                  </span>
+                </div>
+              </div>
+
+              {invoiceUrl && (
+                <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3">
+                  <p className="text-xs text-muted-foreground mb-2">Link Pembayaran</p>
+                  <a href={invoiceUrl} target="_blank" rel="noopener noreferrer"
+                    className="text-sm text-blue-400 hover:underline break-all">{invoiceUrl}</a>
                 </div>
               )}
-              <div className="px-3 py-2 flex justify-between">
-                <span className="text-muted-foreground">Bagian Vendor ({tx.vendor_percent_snapshot}%)</span>
-                <span className="text-blue-400 font-medium">{formatRupiah(tx.vendor_amount)}</span>
-              </div>
-              <div className="px-3 py-2 flex justify-between">
-                <span className="text-muted-foreground">Komisi Guide ({tx.guide_percent_snapshot}%)</span>
-                <span>{formatRupiah(tx.guide_commission)}</span>
-              </div>
-              <div className="px-3 py-2 flex justify-between">
-                <span className="text-muted-foreground">Fee Platform ({tx.platform_percent_snapshot}%)</span>
-                <span>{formatRupiah(tx.platform_fee)}</span>
-              </div>
+
+              {tx!.vendor_rejection_reason && (
+                <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm">
+                  <p className="text-xs text-muted-foreground mb-1">Alasan Ditolak</p>
+                  <p className="text-red-400">{tx!.vendor_rejection_reason}</p>
+                </div>
+              )}
             </div>
-
-            <div className="rounded-lg border border-orange-500/40 bg-orange-500/5 px-4 py-3">
-              <p className="text-xs text-muted-foreground mb-1">Tagihan ke Vendor</p>
-              <div className="flex justify-between items-center">
-                <span className="text-sm">Komisi Guide + Fee Platform</span>
-                <span className="text-lg font-bold text-orange-400">
-                  {formatRupiah(Number(tx.guide_commission) + Number(tx.platform_fee))}
-                </span>
-              </div>
-            </div>
-
-            {invoiceUrl && (
-              <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3">
-                <p className="text-xs text-muted-foreground mb-2">Link Pembayaran</p>
-                <a href={invoiceUrl} target="_blank" rel="noopener noreferrer"
-                  className="text-sm text-blue-400 hover:underline break-all">{invoiceUrl}</a>
-              </div>
-            )}
-
-            {tx.vendor_rejection_reason && (
-              <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm">
-                <p className="text-xs text-muted-foreground mb-1">Alasan Ditolak</p>
-                <p className="text-red-400">{tx.vendor_rejection_reason}</p>
-              </div>
-            )}
           </div>
-        ) : (
+        )}
+
+        {/* Tx panel belum tersedia */}
+        {(isNeedTxReview || booking.status === "completed") && !tx && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <AlertCircle size={14} /> Data transaksi belum tersedia.
-          </div>
-        )
-      )}
-
-      {/* Catatan */}
-      {booking.notes && (
-        <div className="text-sm">
-          <p className="text-muted-foreground text-xs mb-1">Catatan dari Guide</p>
-          <p className="bg-muted/30 rounded-lg px-3 py-2">{booking.notes}</p>
-        </div>
-      )}
-      {booking.status === "rejected" && booking.vendor_rejection_reason && (
-        <div className="text-sm">
-          <p className="text-muted-foreground text-xs mb-1">Alasan Penolakan Booking</p>
-          <p className="bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 text-red-400">{booking.vendor_rejection_reason}</p>
-        </div>
-      )}
-      {booking.status === "cancelled" && booking.cancelled_reason && (
-        <div className="text-sm">
-          <p className="text-muted-foreground text-xs mb-1">Alasan Pembatalan</p>
-          <p className="bg-orange-500/10 border border-orange-500/20 rounded-lg px-3 py-2 text-orange-400">{booking.cancelled_reason}</p>
-        </div>
-      )}
-
-      {actionError && <p className="text-xs text-red-500">{actionError}</p>}
-
-      {/* Action Buttons */}
-      <div className="flex flex-wrap gap-3">
-        {isPending && !showReject && (
-          <>
-            <Button variant="destructive" onClick={() => setShowReject(true)}>
-              <XCircle size={14} className="mr-1" /> Tolak
-            </Button>
-            <Button onClick={handleApprove} disabled={submitting}>
-              <CheckCircle size={14} className="mr-1" />{submitting ? "Menyetujui..." : "Setujui"}
-            </Button>
-          </>
-        )}
-        {isPending && showReject && (
-          <div className="w-full space-y-2">
-            <Label>Alasan Penolakan <span className="text-red-500">*</span></Label>
-            <Textarea value={rejectReason} onChange={e => { setRejectReason(e.target.value); setActionError("") }} rows={3} placeholder="Tuliskan alasan..." />
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setShowReject(false)}>Batal</Button>
-              <Button variant="destructive" onClick={handleReject} disabled={submitting}>
-                {submitting ? "Menolak..." : "Konfirmasi Tolak"}
-              </Button>
-            </div>
-          </div>
-        )}
-        {isConfirmed && (
-          <Button onClick={handleCheckin} disabled={submitting} className="bg-blue-600 hover:bg-blue-700 text-white">
-            <MapPin size={14} className="mr-1" />{submitting ? "Memproses..." : "Checkin Guide"}
-          </Button>
-        )}
-        {isNeedTxReview && txPendingApproval && !showPayMethod && !showTxReject && (
-          <>
-            <Button variant="destructive" onClick={() => setShowTxReject(true)} disabled={submitting}>
-              <XCircle size={14} className="mr-1" /> Tolak Transaksi
-            </Button>
-            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => setShowPayMethod(true)} disabled={submitting}>
-              <CheckCircle2 size={14} className="mr-1" /> Approve Transaksi
-            </Button>
-          </>
-        )}
-        {isNeedTxReview && txPendingApproval && showPayMethod && (
-          <div className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 space-y-3">
-            <p className="text-sm font-medium">Pilih Metode Pembayaran</p>
-            <div className="flex gap-3 flex-wrap">
-              <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleTxApprove("deposit")} disabled={submitting}>
-                <Banknote size={14} className="mr-1" /> Potong Deposit
-              </Button>
-              <Button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleTxApprove("pay_as_you_go")} disabled={submitting}>
-                <CreditCard size={14} className="mr-1" /> Pay As You Go
-              </Button>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => setShowPayMethod(false)}>Batal</Button>
-          </div>
-        )}
-        {isNeedTxReview && txPendingApproval && showTxReject && (
-          <div className="w-full space-y-2">
-            <Label>Alasan Penolakan Transaksi <span className="text-red-500">*</span></Label>
-            <Textarea value={txRejectReason} onChange={e => { setTxRejectReason(e.target.value); setActionError("") }} rows={3} placeholder="Tuliskan alasan..." />
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setShowTxReject(false)}>Batal</Button>
-              <Button variant="destructive" onClick={handleTxReject} disabled={submitting}>
-                {submitting ? "Menolak..." : "Konfirmasi Tolak"}
-              </Button>
-            </div>
           </div>
         )}
       </div>
@@ -441,9 +455,9 @@ export default function BookingDetailContent() {
 
 function InfoRow({ icon, label, value, mono }: { icon?: React.ReactNode; label: string; value: string; mono?: boolean }) {
   return (
-    <div className="flex justify-between items-center px-3 py-2 gap-4">
-      <span className="text-muted-foreground flex items-center gap-1.5 shrink-0">{icon}{label}</span>
-      <span className={mono ? "font-mono text-xs" : ""}>{value}</span>
+    <div className="flex justify-between items-start px-3 py-2 gap-4">
+      <span className="text-muted-foreground flex items-center gap-1.5 shrink-0 text-xs">{icon}{label}</span>
+      <span className={`text-right text-sm ${mono ? "font-mono text-xs" : ""}`}>{value}</span>
     </div>
   )
 }
