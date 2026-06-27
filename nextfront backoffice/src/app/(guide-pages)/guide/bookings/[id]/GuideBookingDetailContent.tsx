@@ -49,17 +49,25 @@ function formatRupiah(n?: number | string | null) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num)
 }
 
+/**
+ * Parse extra_photos dari receipt_notes.
+ * Format DB: [extra_photos:["/api/v1/uploads/xxx.jpg","/api/v1/uploads/yyy.png"]]
+ * Gunakan JSON.parse agar path dengan karakter khusus tetap aman.
+ */
 function parseExtraPhotos(notes: string | null | undefined): string[] {
   if (!notes) return []
   const tag = "[extra_photos:"
   const start = notes.indexOf(tag)
   if (start === -1) return []
-  const jsonStart = start + tag.length
-  const end = notes.indexOf("]}", jsonStart)
-  const jsonStr = end !== -1
-    ? notes.slice(jsonStart, end + 2)
-    : notes.slice(jsonStart, notes.lastIndexOf("]") + 1)
-  try { return JSON.parse(jsonStr) as string[] } catch { return [] }
+  const sub = notes.slice(start + tag.length) // dimulai tepat di '['
+  // Cari posisi ']' penutup array JSON
+  const end = sub.indexOf("]")
+  if (end === -1) return []
+  try {
+    return JSON.parse(sub.slice(0, end + 1)) as string[]
+  } catch {
+    return []
+  }
 }
 
 function InfoRow({ icon, label, value, mono, highlight }: {
@@ -205,9 +213,6 @@ export default function GuideBookingDetailContent() {
     try {
       const b = await bookingsService.get(id)
       setBooking(b)
-      // Fetch tx untuk semua status yang relevan:
-      // - pending_completion / completed  : tx aktif
-      // - pending_receipt (setelah reject) : tx rejected terbaru (untuk tampil foto lama)
       const needTx = ["pending_completion", "completed", "pending_receipt"].includes(b.status)
       if (needTx) {
         try {
@@ -290,15 +295,12 @@ export default function GuideBookingDetailContent() {
   if (loading) return <div className="p-8 text-muted-foreground">Memuat...</div>
   if (error || !booking) return <div className="p-8 text-red-400">{error || "Booking tidak ditemukan."}</div>
 
-  const extraPhotos = parseExtraPhotos(tx?.receipt_notes)
   const allReceiptPhotos: string[] = [
     ...(tx?.receipt_image ? [resolveReceiptUrl(tx.receipt_image)] : []),
-    ...extraPhotos.map(p => resolveReceiptUrl(p)),
+    ...parseExtraPhotos(tx?.receipt_notes).map(p => resolveReceiptUrl(p)),
   ]
 
-  // Panel tx kanan: tampil jika ada tx (aktif atau rejected untuk foto referensi)
   const showTxPanel = ["pending_completion", "completed"].includes(booking.status)
-  // Foto lama (dari tx rejected) tampil di bawah warning saat pending_receipt
   const showRejectedTxPhotos = booking.status === "pending_receipt" && tx?.status === "rejected" && allReceiptPhotos.length > 0
 
   const komisiBadge = tx?.guide_commission && tx.status !== "rejected"
@@ -404,11 +406,10 @@ export default function GuideBookingDetailContent() {
                   Sisa percobaan: <span className="font-semibold text-orange-300">{txAttemptMax - txAttempt}x</span>
                 </p>
 
-                {/* Foto lama dari tx rejected */}
                 {showRejectedTxPhotos && (
                   <div className="mt-3">
                     <p className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
-                      <ImageIcon2 size={11} /> Foto yang ditolak (referensi):
+                      <ImageIcon2 size={11} /> Foto yang ditolak ({allReceiptPhotos.length} foto — referensi):
                     </p>
                     <div className="grid grid-cols-4 gap-1.5">
                       {allReceiptPhotos.map((src, i) => (
@@ -420,6 +421,7 @@ export default function GuideBookingDetailContent() {
                           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
                             <ZoomIn size={14} className="text-white opacity-0 group-hover:opacity-100 drop-shadow" />
                           </div>
+                          <div className="absolute bottom-1 right-1 bg-black/60 text-white text-[10px] px-1 py-0.5 rounded">{i + 1}</div>
                         </button>
                       ))}
                     </div>
