@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { vendorsBrowseService, VendorPublic, resolveCoverPhoto } from '@/services/vendors.service'
 import { formatRupiah } from '@/services/packages-browse.service'
 import { Input } from '@/components/ui/input'
@@ -101,10 +102,13 @@ export default function GuideVendorsContent() {
 function VendorCard({ vendor: v }: { vendor: VendorPublic }) {
   const cover = resolveCoverPhoto(v.cover_photo)
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md overflow-hidden hover:border-white/20 transition-all group">
+    <Link
+      href={`/guide/vendors/${v.id}`}
+      className="block rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md overflow-hidden hover:border-emerald-500/60 hover:shadow-lg hover:shadow-emerald-900/20 transition-all group cursor-pointer"
+    >
       <div className="relative h-36 bg-white/5">
         {cover ? (
-          <Image src={cover} alt={v.vendor_business_name} fill className="object-cover" unoptimized />
+          <Image src={cover} alt={v.vendor_business_name} fill className="object-cover group-hover:scale-105 transition-transform duration-300" unoptimized />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-4xl text-white/10">🏪</div>
         )}
@@ -115,7 +119,7 @@ function VendorCard({ vendor: v }: { vendor: VendorPublic }) {
         )}
       </div>
       <div className="p-4 space-y-2">
-        <h3 className="font-semibold text-sm leading-tight line-clamp-1">{v.vendor_business_name}</h3>
+        <h3 className="font-semibold text-sm leading-tight line-clamp-1 group-hover:text-emerald-400 transition-colors">{v.vendor_business_name}</h3>
         {v.vendor_location && (
           <p className="flex items-center gap-1 text-xs text-muted-foreground">
             <MapPin size={11} /> {v.vendor_location}
@@ -137,6 +141,6 @@ function VendorCard({ vendor: v }: { vendor: VendorPublic }) {
           )}
         </div>
       </div>
-    </div>
+    </Link>
   )
 }

@@ -39,7 +39,6 @@ export interface VendorUpdatePayload {
   allow_direct_booking?: boolean
 }
 
-// All optional so Partial<VendorProfile> is assignable; backend validates required fields
 export interface VendorSubmitPayload {
   vendor_business_name?: string | null
   vendor_location?: string | null
@@ -85,6 +84,36 @@ export interface VendorPublic {
   cover_photo: string | null
 }
 
+export interface PackagePublic {
+  id: string
+  package_name: string
+  package_description: string | null
+  price_per_pax: string
+  min_pax: number | null
+  max_pax: number | null
+  duration_hours: number | null
+  photo_urls: string[] | null
+  is_active: boolean
+  guide_commission_per_pax: number | null
+}
+
+export interface VendorDetail {
+  id: string
+  vendor_business_name: string
+  vendor_category: number
+  vendor_area: number
+  vendor_location: string | null
+  vendor_contact_person: string | null
+  vendor_short_description: string | null
+  vendor_opening_hours: string | null
+  vendor_min_spend: string | null
+  vendor_cashback_percent: number
+  vendor_website: string | null
+  allow_direct_booking: boolean
+  cover_photo: string | null
+  packages: PackagePublic[]
+}
+
 export interface VendorBrowseParams {
   search?: string
   area?: number
@@ -107,6 +136,8 @@ export const vendorsBrowseService = {
     if (params.limit != null)        q.set('limit', String(params.limit))
     return api.get<VendorPublic[]>(`/vendors/browse?${q.toString()}`)
   },
+  getDetail: (vendorId: string) =>
+    api.get<VendorDetail>(`/vendors/browse/${vendorId}`),
 }
 
 export function resolveCoverPhoto(url: string | null): string {
