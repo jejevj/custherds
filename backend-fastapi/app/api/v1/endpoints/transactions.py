@@ -47,7 +47,6 @@ def _get_active_split(db: Session) -> RevenueSplitConfig:
 
 
 def _get_active_gateway(db: Session) -> Optional[PaymentGatewayConfig]:
-    """Ambil gateway aktif dari DB. Return None jika tidak ada."""
     return db.query(PaymentGatewayConfig).filter(PaymentGatewayConfig.is_active == True).first()  # noqa
 
 
@@ -203,7 +202,7 @@ async def vendor_approve_transaction(
 
     tagihan = tx.guide_commission + tx.platform_fee
 
-    # ── DEPOSIT ────────────────────────────────────────────────────────────
+    # ── DEPOSIT ─────────────────────────────────────────────────────────────
     if payload.payment_method == "deposit":
         if vendor.deposit_balance < tagihan:
             raise HTTPException(
@@ -247,31 +246,30 @@ async def vendor_approve_transaction(
     # ── PAY AS YOU GO — DOKU SNAP QRIS ─────────────────────────────────────
     elif payload.payment_method == "pay_as_you_go":
         gateway = _get_active_gateway(db)
-
         if not gateway:
             raise HTTPException(503, "Tidak ada payment gateway aktif. Hubungi admin.")
 
-        creds: dict = gateway.credentials or {}
-        base_url = "https://api.doku.com" if gateway.is_production else "https://api-sandbox.doku.com"
-
-        client_id     = creds.get("client_id", "")
-        private_key   = creds.get("private_key", "")
-        # Key di DB adalah 'secret_key', bukan 'client_secret'
+        creds: dict  = gateway.credentials or {}
+        base_url     = "https://api.doku.com" if gateway.is_production else "https://api-sandbox.doku.com"
+        client_id    = creds.get("client_id", "")
+        private_key  = creds.get("private_key", "")
         client_secret = creds.get("secret_key") or creds.get("client_secret", "")
 
-        logger.info(f"[DOKU] client_id={client_id} secret_key_len={len(client_secret)}")
+        # Di DOKU SNAP, Mall ID = Client ID. Bisa di-override dengan key 'merchant_id' di credentials.
+        merchant_id  = creds.get("merchant_id") or client_id
+        terminal_id  = creds.get("terminal_id", "TERM001")
+
+        logger.info(
+            f"[DOKU] client_id={client_id} merchant_id={merchant_id} "
+            f"terminal_id={terminal_id} secret_len={len(client_secret)}"
+        )
 
         if not client_id or not private_key:
             raise HTTPException(503, "Konfigurasi DOKU belum lengkap (client_id / private_key).")
         if not client_secret:
             raise HTTPException(503, "Konfigurasi DOKU belum lengkap (secret_key).")
 
-        vendor_user = db.query(User).filter(User.id == vendor.user_id).first()
-        order_id    = f"CUSTHERDS-TX-{tx.transaction_code}"
-        description = (
-            f"Tagihan Custherds | Komisi Guide + Fee Platform | "
-            f"Transaksi {tx.transaction_code} | Vendor: {vendor.vendor_business_name}"
-        )
+        order_id = f"CUSTHERDS-TX-{tx.transaction_code}"
 
         try:
             from app.services.doku import create_qris
@@ -282,10 +280,8 @@ async def vendor_approve_transaction(
                 client_secret=client_secret,
                 order_id=order_id,
                 amount=int(tagihan),
-                description=description,
-                customer_name=vendor.vendor_business_name or "Vendor",
-                customer_email=vendor_user.user_email if vendor_user else "vendor@custherds.com",
-                callback_url="https://api-custherds.ourtestcloud.my.id/api/v1/webhooks/doku/qris-notify",
+                merchant_id=merchant_id,
+                terminal_id=terminal_id,
                 expired_time=30,
             )
         except Exception as e:
