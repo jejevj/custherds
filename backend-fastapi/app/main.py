@@ -1,14 +1,26 @@
+import logging
+import time
+import secrets
+
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.api.v1.router import api_router
 from app.middleware.logging import RequestLoggingMiddleware
-import time
-import secrets
+
+# ── Logging setup ────────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
+# ─────────────────────────────────────────────────────────────────────────────
 
 START_TIME = time.time()
 

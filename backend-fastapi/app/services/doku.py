@@ -1,11 +1,5 @@
 """
 DOKU SNAP Service
-=================
-Menyediakan:
-  - get_token_b2b()   : ambil access token B2B via SHA256withRSA
-  - create_qris()     : buat QRIS payment request SNAP
-
-Ref: https://developers.doku.com/accept-payments/direct-api/snap/integration-guide/qris
 """
 from __future__ import annotations
 
@@ -26,7 +20,6 @@ _WIB = timezone(timedelta(hours=7))
 
 
 def _now_wib() -> str:
-    """ISO8601 timestamp WIB: 2024-01-01T12:00:00+07:00"""
     return datetime.now(_WIB).strftime("%Y-%m-%dT%H:%M:%S+07:00")
 
 
@@ -82,7 +75,7 @@ async def get_token_b2b(
         )
 
     raw = resp.json()
-    logger.info(f"[DOKU] get_token_b2b status={resp.status_code} body={raw}")
+    logger.error(f"[DOKU:token] status={resp.status_code} response={raw}")
 
     if resp.status_code != 200 or not raw.get("accessToken"):
         raise RuntimeError(
@@ -116,9 +109,7 @@ async def create_qris(
 
     validity_dt     = datetime.now(_WIB) + timedelta(minutes=expired_time)
     validity_period = validity_dt.strftime("%Y-%m-%dT%H:%M:%S+07:00")
-
-    # DOKU amount value: string dengan 2 desimal, contoh "10000.00"
-    amount_str = f"{int(amount)}.00"
+    amount_str      = f"{int(amount)}.00"
 
     body: Dict[str, Any] = {
         "partnerReferenceNo": order_id,
@@ -130,7 +121,7 @@ async def create_qris(
         "terminalId": terminal_id,
         "validityPeriod": validity_period,
         "additionalInfo": {
-            "feeType": "1",   # 1 karakter, max 1 char per DOKU spec
+            "feeType": "1",
         },
     }
 
@@ -149,10 +140,13 @@ async def create_qris(
         "CHANNEL-ID": "H2H",
     }
 
-    logger.info(
-        f"[DOKU] create_qris => endpoint={endpoint} "
-        f"body={json.dumps(body, ensure_ascii=False)} "
-        f"headers={json.dumps({k: v for k, v in headers.items() if k != 'Authorization'}, ensure_ascii=False)}"
+    logger.error(
+        f"[DOKU:qris:REQUEST] endpoint={endpoint} "
+        f"merchantId={merchant_id} terminalId={terminal_id} "
+        f"amount={amount_str} orderId={order_id} "
+        f"X-PARTNER-ID={client_id} X-EXTERNAL-ID={order_id[:36]} "
+        f"X-TIMESTAMP={timestamp} CHANNEL-ID=H2H "
+        f"body={json.dumps(body, ensure_ascii=False)}"
     )
 
     async with httpx.AsyncClient(timeout=15) as client:
@@ -163,11 +157,11 @@ async def create_qris(
     except Exception:
         raw = {"_raw_text": resp.text}
 
-    logger.info(
-        f"[DOKU] create_qris status={resp.status_code} "
+    logger.error(
+        f"[DOKU:qris:RESPONSE] status={resp.status_code} "
         f"responseCode={raw.get('responseCode')} "
         f"responseMessage={raw.get('responseMessage')} "
-        f"full_response={raw}"
+        f"full={json.dumps(raw, ensure_ascii=False)}"
     )
 
     if resp.status_code not in (200, 201):
