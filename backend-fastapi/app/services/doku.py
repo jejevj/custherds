@@ -111,6 +111,10 @@ async def create_qris(
     validity_period = validity_dt.strftime("%Y-%m-%dT%H:%M:%S+07:00")
     amount_str      = f"{int(amount)}.00"
 
+    # X-EXTERNAL-ID: wajib Numeric String per DOKU SNAP spec
+    import time as _time
+    external_id = str(int(_time.time() * 1000))  # epoch milliseconds, pure numeric
+
     body: Dict[str, Any] = {
         "partnerReferenceNo": order_id,
         "amount": {
@@ -121,12 +125,10 @@ async def create_qris(
         "terminalId": terminal_id,
         "validityPeriod": validity_period,
         "additionalInfo": {
-            "feeType": "1",
+            "postalCode": postal_code,  # WAJIB per DOKU spec (max 5 char numeric)
+            "feeType": "1",             # max 1 char, 1 = No Tips
         },
     }
-
-    if callback_url:
-        body["additionalInfo"]["callbackUrl"] = callback_url
 
     sym_sig = _symmetric_signature("POST", endpoint, access_token, body, timestamp, client_secret)
 
@@ -134,7 +136,7 @@ async def create_qris(
         "Content-Type": "application/json",
         "Authorization": f"Bearer {access_token}",
         "X-PARTNER-ID": client_id,
-        "X-EXTERNAL-ID": order_id[:36],
+        "X-EXTERNAL-ID": external_id,
         "X-TIMESTAMP": timestamp,
         "X-SIGNATURE": sym_sig,
         "CHANNEL-ID": "H2H",
@@ -144,8 +146,7 @@ async def create_qris(
         f"[DOKU:qris:REQUEST] endpoint={endpoint} "
         f"merchantId={merchant_id} terminalId={terminal_id} "
         f"amount={amount_str} orderId={order_id} "
-        f"X-PARTNER-ID={client_id} X-EXTERNAL-ID={order_id[:36]} "
-        f"X-TIMESTAMP={timestamp} CHANNEL-ID=H2H "
+        f"X-EXTERNAL-ID={external_id} X-TIMESTAMP={timestamp} "
         f"body={json.dumps(body, ensure_ascii=False)}"
     )
 
