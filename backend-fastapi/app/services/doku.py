@@ -8,7 +8,7 @@ import hashlib
 import json
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import httpx
 from cryptography.hazmat.primitives import hashes, serialization
@@ -95,7 +95,6 @@ async def create_qris(
     amount: int,
     merchant_id: str,
     terminal_id: str,
-    partner_id: Optional[str] = None,
     description: str = "",
     customer_name: str = "",
     customer_email: str = "",
@@ -104,10 +103,6 @@ async def create_qris(
     postal_code: str = "10110",
 ) -> Dict[str, Any]:
     access_token = await get_token_b2b(base_url, client_id, private_key_pem)
-
-    # X-PARTNER-ID: pakai partner_id (qris_client_id=75143) kalau ada,
-    # fallback ke client_id (BRN-...) kalau tidak
-    x_partner_id = partner_id or client_id
 
     endpoint  = "/snap-adapter/b2b/v1.0/qr/qr-mpm-generate"
     timestamp = _now_wib()
@@ -139,7 +134,7 @@ async def create_qris(
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {access_token}",
-        "X-PARTNER-ID": x_partner_id,
+        "X-PARTNER-ID": client_id,
         "X-EXTERNAL-ID": external_id,
         "X-TIMESTAMP": timestamp,
         "X-SIGNATURE": sym_sig,
@@ -148,7 +143,7 @@ async def create_qris(
 
     logger.error(
         f"[DOKU:qris:REQUEST] endpoint={endpoint} "
-        f"X-PARTNER-ID={x_partner_id} merchantId={merchant_id} "
+        f"X-PARTNER-ID={client_id} merchantId={merchant_id} "
         f"terminalId={terminal_id} amount={amount_str} orderId={order_id} "
         f"X-EXTERNAL-ID={external_id} X-TIMESTAMP={timestamp} "
         f"body={json.dumps(body, ensure_ascii=False)}"
