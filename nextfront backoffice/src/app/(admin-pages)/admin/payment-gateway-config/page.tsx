@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { paymentGatewayConfigService } from '@/services/paymentGatewayConfig.service'
+import type { GatewayTestResult } from '@/services/paymentGatewayConfig.service'
 import type {
   PaymentGatewayConfig,
   PaymentGatewayConfigDetail,
@@ -43,6 +44,8 @@ export default function PaymentGatewayConfigPage() {
   const [pageLoading, setPageLoading]       = useState(true)
   const [error, setError]                   = useState('')
   const [feedback, setFeedback]             = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
+  const [testResults, setTestResults]       = useState<Record<string, GatewayTestResult>>({})
+  const [testingProviders, setTestingProviders] = useState<Record<string, boolean>>({})
 
   const fetchList = async () => {
     try {
@@ -77,6 +80,22 @@ export default function PaymentGatewayConfigPage() {
       setFeedback({ type: 'error', msg: 'Gagal mengaktifkan gateway.' })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleTest = async (provider: string) => {
+    setTestingProviders(prev => ({ ...prev, [provider]: true }))
+    setTestResults(prev => { const n = { ...prev }; delete n[provider]; return n })
+    try {
+      const result = await paymentGatewayConfigService.testConnection(provider)
+      setTestResults(prev => ({ ...prev, [provider]: result }))
+    } catch {
+      setTestResults(prev => ({
+        ...prev,
+        [provider]: { ok: false, provider, message: 'Gagal menghubungi server.', http_status: 0, raw: {} },
+      }))
+    } finally {
+      setTestingProviders(prev => ({ ...prev, [provider]: false }))
     }
   }
 
@@ -193,6 +212,7 @@ export default function PaymentGatewayConfigPage() {
               <th className="px-4 py-3 font-medium">Label</th>
               <th className="px-4 py-3 font-medium">Mode</th>
               <th className="px-4 py-3 font-medium">Status</th>
+              <th className="px-4 py-3 font-medium">Koneksi</th>
               <th className="px-4 py-3 font-medium">Diperbarui</th>
               <th className="px-4 py-3 font-medium">Aksi</th>
             </tr>
@@ -200,58 +220,84 @@ export default function PaymentGatewayConfigPage() {
           <tbody>
             {pageLoading ? (
               <tr>
-                <td colSpan={6} className="text-center py-10 text-muted-foreground">Memuat...</td>
+                <td colSpan={7} className="text-center py-10 text-muted-foreground">Memuat...</td>
               </tr>
             ) : configs.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center py-10 text-muted-foreground">
+                <td colSpan={7} className="text-center py-10 text-muted-foreground">
                   Belum ada gateway terdaftar.
                 </td>
               </tr>
-            ) : configs.map((cfg) => (
-              <tr key={cfg.provider} className="border-b last:border-0 hover:bg-muted/30">
-                <td className="px-4 py-3 font-mono text-xs">{cfg.provider}</td>
-                <td className="px-4 py-3 font-medium">{cfg.label}</td>
-                <td className="px-4 py-3">
-                  <Badge variant={cfg.is_production ? 'destructive' : 'secondary'}>
-                    {cfg.is_production ? 'Production' : 'Sandbox'}
-                  </Badge>
-                </td>
-                <td className="px-4 py-3">
-                  <Badge variant={cfg.is_active ? 'default' : 'secondary'}>
-                    {cfg.is_active ? 'Aktif' : 'Tidak Aktif'}
-                  </Badge>
-                </td>
-                <td className="px-4 py-3 text-muted-foreground text-xs">
-                  {cfg.updated_at ? new Date(cfg.updated_at).toLocaleString('id-ID') : '-'}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-2">
-                    {!cfg.is_active && (
-                      <Button size="sm" disabled={loading} onClick={() => handleActivate(cfg.provider)}>
-                        Aktifkan
-                      </Button>
+            ) : configs.map((cfg) => {
+              const testRes = testResults[cfg.provider]
+              const isTesting = testingProviders[cfg.provider]
+              return (
+                <tr key={cfg.provider} className="border-b last:border-0 hover:bg-muted/30">
+                  <td className="px-4 py-3 font-mono text-xs">{cfg.provider}</td>
+                  <td className="px-4 py-3 font-medium">{cfg.label}</td>
+                  <td className="px-4 py-3">
+                    <Badge variant={cfg.is_production ? 'destructive' : 'secondary'}>
+                      {cfg.is_production ? 'Production' : 'Sandbox'}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge variant={cfg.is_active ? 'default' : 'secondary'}>
+                      {cfg.is_active ? 'Aktif' : 'Tidak Aktif'}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3 min-w-[160px]">
+                    {isTesting ? (
+                      <span className="text-xs text-muted-foreground">Menguji...</span>
+                    ) : testRes ? (
+                      <div className="space-y-1">
+                        <Badge variant={testRes.ok ? 'default' : 'destructive'}>
+                          {testRes.ok ? '✓ Terhubung' : '✗ Gagal'}
+                        </Badge>
+                        <p className="text-xs text-muted-foreground leading-tight">{testRes.message}</p>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">-</span>
                     )}
-                    <Button size="sm" variant="outline" onClick={() => openEditForm(cfg.provider)}>
-                      Edit
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => handleViewDetail(cfg.provider)}>
-                      {detail?.provider === cfg.provider ? 'Tutup Detail' : 'Detail'}
-                    </Button>
-                    {!cfg.is_active && (
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs">
+                    {cfg.updated_at ? new Date(cfg.updated_at).toLocaleString('id-ID') : '-'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-2">
+                      {!cfg.is_active && (
+                        <Button size="sm" disabled={loading} onClick={() => handleActivate(cfg.provider)}>
+                          Aktifkan
+                        </Button>
+                      )}
                       <Button
                         size="sm"
-                        variant="destructive"
-                        disabled={loading}
-                        onClick={() => handleDelete(cfg.provider)}
+                        variant="outline"
+                        disabled={isTesting}
+                        onClick={() => handleTest(cfg.provider)}
                       >
-                        Hapus
+                        {isTesting ? 'Testing...' : 'Test'}
                       </Button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
+                      <Button size="sm" variant="outline" onClick={() => openEditForm(cfg.provider)}>
+                        Edit
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => handleViewDetail(cfg.provider)}>
+                        {detail?.provider === cfg.provider ? 'Tutup' : 'Detail'}
+                      </Button>
+                      {!cfg.is_active && (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={loading}
+                          onClick={() => handleDelete(cfg.provider)}
+                        >
+                          Hapus
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
