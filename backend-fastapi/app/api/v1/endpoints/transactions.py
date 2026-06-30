@@ -251,12 +251,15 @@ async def vendor_approve_transaction(
 
         creds: dict   = gateway.credentials or {}
         base_url      = "https://api.doku.com" if gateway.is_production else "https://api-sandbox.doku.com"
+
+        # client_id (BRN-...) hanya untuk generate token B2B
         client_id     = creds.get("client_id", "")
         private_key   = creds.get("private_key", "")
         client_secret = creds.get("secret_key") or creds.get("client_secret", "")
 
-        # qris_merchant_id = Mall ID dari DOKU dashboard (bukan Client ID / BRN-...)
-        # qris_terminal_id = Terminal ID dari DOKU dashboard (contoh: A01)
+        # partner_id (75143) untuk X-PARTNER-ID di QRIS request
+        partner_id  = creds.get("qris_client_id") or client_id
+
         merchant_id = (
             creds.get("qris_merchant_id")
             or creds.get("merchant_id")
@@ -268,8 +271,9 @@ async def vendor_approve_transaction(
         )
 
         logger.info(
-            f"[DOKU] client_id={client_id} merchant_id={merchant_id} "
-            f"terminal_id={terminal_id} secret_len={len(client_secret)}"
+            f"[DOKU] client_id={client_id} partner_id={partner_id} "
+            f"merchant_id={merchant_id} terminal_id={terminal_id} "
+            f"secret_len={len(client_secret)}"
         )
 
         if not client_id or not private_key:
@@ -277,7 +281,6 @@ async def vendor_approve_transaction(
         if not client_secret:
             raise HTTPException(503, "Konfigurasi DOKU belum lengkap (secret_key).")
 
-        # Tambah epoch timestamp agar partnerReferenceNo selalu unik (hindari 409 Conflict)
         ts = int(datetime.now(timezone.utc).timestamp())
         order_id = f"CST-{tx.transaction_code}-{ts}"
 
@@ -286,6 +289,7 @@ async def vendor_approve_transaction(
             doku_result = await create_qris(
                 base_url=base_url,
                 client_id=client_id,
+                partner_id=partner_id,
                 private_key_pem=private_key,
                 client_secret=client_secret,
                 order_id=order_id,

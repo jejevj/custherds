@@ -8,7 +8,7 @@ import hashlib
 import json
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import httpx
 from cryptography.hazmat.primitives import hashes, serialization
@@ -95,6 +95,7 @@ async def create_qris(
     amount: int,
     merchant_id: str,
     terminal_id: str,
+    partner_id: Optional[str] = None,
     description: str = "",
     customer_name: str = "",
     customer_email: str = "",
@@ -104,6 +105,10 @@ async def create_qris(
 ) -> Dict[str, Any]:
     access_token = await get_token_b2b(base_url, client_id, private_key_pem)
 
+    # X-PARTNER-ID: pakai partner_id (qris_client_id=75143) kalau ada,
+    # fallback ke client_id (BRN-...) kalau tidak
+    x_partner_id = partner_id or client_id
+
     endpoint  = "/snap-adapter/b2b/v1.0/qr/qr-mpm-generate"
     timestamp = _now_wib()
 
@@ -111,9 +116,8 @@ async def create_qris(
     validity_period = validity_dt.strftime("%Y-%m-%dT%H:%M:%S+07:00")
     amount_str      = f"{int(amount)}.00"
 
-    # X-EXTERNAL-ID: wajib Numeric String per DOKU SNAP spec
     import time as _time
-    external_id = str(int(_time.time() * 1000))  # epoch milliseconds, pure numeric
+    external_id = str(int(_time.time() * 1000))
 
     body: Dict[str, Any] = {
         "partnerReferenceNo": order_id,
@@ -125,8 +129,8 @@ async def create_qris(
         "terminalId": terminal_id,
         "validityPeriod": validity_period,
         "additionalInfo": {
-            "postalCode": postal_code,  # WAJIB per DOKU spec (max 5 char numeric)
-            "feeType": "1",             # max 1 char, 1 = No Tips
+            "postalCode": postal_code,
+            "feeType": "1",
         },
     }
 
@@ -135,7 +139,7 @@ async def create_qris(
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {access_token}",
-        "X-PARTNER-ID": client_id,
+        "X-PARTNER-ID": x_partner_id,
         "X-EXTERNAL-ID": external_id,
         "X-TIMESTAMP": timestamp,
         "X-SIGNATURE": sym_sig,
@@ -144,8 +148,8 @@ async def create_qris(
 
     logger.error(
         f"[DOKU:qris:REQUEST] endpoint={endpoint} "
-        f"merchantId={merchant_id} terminalId={terminal_id} "
-        f"amount={amount_str} orderId={order_id} "
+        f"X-PARTNER-ID={x_partner_id} merchantId={merchant_id} "
+        f"terminalId={terminal_id} amount={amount_str} orderId={order_id} "
         f"X-EXTERNAL-ID={external_id} X-TIMESTAMP={timestamp} "
         f"body={json.dumps(body, ensure_ascii=False)}"
     )
