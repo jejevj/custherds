@@ -42,8 +42,8 @@ export default function PaymentGatewayConfigPage() {
 
   const fetchList = async () => {
     try {
-      const res = await paymentGatewayConfigService.list()
-      setConfigs(res.data)
+      const data = await paymentGatewayConfigService.list()
+      setConfigs(data)
     } catch {
       setFeedback({ type: 'error', msg: 'Gagal memuat daftar gateway.' })
     }
@@ -53,8 +53,8 @@ export default function PaymentGatewayConfigPage() {
 
   const handleViewDetail = async (provider: string) => {
     try {
-      const res = await paymentGatewayConfigService.getDetail(provider)
-      setDetail(res.data)
+      const data = await paymentGatewayConfigService.getDetail(provider)
+      setDetail(data)
     } catch {
       setFeedback({ type: 'error', msg: 'Gagal memuat detail gateway.' })
     }
@@ -99,8 +99,7 @@ export default function PaymentGatewayConfigPage() {
 
   const openEditForm = async (provider: string) => {
     try {
-      const res = await paymentGatewayConfigService.getDetail(provider)
-      const d = res.data
+      const d = await paymentGatewayConfigService.getDetail(provider)
       setEditProvider(provider)
       setFormProvider(provider)
       setFormLabel(d.label)
