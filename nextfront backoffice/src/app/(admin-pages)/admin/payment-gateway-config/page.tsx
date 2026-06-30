@@ -8,6 +8,8 @@ import type {
   PaymentGatewayConfigCreate,
   PaymentGatewayConfigUpdate,
 } from '@/types/paymentGatewayConfig'
+import { Badge }  from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 
 const PROVIDERS = [
   { key: 'xendit', label: 'Xendit Invoice' },
@@ -38,6 +40,8 @@ export default function PaymentGatewayConfigPage() {
   const [formLabel, setFormLabel]           = useState('')
   const [formNotes, setFormNotes]           = useState('')
   const [loading, setLoading]               = useState(false)
+  const [pageLoading, setPageLoading]       = useState(true)
+  const [error, setError]                   = useState('')
   const [feedback, setFeedback]             = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
 
   const fetchList = async () => {
@@ -45,13 +49,16 @@ export default function PaymentGatewayConfigPage() {
       const data = await paymentGatewayConfigService.list()
       setConfigs(data)
     } catch {
-      setFeedback({ type: 'error', msg: 'Gagal memuat daftar gateway.' })
+      setError('Gagal memuat daftar gateway.')
+    } finally {
+      setPageLoading(false)
     }
   }
 
   useEffect(() => { fetchList() }, [])
 
   const handleViewDetail = async (provider: string) => {
+    if (detail?.provider === provider) { setDetail(null); return }
     try {
       const data = await paymentGatewayConfigService.getDetail(provider)
       setDetail(data)
@@ -153,22 +160,19 @@ export default function PaymentGatewayConfigPage() {
   const credFields = CREDENTIAL_FIELDS[formProvider] ?? []
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Payment Gateway Config</h1>
-          <p className="text-sm text-muted-foreground mt-1">Kelola dan aktifkan payment gateway (DOKU / Xendit)</p>
+          <h1 className="text-2xl font-bold tracking-tight">Payment Gateway Config</h1>
+          <p className="text-muted-foreground">Kelola dan aktifkan payment gateway (DOKU / Xendit).</p>
         </div>
-        <button
-          onClick={openAddForm}
-          className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90"
-        >
-          + Tambah Gateway
-        </button>
+        <Button onClick={openAddForm}>+ Tambah Gateway</Button>
       </div>
 
+      {/* Feedback */}
       {feedback && (
-        <div className={`rounded-lg px-4 py-3 text-sm font-medium ${
+        <div className={`rounded-lg px-4 py-3 text-sm ${
           feedback.type === 'success'
             ? 'bg-green-50 text-green-800 border border-green-200'
             : 'bg-red-50 text-red-800 border border-red-200'
@@ -178,94 +182,98 @@ export default function PaymentGatewayConfigPage() {
         </div>
       )}
 
-      {/* Gateway Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {configs.length === 0 && (
-          <div className="col-span-2 text-center py-16 text-muted-foreground">
-            Belum ada gateway yang terdaftar. Klik <strong>+ Tambah Gateway</strong> untuk mulai.
-          </div>
-        )}
-        {configs.map((cfg) => (
-          <div
-            key={cfg.provider}
-            className={`rounded-xl border p-5 space-y-3 ${
-              cfg.is_active ? 'border-green-400 bg-green-50' : 'border-border bg-card'
-            }`}
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-lg font-semibold capitalize">{cfg.label}</span>
-                  {cfg.is_active && (
-                    <span className="text-xs bg-green-500 text-white px-2 py-0.5 rounded-full font-medium">AKTIF</span>
-                  )}
-                  {cfg.is_production ? (
-                    <span className="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full">PRODUCTION</span>
-                  ) : (
-                    <span className="text-xs bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded-full">SANDBOX</span>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">Provider: <code>{cfg.provider}</code></p>
-                {cfg.notes && <p className="text-xs text-muted-foreground">{cfg.notes}</p>}
-                {cfg.updated_at && (
-                  <p className="text-xs text-muted-foreground">
-                    Diperbarui: {new Date(cfg.updated_at).toLocaleString('id-ID')}
-                  </p>
-                )}
-              </div>
-            </div>
+      {error && <p className="text-sm text-red-500">{error}</p>}
 
-            <div className="flex flex-wrap gap-2 pt-1">
-              {!cfg.is_active && (
-                <button
-                  onClick={() => handleActivate(cfg.provider)}
-                  disabled={loading}
-                  className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 disabled:opacity-50"
-                >
-                  Aktifkan
-                </button>
-              )}
-              <button
-                onClick={() => openEditForm(cfg.provider)}
-                className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700"
-              >
-                Edit Credentials
-              </button>
-              <button
-                onClick={() => handleViewDetail(cfg.provider)}
-                className="text-xs border px-3 py-1.5 rounded-lg hover:bg-accent"
-              >
-                Lihat Detail
-              </button>
-              {!cfg.is_active && (
-                <button
-                  onClick={() => handleDelete(cfg.provider)}
-                  disabled={loading}
-                  className="text-xs bg-red-100 text-red-700 px-3 py-1.5 rounded-lg hover:bg-red-200 disabled:opacity-50"
-                >
-                  Hapus
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
+      {/* Table */}
+      <div className="rounded-xl border bg-card shadow-sm overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-muted-foreground border-b bg-muted/40">
+              <th className="px-4 py-3 font-medium">Provider</th>
+              <th className="px-4 py-3 font-medium">Label</th>
+              <th className="px-4 py-3 font-medium">Mode</th>
+              <th className="px-4 py-3 font-medium">Status</th>
+              <th className="px-4 py-3 font-medium">Diperbarui</th>
+              <th className="px-4 py-3 font-medium">Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pageLoading ? (
+              <tr>
+                <td colSpan={6} className="text-center py-10 text-muted-foreground">Memuat...</td>
+              </tr>
+            ) : configs.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="text-center py-10 text-muted-foreground">
+                  Belum ada gateway terdaftar.
+                </td>
+              </tr>
+            ) : configs.map((cfg) => (
+              <tr key={cfg.provider} className="border-b last:border-0 hover:bg-muted/30">
+                <td className="px-4 py-3 font-mono text-xs">{cfg.provider}</td>
+                <td className="px-4 py-3 font-medium">{cfg.label}</td>
+                <td className="px-4 py-3">
+                  <Badge variant={cfg.is_production ? 'destructive' : 'secondary'}>
+                    {cfg.is_production ? 'Production' : 'Sandbox'}
+                  </Badge>
+                </td>
+                <td className="px-4 py-3">
+                  <Badge variant={cfg.is_active ? 'default' : 'secondary'}>
+                    {cfg.is_active ? 'Aktif' : 'Tidak Aktif'}
+                  </Badge>
+                </td>
+                <td className="px-4 py-3 text-muted-foreground text-xs">
+                  {cfg.updated_at ? new Date(cfg.updated_at).toLocaleString('id-ID') : '-'}
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap gap-2">
+                    {!cfg.is_active && (
+                      <Button size="sm" disabled={loading} onClick={() => handleActivate(cfg.provider)}>
+                        Aktifkan
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" onClick={() => openEditForm(cfg.provider)}>
+                      Edit
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => handleViewDetail(cfg.provider)}>
+                      {detail?.provider === cfg.provider ? 'Tutup Detail' : 'Detail'}
+                    </Button>
+                    {!cfg.is_active && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={loading}
+                        onClick={() => handleDelete(cfg.provider)}
+                      >
+                        Hapus
+                      </Button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       {/* Detail Panel */}
       {detail && (
-        <div className="rounded-xl border bg-card p-5 space-y-3">
+        <div className="rounded-xl border bg-card shadow-sm p-5 space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Detail: {detail.label}</h2>
-            <button onClick={() => setDetail(null)} className="text-xs text-muted-foreground hover:underline">Tutup</button>
+            <h2 className="font-semibold tracking-tight">Detail Credentials: {detail.label}</h2>
+            <Button variant="ghost" size="sm" onClick={() => setDetail(null)}>Tutup</Button>
           </div>
-          <div className="space-y-2">
+          <div className="rounded-lg border bg-muted/40 divide-y">
             {Object.entries(detail.credentials).map(([k, v]) => (
-              <div key={k} className="flex gap-3 text-sm">
-                <span className="text-muted-foreground w-36 shrink-0 font-mono text-xs">{k}</span>
-                <span className="font-mono break-all text-xs bg-muted px-2 py-0.5 rounded">{v}</span>
+              <div key={k} className="flex items-start gap-4 px-4 py-3">
+                <span className="text-muted-foreground font-mono text-xs w-36 shrink-0 pt-0.5">{k}</span>
+                <span className="font-mono text-xs break-all">{v}</span>
               </div>
             ))}
           </div>
+          {detail.notes && (
+            <p className="text-sm text-muted-foreground">Catatan: {detail.notes}</p>
+          )}
         </div>
       )}
 
@@ -273,7 +281,7 @@ export default function PaymentGatewayConfigPage() {
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-background rounded-2xl shadow-xl w-full max-w-lg p-6 space-y-4 mx-4 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-bold">
+            <h2 className="text-lg font-bold tracking-tight">
               {editProvider ? `Edit Gateway: ${editProvider}` : 'Tambah Gateway Baru'}
             </h2>
 
@@ -343,19 +351,10 @@ export default function PaymentGatewayConfigPage() {
             </div>
 
             <div className="flex gap-3 justify-end pt-2">
-              <button
-                onClick={() => setShowForm(false)}
-                className="text-sm px-4 py-2 border rounded-lg hover:bg-accent"
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleSubmit}
-                disabled={loading}
-                className="text-sm px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
-              >
+              <Button variant="outline" onClick={() => setShowForm(false)}>Batal</Button>
+              <Button onClick={handleSubmit} disabled={loading}>
                 {loading ? 'Menyimpan...' : editProvider ? 'Simpan Perubahan' : 'Daftarkan Gateway'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
