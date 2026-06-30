@@ -41,9 +41,10 @@ const navMain = [
   {
     title: "Finance", url: "#", icon: <Landmark />,
     items: [
-      { title: "Transactions", url: "/admin/finance/transactions" },
-      { title: "Withdrawals",  url: "/admin/finance/withdrawals" },
-      { title: "Commission",   url: "/admin/finance/commission" },
+      { title: "Transactions",     url: "/admin/finance/transactions" },
+      { title: "Withdrawals",      url: "/admin/finance/withdrawals" },
+      { title: "Commission",       url: "/admin/finance/commission" },
+      { title: "Payment Gateway",  url: "/admin/payment-gateway-config" },
     ],
   },
   { title: "Profile", url: "/admin/profile", icon: <CircleUserRound /> },
