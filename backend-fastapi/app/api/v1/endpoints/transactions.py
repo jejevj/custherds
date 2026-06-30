@@ -1,5 +1,5 @@
 import uuid
-from typing import Any, List
+from typing import Any, List, Optional
 from datetime import datetime, timezone
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -19,7 +19,6 @@ from app.schemas.transactions import (
     TransactionInvoiceResponse,
 )
 from app.services.xendit import create_disbursement
-from typing import Optional
 import logging
 
 router = APIRouter()
@@ -47,7 +46,7 @@ def _get_active_split(db: Session) -> RevenueSplitConfig:
     return config
 
 
-def _get_active_gateway(db: Session) -> PaymentGatewayConfig | None:
+def _get_active_gateway(db: Session) -> Optional[PaymentGatewayConfig]:
     """Ambil gateway aktif dari DB. Return None jika tidak ada."""
     return db.query(PaymentGatewayConfig).filter(PaymentGatewayConfig.is_active == True).first()  # noqa
 
@@ -291,12 +290,8 @@ async def vendor_approve_transaction(
         tx.status             = "payment_pending"
         tx.payment_method     = "pay_as_you_go"
         tx.vendor_reviewed_at = datetime.now(timezone.utc)
-
-        # Simpan QRIS string & reference di kolom yang tersedia
-        # qris_string → xendit_invoice_url (re-use kolom, atau tambah kolom baru)
-        # doku_reference_no → xendit_invoice_id
-        tx.xendit_invoice_url = doku_result.get("qris_string")     # qris_string
-        tx.xendit_invoice_id  = doku_result.get("reference_no")    # doku_reference_no
+        tx.xendit_invoice_url = doku_result.get("qris_string")
+        tx.xendit_invoice_id  = doku_result.get("reference_no")
 
         db.commit()
         db.refresh(tx)
@@ -367,7 +362,7 @@ def get_invoice_url(
         payment_method=tx.payment_method,
         invoice_url=None,
         xendit_invoice_id=tx.xendit_invoice_id,
-        qris_string=tx.xendit_invoice_url,      # qris_string disimpan di kolom ini
+        qris_string=tx.xendit_invoice_url,
         doku_reference_no=tx.xendit_invoice_id,
         message="QRIS aktif.",
     )
