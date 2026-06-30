@@ -36,6 +36,8 @@ export interface TransactionInvoiceResponse {
   payment_method: string
   invoice_url: string | null
   xendit_invoice_id: string | null
+  qris_string: string | null
+  doku_reference_no: string | null
   message: string
 }
 
@@ -121,7 +123,7 @@ export const transactionsService = {
   reject: (txId: string, reason?: string) =>
     api.post<Transaction>(`/transactions/${txId}/reject`, { reason }),
 
-  /** Ambil ulang link pembayaran Xendit */
+  /** Ambil ulang QRIS / link pembayaran aktif */
   getInvoiceUrl: (txId: string) =>
     api.get<TransactionInvoiceResponse>(`/transactions/${txId}/invoice-url`),
 }

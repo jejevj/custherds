@@ -60,6 +60,8 @@ class TransactionResponse(BaseModel):
 class TransactionInvoiceResponse(BaseModel):
     transaction: TransactionResponse
     payment_method: str
-    invoice_url: Optional[str]
-    xendit_invoice_id: Optional[str]
+    invoice_url: Optional[str] = None
+    xendit_invoice_id: Optional[str] = None
+    qris_string: Optional[str] = None
+    doku_reference_no: Optional[str] = None
     message: str
