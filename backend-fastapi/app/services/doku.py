@@ -14,7 +14,7 @@ import hashlib
 import json
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import Any
+from typing import Any, Dict
 
 import httpx
 from cryptography.hazmat.primitives import hashes, serialization
@@ -32,9 +32,8 @@ def _now_wib() -> str:
 
 def _asymmetric_signature(client_id: str, private_key_pem: str, timestamp: str) -> str:
     """
-    SHA256withRSA( private_key, client_id + '|' + timestamp ) → Base64
+    SHA256withRSA( private_key, client_id + '|' + timestamp ) -> Base64
     Digunakan untuk header X-SIGNATURE pada Get Token B2B.
-    Ref: https://developers.doku.com/get-started-with-doku-api/signature-component/snap
     """
     string_to_sign = f"{client_id}|{timestamp}"
     pk_bytes = private_key_pem.encode()
@@ -60,7 +59,6 @@ def _symmetric_signature(
     Format: HMAC-SHA512( client_secret,
               uppercase(http_method) + ':' + endpoint + ':' + access_token + ':'
               + lowercase_hex(SHA256(minified_body)) + ':' + timestamp )
-    Ref: https://developers.doku.com/get-started-with-doku-api/signature-component/snap
     """
     import hmac as _hmac
     minified_body = json.dumps(request_body, separators=(",", ":"), ensure_ascii=False)
@@ -98,12 +96,12 @@ async def get_token_b2b(
         )
 
     raw = resp.json()
-    logger.debug(f"[DOKU] get_token_b2b status={resp.status_code} responseCode={raw.get('responseCode')}")
+    logger.info(f"[DOKU] get_token_b2b status={resp.status_code} body={raw}")
 
     if resp.status_code != 200 or not raw.get("accessToken"):
         raise RuntimeError(
             f"DOKU get_token_b2b gagal: {raw.get('responseMessage')} "
-            f"(responseCode={raw.get('responseCode')})"
+            f"(responseCode={raw.get('responseCode')}, HTTP {resp.status_code})"
         )
     return raw["accessToken"]
 
@@ -121,34 +119,48 @@ async def create_qris(
     customer_email: str,
     callback_url: str,
     expired_time: int = 30,
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     """
     Buat QRIS payment via DOKU SNAP.
-    POST /direct-debit/v1/registration-account  ← No, QRIS endpoint:
-    POST /checkout/v1/payment  (SNAP QRIS channel: QRIS)
+    Endpoint: POST /checkout/v1/payment
+    Channel : QRIS
 
     Ref: https://developers.doku.com/accept-payments/direct-api/snap/integration-guide/qris
 
-    Returns dict dengan key:
-      - qris_string     : string QRIS untuk di-encode jadi QR image
-      - reference_no    : DOKU reference number
-      - expired_time    : menit expired
-      - raw             : full response DOKU
+    Returns dict:
+      - qris_string  : QRIS EMV string untuk di-render jadi QR image
+      - reference_no : DOKU reference number
+      - expired_time : menit expired
+      - raw          : full DOKU response
     """
     access_token = await get_token_b2b(base_url, client_id, private_key_pem)
 
-    endpoint = "/checkout/v1/payment"
+    endpoint  = "/checkout/v1/payment"
     timestamp = _now_wib()
 
-    body: dict[str, Any] = {
+    # Amount harus string format "50000.00"
+    amount_str = f"{amount:.2f}"
+
+    body: Dict[str, Any] = {
         "partnerReferenceNo": order_id,
         "amount": {
-            "value": f"{amount}.00",
+            "value": amount_str,
             "currency": "IDR",
         },
+        "paymentType": "QRIS",
         "feeType": "OUR",
-        "paymentMethod": {
-            "paymentType": "QRIS",
+        "customer": {
+            "id": customer_email,
+            "name": customer_name,
+            "email": customer_email,
+        },
+        "order": {
+            "amount": {
+                "value": amount_str,
+                "currency": "IDR",
+            },
+            "description": description[:255],
+            "sessionId": order_id,
         },
         "additionalInfo": {
             "channel": "QRIS",
@@ -158,19 +170,8 @@ async def create_qris(
                 "system": "SNAP",
                 "apiFormat": "SNAP",
             },
-            "customer": {
-                "id": customer_email,
-                "name": customer_name,
-                "email": customer_email,
-            },
-            "order": {
-                "description": description,
-                "lineItems": [
-                    {"name": description[:50], "price": amount, "quantity": 1}
-                ],
-                "callbackUrl": callback_url,
-                "expiryTime": expired_time,
-            },
+            "callbackUrl": callback_url,
+            "expiryTime": str(expired_time),
         },
     }
 
@@ -187,11 +188,18 @@ async def create_qris(
         "CHANNEL-ID": "DIRECT",
     }
 
+    logger.info(f"[DOKU] create_qris request body={json.dumps(body, ensure_ascii=False)}")
+
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(f"{base_url}{endpoint}", json=body, headers=headers)
 
     raw = resp.json()
-    logger.info(f"[DOKU] create_qris status={resp.status_code} responseCode={raw.get('responseCode')} ref={raw.get('referenceNo')}")
+    logger.info(
+        f"[DOKU] create_qris status={resp.status_code} "
+        f"responseCode={raw.get('responseCode')} "
+        f"responseMessage={raw.get('responseMessage')} "
+        f"full_response={raw}"
+    )
 
     if resp.status_code not in (200, 201):
         raise RuntimeError(
@@ -199,11 +207,13 @@ async def create_qris(
             f"(responseCode={raw.get('responseCode')}, HTTP {resp.status_code})"
         )
 
+    # DOKU SNAP QRIS response: qrContent atau additionalInfo.qrisValue
     qris_string = (
-        raw.get("additionalInfo", {}).get("qrisValue")
+        raw.get("qrContent")
         or raw.get("qrCode")
-        or raw.get("qrContent")
+        or raw.get("additionalInfo", {}).get("qrisValue")
         or raw.get("additionalInfo", {}).get("qrContent")
+        or raw.get("additionalInfo", {}).get("qrString")
     )
 
     return {
