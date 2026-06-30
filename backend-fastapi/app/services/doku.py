@@ -31,10 +31,6 @@ def _now_wib() -> str:
 
 
 def _asymmetric_signature(client_id: str, private_key_pem: str, timestamp: str) -> str:
-    """
-    SHA256withRSA( private_key, client_id + '|' + timestamp ) -> Base64
-    Digunakan untuk header X-SIGNATURE pada Get Token B2B.
-    """
     string_to_sign = f"{client_id}|{timestamp}"
     pk_bytes = private_key_pem.encode()
     if not private_key_pem.strip().startswith("-----"):
@@ -54,10 +50,6 @@ def _symmetric_signature(
     timestamp: str,
     client_secret: str,
 ) -> str:
-    """
-    HMAC-SHA512 symmetric signature untuk request setelah mendapat access token.
-    stringToSign = METHOD:endpoint:accessToken:lowercase(hex(sha256(minifiedBody))):timestamp
-    """
     import hmac as _hmac
     minified_body = json.dumps(request_body, separators=(",", ":"), ensure_ascii=False)
     body_hash = hashlib.sha256(minified_body.encode()).hexdigest().lower()
@@ -71,10 +63,6 @@ async def get_token_b2b(
     client_id: str,
     private_key_pem: str,
 ) -> str:
-    """
-    POST /authorization/v1/access-token/b2b
-    Mengembalikan accessToken (Bearer) untuk digunakan di request berikutnya.
-    """
     timestamp = _now_wib()
     signature = _asymmetric_signature(client_id, private_key_pem, timestamp)
 
@@ -121,30 +109,16 @@ async def create_qris(
     expired_time: int = 30,
     postal_code: str = "10110",
 ) -> Dict[str, Any]:
-    """
-    Buat QRIS payment via DOKU SNAP.
-    Endpoint: POST /snap-adapter/b2b/v1.0/qr/qr-mpm-generate
-
-    Required body fields: partnerReferenceNo, amount, merchantId, terminalId,
-                          additionalInfo.postalCode, additionalInfo.feeType
-    Optional: validityPeriod (ISO 8601 datetime)
-
-    Returns dict:
-      - qris_string  : QRIS EMV string (qrContent dari response)
-      - reference_no : DOKU referenceNo
-      - expired_time : menit expired
-      - raw          : full DOKU response
-    """
     access_token = await get_token_b2b(base_url, client_id, private_key_pem)
 
     endpoint  = "/snap-adapter/b2b/v1.0/qr/qr-mpm-generate"
     timestamp = _now_wib()
 
-    # validityPeriod: ISO 8601 dari sekarang + expired_time menit
-    validity_dt = datetime.now(_WIB) + timedelta(minutes=expired_time)
+    validity_dt     = datetime.now(_WIB) + timedelta(minutes=expired_time)
     validity_period = validity_dt.strftime("%Y-%m-%dT%H:%M:%S+07:00")
 
-    amount_str = f"{amount:.2f}"
+    # DOKU amount value: string dengan 2 desimal, contoh "10000.00"
+    amount_str = f"{int(amount)}.00"
 
     body: Dict[str, Any] = {
         "partnerReferenceNo": order_id,
@@ -156,10 +130,12 @@ async def create_qris(
         "terminalId": terminal_id,
         "validityPeriod": validity_period,
         "additionalInfo": {
-            "postalCode": postal_code,
-            "feeType": "1",  # 1 = No Tips
+            "feeType": "OUR",   # OUR = No Tips / no surcharge
         },
     }
+
+    if callback_url:
+        body["additionalInfo"]["callbackUrl"] = callback_url
 
     sym_sig = _symmetric_signature("POST", endpoint, access_token, body, timestamp, client_secret)
 
@@ -173,12 +149,15 @@ async def create_qris(
         "CHANNEL-ID": "H2H",
     }
 
-    logger.info(f"[DOKU] create_qris request endpoint={endpoint} body={json.dumps(body, ensure_ascii=False)}")
+    logger.info(
+        f"[DOKU] create_qris => endpoint={endpoint} "
+        f"body={json.dumps(body, ensure_ascii=False)} "
+        f"headers={json.dumps({k: v for k, v in headers.items() if k != 'Authorization'}, ensure_ascii=False)}"
+    )
 
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(f"{base_url}{endpoint}", json=body, headers=headers)
 
-    # Coba parse JSON, fallback ke text jika gagal
     try:
         raw = resp.json()
     except Exception:
