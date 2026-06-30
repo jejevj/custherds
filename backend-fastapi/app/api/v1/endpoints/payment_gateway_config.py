@@ -24,21 +24,13 @@ def list_gateways(db: Session = Depends(get_db)):
     return db.query(PaymentGatewayConfig).all()
 
 
+# ⚠️ Static routes harus SEBELUM dynamic /{provider}
 @router.get("/active", response_model=PaymentGatewayConfigSafeResponse)
 def get_active_gateway(db: Session = Depends(get_db)):
     """Cek gateway mana yang sedang aktif."""
     config = db.query(PaymentGatewayConfig).filter(PaymentGatewayConfig.is_active == True).first()
     if not config:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Belum ada gateway yang aktif.")
-    return config
-
-
-@router.get("/{provider}", response_model=PaymentGatewayConfigResponse)
-def get_gateway_detail(provider: str, db: Session = Depends(get_db)):
-    """Detail konfigurasi termasuk credentials — hanya untuk admin."""
-    config = db.query(PaymentGatewayConfig).filter(PaymentGatewayConfig.provider == provider).first()
-    if not config:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Gateway '{provider}' tidak ditemukan.")
     return config
 
 
@@ -63,20 +55,7 @@ def create_gateway(payload: PaymentGatewayConfigCreate, db: Session = Depends(ge
     return config
 
 
-@router.put("/{provider}", response_model=PaymentGatewayConfigResponse)
-def update_gateway(provider: str, payload: PaymentGatewayConfigUpdate, db: Session = Depends(get_db)):
-    """Update credentials atau konfigurasi gateway (label, is_production, notes)."""
-    config = db.query(PaymentGatewayConfig).filter(PaymentGatewayConfig.provider == provider).first()
-    if not config:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Gateway '{provider}' tidak ditemukan.")
-    update_data = payload.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(config, field, value)
-    db.commit()
-    db.refresh(config)
-    return config
-
-
+# ⚠️ PUT /activate HARUS sebelum PUT /{provider} agar tidak di-shadow
 @router.put("/activate", response_model=PaymentGatewayConfigSafeResponse)
 def activate_gateway(payload: PaymentGatewayActivateRequest, db: Session = Depends(get_db)):
     """
@@ -94,6 +73,29 @@ def activate_gateway(payload: PaymentGatewayActivateRequest, db: Session = Depen
     db.commit()
     db.refresh(target)
     return target
+
+
+@router.get("/{provider}", response_model=PaymentGatewayConfigResponse)
+def get_gateway_detail(provider: str, db: Session = Depends(get_db)):
+    """Detail konfigurasi termasuk credentials — hanya untuk admin."""
+    config = db.query(PaymentGatewayConfig).filter(PaymentGatewayConfig.provider == provider).first()
+    if not config:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Gateway '{provider}' tidak ditemukan.")
+    return config
+
+
+@router.put("/{provider}", response_model=PaymentGatewayConfigResponse)
+def update_gateway(provider: str, payload: PaymentGatewayConfigUpdate, db: Session = Depends(get_db)):
+    """Update credentials atau konfigurasi gateway (label, is_production, notes)."""
+    config = db.query(PaymentGatewayConfig).filter(PaymentGatewayConfig.provider == provider).first()
+    if not config:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Gateway '{provider}' tidak ditemukan.")
+    update_data = payload.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(config, field, value)
+    db.commit()
+    db.refresh(config)
+    return config
 
 
 @router.delete("/{provider}", status_code=status.HTTP_204_NO_CONTENT)
