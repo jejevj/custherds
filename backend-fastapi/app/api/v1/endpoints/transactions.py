@@ -12,21 +12,23 @@ from app.models.booking import Booking
 from app.models.guide import Guide
 from app.models.vendor import Vendor
 from app.models.revenue_split_config import RevenueSplitConfig
+from app.models.payment_gateway_config import PaymentGatewayConfig
 from app.schemas.transactions import (
     TransactionCreate, TransactionResponse,
     TransactionVendorApprove, TransactionVendorReject,
     TransactionInvoiceResponse,
 )
-from app.services.xendit import create_invoice, create_disbursement
+from app.services.xendit import create_disbursement
 from typing import Optional
+import logging
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 TX_MAX_ATTEMPT = 3
 
 
 def _fmt_rp(amount: Decimal) -> str:
-    """Format Decimal ke string Rupiah, misal: Rp 2.200.000"""
     return f"Rp {int(amount):,}".replace(",", ".")
 
 
@@ -45,29 +47,20 @@ def _get_active_split(db: Session) -> RevenueSplitConfig:
     return config
 
 
-import logging
-logger = logging.getLogger(__name__)
+def _get_active_gateway(db: Session) -> PaymentGatewayConfig | None:
+    """Ambil gateway aktif dari DB. Return None jika tidak ada."""
+    return db.query(PaymentGatewayConfig).filter(PaymentGatewayConfig.is_active == True).first()  # noqa
 
 
 async def _disburse_guide_commission(tx: Transaction, db: Session) -> None:
-    """
-    Kirim komisi guide ke rekening via Xendit Disbursement.
-    Dipanggil setelah transaksi settled. Jika gagal, komisi tetap di wallet_balance.
-    """
     guide = db.query(Guide).filter(Guide.id == tx.guide_id).first()
     if not guide:
         return
-
     if not all([guide.bank_name, guide.bank_account_number, guide.bank_account_name]):
-        logger.info(
-            f"[Disbursement] Guide {guide.id} belum lengkap data bank — "
-            f"komisi Rp {tx.guide_commission} tetap di wallet_balance"
-        )
+        logger.info(f"[Disbursement] Guide {guide.id} belum lengkap data bank — komisi tetap di wallet_balance")
         return
-
     external_id = f"CUSTHERDS-COMM-{tx.transaction_code}"
     description = f"Komisi Guide | Booking {tx.booking_id} | Transaksi {tx.transaction_code}"
-
     try:
         result = await create_disbursement(
             external_id=external_id,
@@ -77,9 +70,8 @@ async def _disburse_guide_commission(tx: Transaction, db: Session) -> None:
             amount=float(tx.guide_commission),
             description=description,
         )
-        xendit_disb_id = result.get("id", "")
-        logger.info(f"[Disbursement] Berhasil | guide={guide.id} | amount={tx.guide_commission} | xendit_id={xendit_disb_id}")
-        tx.xendit_disbursement_id = xendit_disb_id
+        tx.xendit_disbursement_id = result.get("id", "")
+        logger.info(f"[Disbursement] Berhasil | guide={guide.id} | amount={tx.guide_commission}")
     except Exception as e:
         logger.error(f"[Disbursement] GAGAL | guide={guide.id} | tx={tx.transaction_code} | error={str(e)}")
 
@@ -212,6 +204,7 @@ async def vendor_approve_transaction(
 
     tagihan = tx.guide_commission + tx.platform_fee
 
+    # ── DEPOSIT ────────────────────────────────────────────────────────────
     if payload.payment_method == "deposit":
         if vendor.deposit_balance < tagihan:
             raise HTTPException(
@@ -227,13 +220,11 @@ async def vendor_approve_transaction(
         tx.settled_at          = datetime.now(timezone.utc)
         tx.vendor_reviewed_at  = datetime.now(timezone.utc)
 
-        # Kredit wallet guide
         guide = db.query(Guide).filter(Guide.id == tx.guide_id).first()
         if guide:
             guide.wallet_balance  += tx.guide_commission
             guide.total_earnings  += tx.guide_commission
 
-        # Selesaikan booking
         booking = db.query(Booking).filter(Booking.id == tx.booking_id).first()
         if booking:
             booking.status       = "completed"
@@ -241,8 +232,6 @@ async def vendor_approve_transaction(
 
         db.commit()
         db.refresh(tx)
-
-        # Disbursement komisi ke rekening guide
         await _disburse_guide_commission(tx, db)
         db.commit()
 
@@ -251,40 +240,77 @@ async def vendor_approve_transaction(
             payment_method="deposit",
             invoice_url=None,
             xendit_invoice_id=None,
+            qris_string=None,
+            doku_reference_no=None,
             message="Pembayaran via deposit berhasil. Komisi guide sedang diproses ke rekening.",
         )
 
+    # ── PAY AS YOU GO — DOKU SNAP QRIS ─────────────────────────────────────
     elif payload.payment_method == "pay_as_you_go":
+        gateway = _get_active_gateway(db)
+
+        if not gateway:
+            raise HTTPException(503, "Tidak ada payment gateway aktif. Hubungi admin.")
+
+        creds: dict = gateway.credentials or {}
+        base_url = "https://api.doku.com" if gateway.is_production else "https://api-sandbox.doku.com"
+
+        client_id      = creds.get("client_id", "")
+        private_key    = creds.get("private_key", "")
+        client_secret  = creds.get("client_secret", "")
+
+        if not client_id or not private_key:
+            raise HTTPException(503, "Konfigurasi DOKU belum lengkap (client_id / private_key).")
+
         vendor_user = db.query(User).filter(User.id == vendor.user_id).first()
-        external_id = f"CUSTHERDS-TX-{tx.transaction_code}"
+        order_id    = f"CUSTHERDS-TX-{tx.transaction_code}"
         description = (
-            f"Tagihan Custherds - Komisi Guide + Fee Platform | "
+            f"Tagihan Custherds | Komisi Guide + Fee Platform | "
             f"Transaksi {tx.transaction_code} | Vendor: {vendor.vendor_business_name}"
         )
+
         try:
-            xendit_response = await create_invoice(
-                external_id=external_id,
-                amount=float(tagihan),
-                payer_email=vendor_user.user_email if vendor_user else "vendor@custherds.com",
+            from app.services.doku import create_qris
+            doku_result = await create_qris(
+                base_url=base_url,
+                client_id=client_id,
+                private_key_pem=private_key,
+                client_secret=client_secret,
+                order_id=order_id,
+                amount=int(tagihan),
                 description=description,
+                customer_name=vendor.vendor_business_name or "Vendor",
+                customer_email=vendor_user.user_email if vendor_user else "vendor@custherds.com",
+                callback_url="https://api-custherds.ourtestcloud.my.id/api/v1/webhooks/doku/qris-notify",
+                expired_time=30,
             )
         except Exception as e:
-            raise HTTPException(502, f"Gagal membuat invoice Xendit: {str(e)}")
+            logger.error(f"[DOKU QRIS] Gagal buat QRIS untuk TX {tx.transaction_code}: {e}")
+            raise HTTPException(502, f"Gagal membuat QRIS DOKU: {str(e)}")
 
-        tx.status              = "payment_pending"
-        tx.payment_method      = "pay_as_you_go"
-        tx.xendit_invoice_id   = xendit_response.get("id")
-        tx.xendit_invoice_url  = xendit_response.get("invoice_url")
-        tx.vendor_reviewed_at  = datetime.now(timezone.utc)
+        tx.status             = "payment_pending"
+        tx.payment_method     = "pay_as_you_go"
+        tx.vendor_reviewed_at = datetime.now(timezone.utc)
+
+        # Simpan QRIS string & reference di kolom yang tersedia
+        # qris_string → xendit_invoice_url (re-use kolom, atau tambah kolom baru)
+        # doku_reference_no → xendit_invoice_id
+        tx.xendit_invoice_url = doku_result.get("qris_string")     # qris_string
+        tx.xendit_invoice_id  = doku_result.get("reference_no")    # doku_reference_no
+
         db.commit()
         db.refresh(tx)
+
         return TransactionInvoiceResponse(
             transaction=tx,
             payment_method="pay_as_you_go",
-            invoice_url=xendit_response.get("invoice_url"),
-            xendit_invoice_id=xendit_response.get("id"),
-            message="Invoice pembayaran berhasil dibuat. Silakan selesaikan pembayaran melalui link berikut.",
+            invoice_url=None,
+            xendit_invoice_id=doku_result.get("reference_no"),
+            qris_string=doku_result.get("qris_string"),
+            doku_reference_no=doku_result.get("reference_no"),
+            message="QRIS DOKU berhasil dibuat. Silakan scan QR untuk menyelesaikan pembayaran.",
         )
+
     else:
         raise HTTPException(400, "payment_method harus 'deposit' atau 'pay_as_you_go'")
 
@@ -324,7 +350,7 @@ def vendor_reject_transaction(
     return tx
 
 
-@router.get("/{tx_id}/invoice-url", response_model=TransactionInvoiceResponse, summary="Ambil ulang link pembayaran Xendit")
+@router.get("/{tx_id}/invoice-url", response_model=TransactionInvoiceResponse, summary="Ambil ulang QRIS / link pembayaran")
 def get_invoice_url(
     tx_id: uuid.UUID,
     db: Session = Depends(get_db),
@@ -335,11 +361,13 @@ def get_invoice_url(
     if not tx:
         raise HTTPException(404, "Transaksi tidak ditemukan")
     if tx.status != "payment_pending":
-        raise HTTPException(400, f"Tidak ada invoice aktif untuk transaksi ini. Status: {tx.status}")
+        raise HTTPException(400, f"Tidak ada pembayaran aktif untuk transaksi ini. Status: {tx.status}")
     return TransactionInvoiceResponse(
         transaction=tx,
         payment_method=tx.payment_method,
-        invoice_url=tx.xendit_invoice_url,
+        invoice_url=None,
         xendit_invoice_id=tx.xendit_invoice_id,
-        message="Link pembayaran aktif.",
+        qris_string=tx.xendit_invoice_url,      # qris_string disimpan di kolom ini
+        doku_reference_no=tx.xendit_invoice_id,
+        message="QRIS aktif.",
     )

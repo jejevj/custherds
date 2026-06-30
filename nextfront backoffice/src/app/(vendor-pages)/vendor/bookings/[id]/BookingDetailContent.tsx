@@ -8,10 +8,12 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
+import QRCode from "qrcode.react"
 import {
   ArrowLeft, FileText, CalendarDays, Users, Package, MapPin,
   Upload, CheckCircle, XCircle, CheckCircle2, Receipt, AlertCircle,
   CreditCard, Banknote, ZoomIn, ChevronLeft, ChevronRight, X, Loader2,
+  QrCode,
 } from "lucide-react"
 
 const POLL_INTERVAL_MS  = 5000
@@ -56,7 +58,7 @@ function parseExtraPhotos(notes: string | null | undefined): string[] {
   catch { return [] }
 }
 
-// ── Lightbox ──────────────────────────────────────────────────────────────
+// ── Lightbox ────────────────────────────────────────────────────────────────
 function Lightbox({ images, initialIndex, onClose }: { images: string[]; initialIndex: number; onClose: () => void }) {
   const [idx, setIdx] = useState(initialIndex)
   const prev = () => setIdx(i => (i - 1 + images.length) % images.length)
@@ -101,7 +103,63 @@ function Lightbox({ images, initialIndex, onClose }: { images: string[]; initial
   )
 }
 
-// ── Photo Grid ────────────────────────────────────────────────────────────
+// ── QR Modal ─────────────────────────────────────────────────────────────────
+function QrisModal({ qrisString, referenceNo, onClose }: { qrisString: string; referenceNo?: string | null; onClose: () => void }) {
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose() }
+    window.addEventListener("keydown", h)
+    return () => window.removeEventListener("keydown", h)
+  }, [onClose])
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl p-6 flex flex-col items-center gap-4 max-w-xs w-full"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between w-full">
+          <div className="flex items-center gap-2">
+            <QrCode size={18} className="text-emerald-600" />
+            <span className="font-semibold text-gray-800 text-sm">Scan QRIS untuk Bayar</span>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="border-4 border-emerald-500 rounded-xl p-2 bg-white">
+          <QRCode
+            value={qrisString}
+            size={220}
+            level="M"
+            includeMargin={false}
+          />
+        </div>
+
+        <div className="text-center space-y-1">
+          <p className="text-xs text-gray-500">Gunakan aplikasi bank / e-wallet apapun</p>
+          {referenceNo && (
+            <p className="text-[10px] text-gray-400 font-mono">Ref: {referenceNo}</p>
+          )}
+        </div>
+
+        <div className="w-full rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+          <p className="text-[11px] text-amber-700 text-center">
+            QR berlaku <strong>30 menit</strong>. Halaman otomatis update setelah pembayaran.
+          </p>
+        </div>
+
+        <button
+          onClick={onClose}
+          className="w-full text-sm text-gray-500 hover:text-gray-700 py-1"
+        >
+          Tutup
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Photo Grid ────────────────────────────────────────────────────────────────
 function PhotoGrid({ urls, label }: { urls: string[]; label: string }) {
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null)
   if (!urls.length) return null
@@ -132,7 +190,7 @@ function PhotoGrid({ urls, label }: { urls: string[]; label: string }) {
   )
 }
 
-// ── Main Component ──────────────────────────────────────────────────────────
+// ── Main Component ────────────────────────────────────────────────────────────
 export default function BookingDetailContent() {
   const { id } = useParams<{ id: string }>()
   const router  = useRouter()
@@ -150,7 +208,11 @@ export default function BookingDetailContent() {
   const [showTxReject, setShowTxReject]       = useState(false)
   const [txRejectReason, setTxRejectReason]   = useState("")
   const [showPayMethod, setShowPayMethod]     = useState(false)
-  const [invoiceUrl, setInvoiceUrl]           = useState<string | null>(null)
+
+  // QRIS state
+  const [qrisString, setQrisString]       = useState<string | null>(null)
+  const [dokuRefNo, setDokuRefNo]         = useState<string | null>(null)
+  const [showQrisModal, setShowQrisModal] = useState(false)
 
   const pollTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pollAttemptsRef = useRef(0)
@@ -170,6 +232,11 @@ export default function BookingDetailContent() {
         try {
           const t = await transactionsService.getByBookingId(b.id)
           setTx(t)
+          // Jika TX payment_pending dan ada qris_string di xendit_invoice_url
+          if (t?.status === "payment_pending" && t?.xendit_invoice_url) {
+            setQrisString(t.xendit_invoice_url)
+            setDokuRefNo(t.xendit_invoice_id ?? null)
+          }
         } catch { /* tx belum ada */ }
       }
     } catch {
@@ -179,58 +246,44 @@ export default function BookingDetailContent() {
     }
   }, [id])
 
-  // ── Polling: aktif saat TX status = payment_pending ──────────────────────
+  // ── Polling ──────────────────────────────────────────────────────────────
   const startPolling = useCallback((bookingId: string) => {
     if (pollTimerRef.current) return
     setPolling(true)
     pollAttemptsRef.current = 0
 
     const tick = async () => {
-      if (pollAttemptsRef.current >= POLL_MAX_ATTEMPTS) {
-        stopPolling()
-        return
-      }
+      if (pollAttemptsRef.current >= POLL_MAX_ATTEMPTS) { stopPolling(); return }
       pollAttemptsRef.current++
-
       try {
         const latestTx = await transactionsService.getByBookingId(bookingId)
-
-        // null guard — tx mungkin belum ada saat polling awal
-        if (!latestTx) {
-          pollTimerRef.current = setTimeout(tick, POLL_INTERVAL_MS)
-          return
-        }
-
+        if (!latestTx) { pollTimerRef.current = setTimeout(tick, POLL_INTERVAL_MS); return }
         setTx(latestTx)
-
         if (latestTx.status === "settled") {
           const latestBooking = await bookingsService.get(id)
           setBooking(latestBooking)
           stopPolling()
-          toast.success("Pembayaran berhasil!", {
+          setShowQrisModal(false)
+          toast.success("Pembayaran QRIS berhasil!", {
             description: "Transaksi telah settled dan booking selesai.",
             duration: 6000,
           })
           return
         }
-
         if (latestTx.status === "pending_vendor_approval") {
           const latestBooking = await bookingsService.get(id)
           setBooking(latestBooking)
           stopPolling()
-          toast.error("Invoice kedaluwarsa", {
-            description: "Invoice Xendit sudah expired. Silakan pilih metode pembayaran kembali.",
+          setShowQrisModal(false)
+          toast.error("QRIS kedaluwarsa", {
+            description: "QRIS sudah expired. Silakan pilih metode pembayaran kembali.",
             duration: 8000,
           })
           return
         }
-      } catch {
-        // silent — lanjut polling
-      }
-
+      } catch { /* silent */ }
       pollTimerRef.current = setTimeout(tick, POLL_INTERVAL_MS)
     }
-
     pollTimerRef.current = setTimeout(tick, POLL_INTERVAL_MS)
   }, [id, stopPolling]) // eslint-disable-line
 
@@ -281,7 +334,12 @@ export default function BookingDetailContent() {
     try {
       const result = await transactionsService.approve(tx.id, method)
       setTx(result.transaction)
-      if (result.invoice_url) setInvoiceUrl(result.invoice_url)
+      // Jika DOKU QRIS → ambil qris_string dan tampilkan modal
+      if (result.qris_string) {
+        setQrisString(result.qris_string)
+        setDokuRefNo(result.doku_reference_no ?? null)
+        setShowQrisModal(true)
+      }
       const updated = await bookingsService.get(booking!.id)
       setBooking(updated)
       setShowPayMethod(false)
@@ -344,9 +402,19 @@ export default function BookingDetailContent() {
     : []
 
   const hasTxPanel = (isNeedTxReview || booking.status === "completed") && !!tx
+  const activeQris = txPaymentPending ? (qrisString ?? tx?.xendit_invoice_url) : null
 
   return (
     <div className="w-full space-y-5 py-6 px-4">
+
+      {/* ── QR Modal ── */}
+      {showQrisModal && activeQris && (
+        <QrisModal
+          qrisString={activeQris}
+          referenceNo={dokuRefNo ?? tx?.xendit_invoice_id}
+          onClose={() => setShowQrisModal(false)}
+        />
+      )}
 
       <button onClick={() => router.push("/vendor/bookings")}
         className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition">
@@ -366,9 +434,17 @@ export default function BookingDetailContent() {
       </div>
 
       {txPaymentPending && polling && (
-        <div className="flex items-center gap-2.5 rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3 text-sm text-blue-300">
+        <div className="flex items-center gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-300">
           <Loader2 size={14} className="animate-spin shrink-0" />
-          <span>Menunggu konfirmasi pembayaran dari Xendit… halaman akan otomatis diperbarui.</span>
+          <span>Menunggu konfirmasi pembayaran QRIS… halaman akan otomatis diperbarui.</span>
+          {activeQris && (
+            <button
+              onClick={() => setShowQrisModal(true)}
+              className="ml-auto shrink-0 flex items-center gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg transition"
+            >
+              <QrCode size={13} /> Lihat QR
+            </button>
+          )}
         </div>
       )}
 
@@ -459,7 +535,7 @@ export default function BookingDetailContent() {
                     <Banknote size={14} className="mr-1" /> Potong Deposit
                   </Button>
                   <Button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleTxApprove("pay_as_you_go")} disabled={submitting}>
-                    <CreditCard size={14} className="mr-1" /> Pay As You Go
+                    <CreditCard size={14} className="mr-1" /> Pay As You Go (QRIS)
                   </Button>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => setShowPayMethod(false)}>Batal</Button>
@@ -531,24 +607,22 @@ export default function BookingDetailContent() {
                 </div>
               </div>
 
-              {txPaymentPending && (invoiceUrl ?? tx!.xendit_invoice_url) && (
-                <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3 space-y-2">
-                  <div className="flex items-center gap-2 text-xs text-blue-300">
+              {/* ── QRIS Payment Panel ── */}
+              {txPaymentPending && activeQris && (
+                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 space-y-3">
+                  <div className="flex items-center gap-2 text-xs text-emerald-300">
                     {polling && <Loader2 size={12} className="animate-spin" />}
-                    <span>Menunggu pembayaran — halaman otomatis update setelah lunas.</span>
+                    <span>Menunggu pembayaran QRIS — halaman otomatis update setelah lunas.</span>
                   </div>
-                  <a href={invoiceUrl ?? tx!.xendit_invoice_url!} target="_blank" rel="noopener noreferrer"
-                    className="text-sm text-blue-400 hover:underline break-all">
-                    {invoiceUrl ?? tx!.xendit_invoice_url}
-                  </a>
-                </div>
-              )}
-
-              {tx!.status === "settled" && invoiceUrl && (
-                <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3">
-                  <p className="text-xs text-muted-foreground mb-2">Link Pembayaran</p>
-                  <a href={invoiceUrl} target="_blank" rel="noopener noreferrer"
-                    className="text-sm text-blue-400 hover:underline break-all">{invoiceUrl}</a>
+                  <Button
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={() => setShowQrisModal(true)}
+                  >
+                    <QrCode size={15} className="mr-2" /> Tampilkan QR Code
+                  </Button>
+                  {tx?.xendit_invoice_id && (
+                    <p className="text-[10px] text-muted-foreground font-mono">Ref DOKU: {tx.xendit_invoice_id}</p>
+                  )}
                 </div>
               )}
 

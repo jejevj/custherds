@@ -1,3 +1,5 @@
+import hashlib
+import hmac as _hmac
 import logging
 from typing import Any
 from datetime import datetime, timezone
@@ -15,8 +17,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
 def _verify_xendit_token(x_callback_token: str):
-    """Verifikasi Xendit callback token."""
     if not settings.XENDIT_WEBHOOK_TOKEN:
         logger.warning("XENDIT_WEBHOOK_TOKEN belum diset, skip verifikasi")
         return
@@ -25,73 +28,51 @@ def _verify_xendit_token(x_callback_token: str):
 
 
 async def _disburse_guide_commission(tx: Transaction, db: Session) -> None:
-    """
-    Kirim komisi guide ke rekening via Xendit Disbursement.
-    Dipanggil setelah transaksi settled (baik deposit maupun PAYG).
-
-    Flow:
-      1. Cek guide punya data bank lengkap
-      2. Buat disbursement ke Xendit
-      3. Catat xendit_disbursement_id ke transaction
-      4. Jika guide tidak punya data bank → skip (komisi tetap di wallet_balance)
-    """
     guide = db.query(Guide).filter(Guide.id == tx.guide_id).first()
     if not guide:
-        logger.warning(f"[Disbursement] Guide tidak ditemukan untuk tx {tx.transaction_code}")
         return
-
-    # Cek kelengkapan data bank guide
     if not all([guide.bank_name, guide.bank_account_number, guide.bank_account_name]):
-        logger.info(
-            f"[Disbursement] Guide {guide.id} belum lengkap data bank — "
-            f"komisi Rp {tx.guide_commission} tetap di wallet_balance"
-        )
+        logger.info(f"[Disbursement] Guide {guide.id} belum lengkap data bank — komisi tetap di wallet_balance")
         return
-
     external_id = f"CUSTHERDS-COMM-{tx.transaction_code}"
-    description = (
-        f"Komisi Guide | Booking {tx.booking_id} | "
-        f"Transaksi {tx.transaction_code}"
-    )
-
+    description = f"Komisi Guide | Booking {tx.booking_id} | Transaksi {tx.transaction_code}"
     try:
         result = await create_disbursement(
             external_id=external_id,
-            bank_code=guide.bank_name,          # guide.bank_name harus berisi kode bank Xendit, misal "BCA"
+            bank_code=guide.bank_name,
             account_number=guide.bank_account_number,
             account_holder_name=guide.bank_account_name,
             amount=float(tx.guide_commission),
             description=description,
         )
-        xendit_disb_id = result.get("id", "")
-        logger.info(
-            f"[Disbursement] Berhasil dibuat untuk guide {guide.id} "
-            f"| amount={tx.guide_commission} | xendit_id={xendit_disb_id}"
-        )
-        # Simpan ID disbursement ke transaksi untuk audit trail
-        tx.xendit_disbursement_id = xendit_disb_id
+        tx.xendit_disbursement_id = result.get("id", "")
+        logger.info(f"[Disbursement] Berhasil | guide={guide.id} | amount={tx.guide_commission}")
     except Exception as e:
-        # Jangan gagalkan transaksi hanya karena disbursement error
-        # Komisi tetap ada di wallet_balance, bisa retry manual
-        logger.error(
-            f"[Disbursement] GAGAL untuk guide {guide.id} | "
-            f"tx={tx.transaction_code} | error={str(e)}"
-        )
+        logger.error(f"[Disbursement] GAGAL | guide={guide.id} | tx={tx.transaction_code} | error={str(e)}")
 
+
+def _settle_transaction(tx: Transaction, booking: Booking | None, guide: Guide | None, db: Session, now: datetime) -> None:
+    """Shared logic: settle TX, kredit wallet guide, selesaikan booking."""
+    tx.status     = "settled"
+    tx.paid_at    = now
+    tx.settled_at = now
+
+    if guide:
+        guide.wallet_balance += tx.guide_commission
+        guide.total_earnings += tx.guide_commission
+        logger.info(f"[Webhook] Guide {guide.id} wallet +{tx.guide_commission}")
+
+    if booking:
+        booking.status       = "completed"
+        booking.completed_at = now
+        logger.info(f"[Webhook] Booking {booking.booking_code} → completed")
+
+
+# ── Xendit Webhooks ──────────────────────────────────────────────────────────
 
 @router.post(
     "/xendit/invoice-paid",
     summary="[Webhook] Xendit — Invoice Paid Callback",
-    description="""
-Endpoint ini dipanggil otomatis oleh Xendit setelah vendor menyelesaikan pembayaran invoice.
-
-**Cara setup di Xendit Dashboard:**
-1. Login ke [dashboard.xendit.co](https://dashboard.xendit.co)
-2. Settings → Webhooks
-3. Tambahkan URL: `https://api.custherds.ourtestcloud.my.id/api/v1/webhooks/xendit/invoice-paid`
-4. Pilih event: **Invoice Paid**
-5. Copy Webhook Token → isi ke `.env` sebagai `XENDIT_WEBHOOK_TOKEN`
-    """,
     tags=["Webhooks"],
 )
 async def xendit_invoice_paid(
@@ -100,63 +81,36 @@ async def xendit_invoice_paid(
     x_callback_token: str = Header("", alias="x-callback-token"),
 ) -> Any:
     _verify_xendit_token(x_callback_token)
-
     body = await request.json()
-    logger.info(f"[Webhook] Invoice Paid received: {body.get('id')} status={body.get('status')}")
+    logger.info(f"[Webhook] Xendit Invoice Paid: {body.get('id')} status={body.get('status')}")
 
     if body.get("status") != "PAID":
         return {"message": "Status bukan PAID, diabaikan"}
 
     external_id: str = body.get("external_id", "")
-    xendit_invoice_id: str = body.get("id", "")
-
     if not external_id.startswith("CUSTHERDS-TX-"):
-        logger.warning(f"[Webhook] external_id tidak dikenali: {external_id}")
         return {"message": "external_id tidak dikenali"}
 
     tx_code = external_id.replace("CUSTHERDS-TX-", "")
     tx = db.query(Transaction).filter(Transaction.transaction_code == tx_code).first()
     if not tx:
-        logger.error(f"[Webhook] Transaction tidak ditemukan: {tx_code}")
         raise HTTPException(404, "Transaction tidak ditemukan")
-
     if tx.status == "settled":
-        return {"message": "Transaksi sudah settled sebelumnya, skip"}
-
+        return {"message": "Sudah settled"}
     if tx.status != "payment_pending":
-        logger.warning(f"[Webhook] Status tidak expected: {tx.status}")
         return {"message": f"Status tidak bisa diproses: {tx.status}"}
 
-    now = datetime.now(timezone.utc)
-
-    # ── 1. Settle transaksi ────────────────────────────────────────────────
-    tx.status         = "settled"
-    tx.paid_at        = now
-    tx.settled_at     = now
-    tx.xendit_invoice_id = xendit_invoice_id
-
-    # ── 2. Kredit wallet guide ─────────────────────────────────────────────
-    guide = db.query(Guide).filter(Guide.id == tx.guide_id).first()
-    if guide:
-        guide.wallet_balance  += tx.guide_commission
-        guide.total_earnings  += tx.guide_commission
-        logger.info(f"[Webhook] Guide {guide.id} wallet +{tx.guide_commission}")
-
-    # ── 3. Selesaikan booking ──────────────────────────────────────────────
+    now     = datetime.now(timezone.utc)
+    guide   = db.query(Guide).filter(Guide.id == tx.guide_id).first()
     booking = db.query(Booking).filter(Booking.id == tx.booking_id).first()
-    if booking:
-        booking.status       = "completed"
-        booking.completed_at = now
-        logger.info(f"[Webhook] Booking {booking.booking_code} → completed (PAYG)")
-
+    tx.xendit_invoice_id = body.get("id", "")
+    _settle_transaction(tx, booking, guide, db, now)
     db.commit()
     db.refresh(tx)
 
-    # ── 4. Disbursement komisi ke rekening guide (async, non-blocking) ─────
     await _disburse_guide_commission(tx, db)
-    db.commit()  # simpan xendit_disbursement_id jika ada
+    db.commit()
 
-    logger.info(f"[Webhook] Transaction {tx.transaction_code} fully settled via PAYG")
     return {"message": "OK", "transaction_code": tx.transaction_code, "status": "settled"}
 
 
@@ -170,9 +124,7 @@ async def xendit_invoice_expired(
     db: Session = Depends(get_db),
     x_callback_token: str = Header("", alias="x-callback-token"),
 ) -> Any:
-    """Jika invoice expired, kembalikan TX ke pending_vendor_approval agar vendor bisa pilih ulang."""
     _verify_xendit_token(x_callback_token)
-
     body = await request.json()
     if body.get("status") != "EXPIRED":
         return {"message": "Bukan EXPIRED, diabaikan"}
@@ -186,14 +138,13 @@ async def xendit_invoice_expired(
     if not tx or tx.status != "payment_pending":
         return {"message": "Tidak perlu diproses"}
 
-    tx.status              = "pending_vendor_approval"
-    tx.payment_method      = None
-    tx.xendit_invoice_id   = None
-    tx.xendit_invoice_url  = None
-    tx.vendor_reviewed_at  = None
+    tx.status             = "pending_vendor_approval"
+    tx.payment_method     = None
+    tx.xendit_invoice_id  = None
+    tx.xendit_invoice_url = None
+    tx.vendor_reviewed_at = None
     db.commit()
-    logger.info(f"[Webhook] TX {tx.transaction_code} reset ke pending_vendor_approval (expired)")
-
+    logger.info(f"[Webhook] TX {tx.transaction_code} reset ke pending_vendor_approval (Xendit expired)")
     return {"message": "OK", "transaction_code": tx.transaction_code, "status": "reset_to_pending"}
 
 
@@ -207,18 +158,11 @@ async def xendit_disbursement_callback(
     db: Session = Depends(get_db),
     x_callback_token: str = Header("", alias="x-callback-token"),
 ) -> Any:
-    """
-    Callback dari Xendit setelah disbursement komisi guide selesai atau gagal.
-    Setup di Xendit Dashboard → Settings → Webhooks → Disbursement Completed.
-    URL: https://api.custherds.ourtestcloud.my.id/api/v1/webhooks/xendit/disbursement-completed
-    """
     _verify_xendit_token(x_callback_token)
-
-    body = await request.json()
-    status      = body.get("status", "")          # COMPLETED / FAILED
-    external_id = body.get("external_id", "")     # CUSTHERDS-COMM-{tx_code}
+    body        = await request.json()
+    status      = body.get("status", "")
+    external_id = body.get("external_id", "")
     failure_code = body.get("failure_code", "")
-
     logger.info(f"[Disbursement CB] external_id={external_id} status={status}")
 
     if not external_id.startswith("CUSTHERDS-COMM-"):
@@ -230,16 +174,141 @@ async def xendit_disbursement_callback(
         return {"message": "Transaction tidak ditemukan"}
 
     if status == "COMPLETED":
-        logger.info(f"[Disbursement CB] Komisi guide untuk TX {tx_code} berhasil dikirim")
-        # Opsional: update flag disbursement_status di tx jika kolom tersedia
-
+        logger.info(f"[Disbursement CB] Komisi guide TX {tx_code} berhasil dikirim")
     elif status == "FAILED":
-        logger.error(
-            f"[Disbursement CB] GAGAL kirim komisi TX {tx_code} "
-            f"| failure_code={failure_code} "
-            f"— komisi tetap di wallet_balance guide, perlu retry manual"
-        )
-        # Komisi sudah ada di wallet_balance, tidak perlu rollback
-        # Admin bisa trigger manual disbursement dari dashboard Xendit
+        logger.error(f"[Disbursement CB] GAGAL kirim komisi TX {tx_code} | failure_code={failure_code}")
 
     return {"message": "OK", "status": status}
+
+
+# ── DOKU SNAP Webhook ─────────────────────────────────────────────────────────
+
+@router.post(
+    "/doku/qris-notify",
+    summary="[Webhook] DOKU SNAP — QRIS Payment Notification",
+    description="""
+Endpoint ini dipanggil otomatis oleh DOKU setelah pembayaran QRIS selesai.
+
+**Setup di DOKU Dashboard (Sandbox / Production):**
+1. Login → Settings → Configuration → Notification URL
+2. Isi URL: `https://api-custherds.ourtestcloud.my.id/api/v1/webhooks/doku/qris-notify`
+3. Pilih event: **Payment Notification**
+
+**Verifikasi:** DOKU mengirim header `X-Signature` (HMAC-SHA512) dan `Request-Id`.
+Sistem memverifikasi signature menggunakan `client_secret` dari gateway aktif.
+    """,
+    tags=["Webhooks"],
+)
+async def doku_qris_notify(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> Any:
+    """
+    DOKU SNAP QRIS notification.
+    DOKU SNAP mengirim notifikasi dengan body JSON dan header:
+      - Request-Id
+      - Request-Timestamp
+      - X-Signature  (HMAC-SHA512 dari notify_url + request_id + timestamp + sha256(body))
+
+    Ref: https://developers.doku.com/accept-payments/direct-api/snap/integration-guide/qris
+    """
+    from app.models.payment_gateway_config import PaymentGatewayConfig
+    import json, base64
+
+    raw_body = await request.body()
+    body: dict = {}
+    try:
+        body = json.loads(raw_body)
+    except Exception:
+        raise HTTPException(400, "Body tidak valid JSON")
+
+    logger.info(f"[DOKU Webhook] QRIS notify received: {body}")
+
+    # ── Verifikasi Signature (opsional tapi direkomendasikan) ─────────────
+    gateway = db.query(PaymentGatewayConfig).filter(
+        PaymentGatewayConfig.provider == "doku",
+        PaymentGatewayConfig.is_active == True,  # noqa
+    ).first()
+
+    if gateway:
+        creds         = gateway.credentials or {}
+        client_secret = creds.get("client_secret", "")
+        if client_secret:
+            try:
+                notify_url   = "/api/v1/webhooks/doku/qris-notify"
+                request_id   = request.headers.get("Request-Id", "")
+                timestamp    = request.headers.get("Request-Timestamp", "")
+                x_signature  = request.headers.get("X-Signature", "")
+                body_hash    = hashlib.sha256(raw_body).hexdigest().lower()
+                str_to_sign  = f"{notify_url}:{request_id}:{timestamp}:{body_hash}"
+                expected_sig = base64.b64encode(
+                    _hmac.new(client_secret.encode(), str_to_sign.encode(), hashlib.sha512).digest()
+                ).decode()
+                if x_signature and x_signature != expected_sig:
+                    logger.warning(f"[DOKU Webhook] Signature mismatch — req={x_signature[:20]}... exp={expected_sig[:20]}...")
+                    raise HTTPException(401, "DOKU signature tidak valid")
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.warning(f"[DOKU Webhook] Signature verification error: {e} — dilanjutkan tanpa verifikasi")
+
+    # ── Identifikasi transaksi ────────────────────────────────────────────
+    # DOKU SNAP notification body structure:
+    # { "originalPartnerReferenceNo": "CUSTHERDS-TX-TXXXXXXXXXXX",
+    #   "originalReferenceNo": "DOKU-REF-...",
+    #   "latestTransactionStatus": "00",   # 00 = success
+    #   "transactionStatusDesc": "Success",
+    #   "amount": { "value": "50000.00", "currency": "IDR" },
+    #   ... }
+    partner_ref = (
+        body.get("originalPartnerReferenceNo")
+        or body.get("partnerReferenceNo")
+        or body.get("order", {}).get("invoice_number", "")
+    )
+    tx_status_code = (
+        body.get("latestTransactionStatus")
+        or body.get("transactionStatus")
+        or body.get("resultInfo", {}).get("resultStatus", "")
+    )
+    doku_reference = body.get("originalReferenceNo") or body.get("referenceNo", "")
+
+    logger.info(f"[DOKU Webhook] partnerRef={partner_ref} status={tx_status_code} dokuRef={doku_reference}")
+
+    if not partner_ref:
+        logger.warning("[DOKU Webhook] partnerReferenceNo tidak ditemukan di body")
+        return {"message": "partnerReferenceNo tidak ditemukan, diabaikan"}
+
+    # Status 00 = QRIS berhasil dibayar
+    if tx_status_code not in ("00", "SUCCESS", "success"):
+        logger.info(f"[DOKU Webhook] Status {tx_status_code} bukan sukses, diabaikan")
+        return {"message": f"Status {tx_status_code} bukan sukses, diabaikan"}
+
+    # ── Cari transaksi ────────────────────────────────────────────────────
+    tx_code = str(partner_ref).replace("CUSTHERDS-TX-", "")
+    tx = db.query(Transaction).filter(Transaction.transaction_code == tx_code).first()
+    if not tx:
+        logger.error(f"[DOKU Webhook] Transaction {tx_code} tidak ditemukan")
+        raise HTTPException(404, "Transaction tidak ditemukan")
+
+    if tx.status == "settled":
+        return {"message": "Sudah settled sebelumnya, skip"}
+    if tx.status != "payment_pending":
+        return {"message": f"Status tidak bisa diproses: {tx.status}"}
+
+    # ── Settle ────────────────────────────────────────────────────────────
+    now     = datetime.now(timezone.utc)
+    guide   = db.query(Guide).filter(Guide.id == tx.guide_id).first()
+    booking = db.query(Booking).filter(Booking.id == tx.booking_id).first()
+
+    if doku_reference:
+        tx.xendit_invoice_id = doku_reference   # simpan DOKU reference di kolom ini
+
+    _settle_transaction(tx, booking, guide, db, now)
+    db.commit()
+    db.refresh(tx)
+
+    await _disburse_guide_commission(tx, db)
+    db.commit()
+
+    logger.info(f"[DOKU Webhook] TX {tx.transaction_code} settled via QRIS")
+    return {"message": "OK", "transaction_code": tx.transaction_code, "status": "settled"}
