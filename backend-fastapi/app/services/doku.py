@@ -56,9 +56,7 @@ def _symmetric_signature(
 ) -> str:
     """
     HMAC-SHA512 symmetric signature untuk request setelah mendapat access token.
-    Format: HMAC-SHA512( client_secret,
-              uppercase(http_method) + ':' + endpoint + ':' + access_token + ':'
-              + lowercase_hex(SHA256(minified_body)) + ':' + timestamp )
+    stringToSign = METHOD:endpoint:accessToken:lowercase(hex(sha256(minifiedBody))):timestamp
     """
     import hmac as _hmac
     minified_body = json.dumps(request_body, separators=(",", ":"), ensure_ascii=False)
@@ -114,31 +112,38 @@ async def create_qris(
     *,
     order_id: str,
     amount: int,
-    description: str,
-    customer_name: str,
-    customer_email: str,
-    callback_url: str,
+    merchant_id: str,
+    terminal_id: str,
+    description: str = "",
+    customer_name: str = "",
+    customer_email: str = "",
+    callback_url: str = "",
     expired_time: int = 30,
+    postal_code: str = "10110",
 ) -> Dict[str, Any]:
     """
     Buat QRIS payment via DOKU SNAP.
-    Endpoint: POST /checkout/v1/payment
-    Channel : QRIS
+    Endpoint: POST /snap-adapter/b2b/v1.0/qr/qr-mpm-generate
 
-    Ref: https://developers.doku.com/accept-payments/direct-api/snap/integration-guide/qris
+    Required body fields: partnerReferenceNo, amount, merchantId, terminalId,
+                          additionalInfo.postalCode, additionalInfo.feeType
+    Optional: validityPeriod (ISO 8601 datetime)
 
     Returns dict:
-      - qris_string  : QRIS EMV string untuk di-render jadi QR image
-      - reference_no : DOKU reference number
+      - qris_string  : QRIS EMV string (qrContent dari response)
+      - reference_no : DOKU referenceNo
       - expired_time : menit expired
       - raw          : full DOKU response
     """
     access_token = await get_token_b2b(base_url, client_id, private_key_pem)
 
-    endpoint  = "/checkout/v1/payment"
+    endpoint  = "/snap-adapter/b2b/v1.0/qr/qr-mpm-generate"
     timestamp = _now_wib()
 
-    # Amount harus string format "50000.00"
+    # validityPeriod: ISO 8601 dari sekarang + expired_time menit
+    validity_dt = datetime.now(_WIB) + timedelta(minutes=expired_time)
+    validity_period = validity_dt.strftime("%Y-%m-%dT%H:%M:%S+07:00")
+
     amount_str = f"{amount:.2f}"
 
     body: Dict[str, Any] = {
@@ -147,31 +152,12 @@ async def create_qris(
             "value": amount_str,
             "currency": "IDR",
         },
-        "paymentType": "QRIS",
-        "feeType": "OUR",
-        "customer": {
-            "id": customer_email,
-            "name": customer_name,
-            "email": customer_email,
-        },
-        "order": {
-            "amount": {
-                "value": amount_str,
-                "currency": "IDR",
-            },
-            "description": description[:255],
-            "sessionId": order_id,
-        },
+        "merchantId": merchant_id,
+        "terminalId": terminal_id,
+        "validityPeriod": validity_period,
         "additionalInfo": {
-            "channel": "QRIS",
-            "origin": {
-                "product": "SDK",
-                "source": "WEB",
-                "system": "SNAP",
-                "apiFormat": "SNAP",
-            },
-            "callbackUrl": callback_url,
-            "expiryTime": str(expired_time),
+            "postalCode": postal_code,
+            "feeType": "1",  # 1 = No Tips
         },
     }
 
@@ -180,20 +166,24 @@ async def create_qris(
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {access_token}",
-        "X-CLIENT-KEY": client_id,
-        "X-TIMESTAMP": timestamp,
-        "X-SIGNATURE": sym_sig,
         "X-PARTNER-ID": client_id,
         "X-EXTERNAL-ID": order_id[:36],
-        "CHANNEL-ID": "DIRECT",
+        "X-TIMESTAMP": timestamp,
+        "X-SIGNATURE": sym_sig,
+        "CHANNEL-ID": "H2H",
     }
 
-    logger.info(f"[DOKU] create_qris request body={json.dumps(body, ensure_ascii=False)}")
+    logger.info(f"[DOKU] create_qris request endpoint={endpoint} body={json.dumps(body, ensure_ascii=False)}")
 
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(f"{base_url}{endpoint}", json=body, headers=headers)
 
-    raw = resp.json()
+    # Coba parse JSON, fallback ke text jika gagal
+    try:
+        raw = resp.json()
+    except Exception:
+        raw = {"_raw_text": resp.text}
+
     logger.info(
         f"[DOKU] create_qris status={resp.status_code} "
         f"responseCode={raw.get('responseCode')} "
@@ -207,14 +197,7 @@ async def create_qris(
             f"(responseCode={raw.get('responseCode')}, HTTP {resp.status_code})"
         )
 
-    # DOKU SNAP QRIS response: qrContent atau additionalInfo.qrisValue
-    qris_string = (
-        raw.get("qrContent")
-        or raw.get("qrCode")
-        or raw.get("additionalInfo", {}).get("qrisValue")
-        or raw.get("additionalInfo", {}).get("qrContent")
-        or raw.get("additionalInfo", {}).get("qrString")
-    )
+    qris_string = raw.get("qrContent") or raw.get("additionalInfo", {}).get("qrContent")
 
     return {
         "qris_string": qris_string,
