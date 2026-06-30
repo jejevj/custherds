@@ -13,20 +13,22 @@ from app.api.v1.endpoints import (
     webhooks,
     payments,
     uploads,
+    payment_gateway_config,
 )
 
 api_router = APIRouter()
 
-api_router.include_router(health.router,       prefix="/health",       tags=["Health"])
-api_router.include_router(auth.router,         prefix="/auth",         tags=["Auth"])
-api_router.include_router(users.router,        prefix="/users",        tags=["Users"])
-api_router.include_router(uploads.router,      prefix="/uploads",      tags=["Uploads"])
-api_router.include_router(guides.router,       prefix="/guides",       tags=["Guides"])
-api_router.include_router(vendors.router,      prefix="/vendors",      tags=["Vendors"])
-api_router.include_router(packages.router,     prefix="/packages",     tags=["Packages"])
-api_router.include_router(bookings.router,     prefix="/bookings",     tags=["Bookings"])
-api_router.include_router(transactions.router, prefix="/transactions", tags=["Transactions"])
-api_router.include_router(withdrawals.router,  prefix="/withdrawals",  tags=["Withdrawals"])
-api_router.include_router(admin.router,        prefix="/admin",        tags=["Admin"])
-api_router.include_router(webhooks.router,     prefix="/webhooks",     tags=["Webhooks"])
-api_router.include_router(payments.router,     prefix="/payments",     tags=["Payments"])
+api_router.include_router(health.router,                   prefix="/health",                        tags=["Health"])
+api_router.include_router(auth.router,                     prefix="/auth",                          tags=["Auth"])
+api_router.include_router(users.router,                    prefix="/users",                         tags=["Users"])
+api_router.include_router(uploads.router,                  prefix="/uploads",                       tags=["Uploads"])
+api_router.include_router(guides.router,                   prefix="/guides",                        tags=["Guides"])
+api_router.include_router(vendors.router,                  prefix="/vendors",                       tags=["Vendors"])
+api_router.include_router(packages.router,                 prefix="/packages",                      tags=["Packages"])
+api_router.include_router(bookings.router,                 prefix="/bookings",                      tags=["Bookings"])
+api_router.include_router(transactions.router,             prefix="/transactions",                  tags=["Transactions"])
+api_router.include_router(withdrawals.router,              prefix="/withdrawals",                   tags=["Withdrawals"])
+api_router.include_router(admin.router,                    prefix="/admin",                         tags=["Admin"])
+api_router.include_router(webhooks.router,                 prefix="/webhooks",                      tags=["Webhooks"])
+api_router.include_router(payments.router,                 prefix="/payments",                      tags=["Payments"])
+api_router.include_router(payment_gateway_config.router,   prefix="/admin/payment-gateway-config",  tags=["Admin"])
