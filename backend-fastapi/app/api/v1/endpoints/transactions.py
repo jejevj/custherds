@@ -254,12 +254,17 @@ async def vendor_approve_transaction(
         creds: dict = gateway.credentials or {}
         base_url = "https://api.doku.com" if gateway.is_production else "https://api-sandbox.doku.com"
 
-        client_id      = creds.get("client_id", "")
-        private_key    = creds.get("private_key", "")
-        client_secret  = creds.get("client_secret", "")
+        client_id     = creds.get("client_id", "")
+        private_key   = creds.get("private_key", "")
+        # Key di DB adalah 'secret_key', bukan 'client_secret'
+        client_secret = creds.get("secret_key") or creds.get("client_secret", "")
+
+        logger.info(f"[DOKU] client_id={client_id} secret_key_len={len(client_secret)}")
 
         if not client_id or not private_key:
             raise HTTPException(503, "Konfigurasi DOKU belum lengkap (client_id / private_key).")
+        if not client_secret:
+            raise HTTPException(503, "Konfigurasi DOKU belum lengkap (secret_key).")
 
         vendor_user = db.query(User).filter(User.id == vendor.user_id).first()
         order_id    = f"CUSTHERDS-TX-{tx.transaction_code}"
