@@ -130,7 +130,7 @@ async def create_qris(
         "terminalId": terminal_id,
         "validityPeriod": validity_period,
         "additionalInfo": {
-            "feeType": "OUR",   # OUR = No Tips / no surcharge
+            "feeType": "1",   # 1 karakter, max 1 char per DOKU spec
         },
     }
 
