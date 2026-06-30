@@ -1,7 +1,7 @@
 import hashlib
 import hmac as _hmac
 import logging
-from typing import Any
+from typing import Any, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from sqlalchemy.orm import Session
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# ── Helpers ────────────────────────────────────────────────────────────────────────
 
 def _verify_xendit_token(x_callback_token: str):
     if not settings.XENDIT_WEBHOOK_TOKEN:
@@ -51,7 +51,7 @@ async def _disburse_guide_commission(tx: Transaction, db: Session) -> None:
         logger.error(f"[Disbursement] GAGAL | guide={guide.id} | tx={tx.transaction_code} | error={str(e)}")
 
 
-def _settle_transaction(tx: Transaction, booking: Booking | None, guide: Guide | None, db: Session, now: datetime) -> None:
+def _settle_transaction(tx: Transaction, booking: Optional[Booking], guide: Optional[Guide], db: Session, now: datetime) -> None:
     """Shared logic: settle TX, kredit wallet guide, selesaikan booking."""
     tx.status     = "settled"
     tx.paid_at    = now
@@ -68,7 +68,7 @@ def _settle_transaction(tx: Transaction, booking: Booking | None, guide: Guide |
         logger.info(f"[Webhook] Booking {booking.booking_code} → completed")
 
 
-# ── Xendit Webhooks ──────────────────────────────────────────────────────────
+# ── Xendit Webhooks ───────────────────────────────────────────────────────────
 
 @router.post(
     "/xendit/invoice-paid",
@@ -181,7 +181,7 @@ async def xendit_disbursement_callback(
     return {"message": "OK", "status": status}
 
 
-# ── DOKU SNAP Webhook ─────────────────────────────────────────────────────────
+# ── DOKU SNAP Webhook ───────────────────────────────────────────────────────────
 
 @router.post(
     "/doku/qris-notify",
@@ -203,15 +203,6 @@ async def doku_qris_notify(
     request: Request,
     db: Session = Depends(get_db),
 ) -> Any:
-    """
-    DOKU SNAP QRIS notification.
-    DOKU SNAP mengirim notifikasi dengan body JSON dan header:
-      - Request-Id
-      - Request-Timestamp
-      - X-Signature  (HMAC-SHA512 dari notify_url + request_id + timestamp + sha256(body))
-
-    Ref: https://developers.doku.com/accept-payments/direct-api/snap/integration-guide/qris
-    """
     from app.models.payment_gateway_config import PaymentGatewayConfig
     import json, base64
 
@@ -224,7 +215,7 @@ async def doku_qris_notify(
 
     logger.info(f"[DOKU Webhook] QRIS notify received: {body}")
 
-    # ── Verifikasi Signature (opsional tapi direkomendasikan) ─────────────
+    # ── Verifikasi Signature ──────────────────────────────────────────────────
     gateway = db.query(PaymentGatewayConfig).filter(
         PaymentGatewayConfig.provider == "doku",
         PaymentGatewayConfig.is_active == True,  # noqa
@@ -252,14 +243,7 @@ async def doku_qris_notify(
             except Exception as e:
                 logger.warning(f"[DOKU Webhook] Signature verification error: {e} — dilanjutkan tanpa verifikasi")
 
-    # ── Identifikasi transaksi ────────────────────────────────────────────
-    # DOKU SNAP notification body structure:
-    # { "originalPartnerReferenceNo": "CUSTHERDS-TX-TXXXXXXXXXXX",
-    #   "originalReferenceNo": "DOKU-REF-...",
-    #   "latestTransactionStatus": "00",   # 00 = success
-    #   "transactionStatusDesc": "Success",
-    #   "amount": { "value": "50000.00", "currency": "IDR" },
-    #   ... }
+    # ── Identifikasi transaksi ────────────────────────────────────────────────
     partner_ref = (
         body.get("originalPartnerReferenceNo")
         or body.get("partnerReferenceNo")
@@ -278,12 +262,11 @@ async def doku_qris_notify(
         logger.warning("[DOKU Webhook] partnerReferenceNo tidak ditemukan di body")
         return {"message": "partnerReferenceNo tidak ditemukan, diabaikan"}
 
-    # Status 00 = QRIS berhasil dibayar
     if tx_status_code not in ("00", "SUCCESS", "success"):
         logger.info(f"[DOKU Webhook] Status {tx_status_code} bukan sukses, diabaikan")
         return {"message": f"Status {tx_status_code} bukan sukses, diabaikan"}
 
-    # ── Cari transaksi ────────────────────────────────────────────────────
+    # ── Cari transaksi ─────────────────────────────────────────────────────
     tx_code = str(partner_ref).replace("CUSTHERDS-TX-", "")
     tx = db.query(Transaction).filter(Transaction.transaction_code == tx_code).first()
     if not tx:
@@ -295,13 +278,13 @@ async def doku_qris_notify(
     if tx.status != "payment_pending":
         return {"message": f"Status tidak bisa diproses: {tx.status}"}
 
-    # ── Settle ────────────────────────────────────────────────────────────
+    # ── Settle ────────────────────────────────────────────────────────────────
     now     = datetime.now(timezone.utc)
     guide   = db.query(Guide).filter(Guide.id == tx.guide_id).first()
     booking = db.query(Booking).filter(Booking.id == tx.booking_id).first()
 
     if doku_reference:
-        tx.xendit_invoice_id = doku_reference   # simpan DOKU reference di kolom ini
+        tx.xendit_invoice_id = doku_reference
 
     _settle_transaction(tx, booking, guide, db, now)
     db.commit()
