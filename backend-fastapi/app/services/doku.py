@@ -124,14 +124,11 @@ async def create_qris(
         "validityPeriod": validity_period,
         "additionalInfo": {
             "postalCode": postal_code,
-            "feeType": "1",  # string per DOKU official Python sample code
+            "feeType": "1",
         },
     }
 
-    # Minify body sekali — dipakai untuk X-SIGNATURE DAN dikirim ke DOKU
-    # Memastikan body yang di-hash == body yang diterima DOKU
     body_minified = json.dumps(body, separators=(",", ":"), ensure_ascii=False)
-
     sym_sig = _symmetric_signature("POST", endpoint, access_token, body_minified, timestamp, client_secret)
 
     headers = {
@@ -153,7 +150,6 @@ async def create_qris(
     )
 
     async with httpx.AsyncClient(timeout=15) as client:
-        # Kirim raw bytes — persis sama dengan yang dipakai menghitung X-SIGNATURE
         resp = await client.post(
             f"{base_url}{endpoint}",
             content=body_minified.encode("utf-8"),
@@ -165,29 +161,35 @@ async def create_qris(
     except Exception:
         raw = {"_raw_text": resp.text}
 
+    # Log full response agar referenceNo bisa dilihat
+    logger.info(
+        f"[DOKU:qris:RESPONSE] HTTP={resp.status_code} "
+        f"responseCode={raw.get('responseCode')} "
+        f"responseMessage={raw.get('responseMessage')} "
+        f"referenceNo={raw.get('referenceNo')} "
+        f"partnerReferenceNo={raw.get('partnerReferenceNo')} "
+        f"full={json.dumps(raw, ensure_ascii=False)}"
+    )
+
     if resp.status_code not in (200, 201):
-        logger.error(
-            f"[DOKU:qris:RESPONSE ERROR] status={resp.status_code} "
-            f"responseCode={raw.get('responseCode')} "
-            f"responseMessage={raw.get('responseMessage')} "
-            f"full={json.dumps(raw, ensure_ascii=False)}"
-        )
         raise RuntimeError(
             f"DOKU create_qris gagal: {raw.get('responseMessage')} "
             f"(responseCode={raw.get('responseCode')}, HTTP {resp.status_code})"
         )
 
-    logger.info(
-        f"[DOKU:qris:RESPONSE OK] status={resp.status_code} "
-        f"responseCode={raw.get('responseCode')} "
-        f"referenceNo={raw.get('referenceNo')}"
-    )
-
     qris_string = raw.get("qrContent") or raw.get("additionalInfo", {}).get("qrContent")
 
+    # Kembalikan KEDUANYA:
+    # - reference_no     : referenceNo dari DOKU (yang dipakai untuk query status)
+    # - partner_reference_no : partnerReferenceNo = order_id kita (CST-TX...-ts)
+    doku_reference_no   = raw.get("referenceNo", "")
+    partner_reference_no = raw.get("partnerReferenceNo") or order_id
+
     return {
-        "qris_string": qris_string,
-        "reference_no": raw.get("referenceNo") or raw.get("partnerReferenceNo"),
-        "expired_time": expired_time,
-        "raw": raw,
+        "qris_string":          qris_string,
+        "reference_no":         doku_reference_no or partner_reference_no,
+        "doku_reference_no":    doku_reference_no,       # referenceNo DOKU asli
+        "partner_reference_no": partner_reference_no,    # partnerReferenceNo = order_id kita
+        "expired_time":         expired_time,
+        "raw":                  raw,
     }

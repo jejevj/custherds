@@ -251,19 +251,11 @@ async def vendor_approve_transaction(
 
         creds: dict   = gateway.credentials or {}
         base_url      = "https://api.doku.com" if gateway.is_production else "https://api-sandbox.doku.com"
-
         client_id     = creds.get("client_id", "")
         private_key   = creds.get("private_key", "")
         client_secret = creds.get("secret_key") or creds.get("client_secret", "")
-        merchant_id   = (
-            creds.get("qris_merchant_id")
-            or creds.get("merchant_id")
-        )
-        terminal_id   = (
-            creds.get("qris_terminal_id")
-            or creds.get("terminal_id")
-            or "A01"
-        )
+        merchant_id   = creds.get("qris_merchant_id") or creds.get("merchant_id")
+        terminal_id   = creds.get("qris_terminal_id") or creds.get("terminal_id") or "A01"
 
         logger.info(
             f"[DOKU] client_id={client_id} merchant_id={merchant_id} "
@@ -275,13 +267,9 @@ async def vendor_approve_transaction(
         if not client_secret:
             raise HTTPException(503, "Konfigurasi DOKU belum lengkap (secret_key).")
         if not merchant_id:
-            raise HTTPException(
-                503,
-                "Konfigurasi DOKU belum lengkap: 'qris_merchant_id' tidak ditemukan di credentials. "
-                "Isi field 'qris_merchant_id' dengan numeric Merchant ID dari DOKU Dashboard."
-            )
+            raise HTTPException(503, "Konfigurasi DOKU belum lengkap: 'qris_merchant_id' tidak ditemukan.")
 
-        ts = int(datetime.now(timezone.utc).timestamp())
+        ts       = int(datetime.now(timezone.utc).timestamp())
         order_id = f"CST-{tx.transaction_code}-{ts}"
 
         try:
@@ -301,13 +289,28 @@ async def vendor_approve_transaction(
             logger.error(f"[DOKU QRIS] Gagal buat QRIS untuk TX {tx.transaction_code}: {e}")
             raise HTTPException(502, f"Gagal membuat QRIS DOKU: {str(e)}")
 
+        # Simpan referenceNo DOKU asli di xendit_invoice_id (untuk query status)
+        # Simpan partnerReferenceNo (order_id kita) di vendor_rejection_reason sementara
+        # karena tidak ada field terpisah — log saja
+        doku_ref     = doku_result.get("doku_reference_no") or doku_result.get("reference_no", "")
+        partner_ref  = doku_result.get("partner_reference_no") or order_id
+        qris_string  = doku_result.get("qris_string") or ""
+
+        logger.info(
+            f"[DOKU QRIS] TX={tx.transaction_code} "
+            f"doku_referenceNo={doku_ref} "
+            f"partnerReferenceNo={partner_ref} "
+            f"qris_string_len={len(qris_string)}"
+        )
+
         tx.status             = "payment_pending"
         tx.payment_method     = "pay_as_you_go"
         tx.vendor_reviewed_at = datetime.now(timezone.utc)
-        # xendit_invoice_url = qris_string (QRIS content untuk QR code)
-        # xendit_invoice_id  = partnerReferenceNo / referenceNo (untuk query status)
-        tx.xendit_invoice_url = doku_result.get("qris_string")
-        tx.xendit_invoice_id  = doku_result.get("reference_no")
+        # xendit_invoice_url = qris_string (konten QRIS untuk di-render QR)
+        # xendit_invoice_id  = referenceNo DOKU (untuk query status)
+        #                       jika DOKU tidak kembalikan referenceNo, fallback ke partnerReferenceNo
+        tx.xendit_invoice_url = qris_string
+        tx.xendit_invoice_id  = doku_ref or partner_ref
 
         db.commit()
         db.refresh(tx)
@@ -316,9 +319,9 @@ async def vendor_approve_transaction(
             transaction=tx,
             payment_method="pay_as_you_go",
             invoice_url=None,
-            xendit_invoice_id=doku_result.get("reference_no"),
-            qris_string=doku_result.get("qris_string"),
-            doku_reference_no=doku_result.get("reference_no"),
+            xendit_invoice_id=doku_ref or partner_ref,
+            qris_string=qris_string,
+            doku_reference_no=doku_ref or partner_ref,
             message="QRIS DOKU berhasil dibuat. Silakan scan QR untuk menyelesaikan pembayaran.",
         )
 
@@ -378,8 +381,7 @@ def get_invoice_url(
         payment_method=tx.payment_method,
         invoice_url=None,
         xendit_invoice_id=tx.xendit_invoice_id,
-        # xendit_invoice_url menyimpan qris_string
-        qris_string=tx.xendit_invoice_url,
+        qris_string=tx.xendit_invoice_url,   # xendit_invoice_url = qris_string
         doku_reference_no=tx.xendit_invoice_id,
         message="QRIS aktif.",
     )
@@ -395,18 +397,11 @@ async def manual_settle_transaction(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user_type(0)),  # admin only
 ) -> Any:
-    """
-    Digunakan admin untuk manual-settle transaksi yang sudah terbayar
-    di DOKU (terlihat di DOKU Dashboard) tapi status di DB masih payment_pending.
-
-    Contoh kasus: TX7297568553 — paid IDR 1 di DOKU 19 Jul 2026 18:26 WIB
-    tapi polling belum jalan / terjadi race condition.
-    """
     tx = db.query(Transaction).filter(Transaction.id == tx_id).first()
     if not tx:
         raise HTTPException(404, "Transaksi tidak ditemukan")
     if tx.status == "settled":
-        return tx  # idempotent
+        return tx
     if tx.status not in ("payment_pending", "payment_failed"):
         raise HTTPException(
             400,

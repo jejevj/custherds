@@ -1,22 +1,23 @@
 """
 Polling endpoint: GET /api/v1/transactions/{tx_id}/payment-status
 
-Frontend memanggil ini tiap 5 detik saat QRIS modal ditampilkan.
-Backend query langsung ke DOKU API untuk status terkini,
-lalu auto-settle di DB jika DOKU bilang PAID.
-
-DOKU tidak push webhook — merchant harus polling aktif via:
-POST /snap-adapter/b2b/v1.0/qr/qr-mpm-query
-
 Field mapping TX model:
-  xendit_invoice_id  = partnerReferenceNo (order_id kita, e.g. CST-TX...-timestamp)
-  xendit_invoice_url = qris_string (string QRIS panjang untuk QR code)
+  xendit_invoice_id  = referenceNo DOKU (dari response generate);
+                       jika DOKU tidak kembalikan referenceNo, fallback ke partnerReferenceNo
+                       (format CST-TX...-timestamp)
+  xendit_invoice_url = qris_string (konten QRIS untuk render QR code)
+
+Query DOKU:
+  originalReferenceNo        = xendit_invoice_id  (referenceNo DOKU)
+  originalPartnerReferenceNo = xendit_invoice_id  (sama, karena mungkin DOKU echo partnerRef)
 """
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any
 
 import httpx
@@ -36,9 +37,9 @@ from app.services.doku import get_token_b2b, _symmetric_signature, _now_wib
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-DOKU_SANDBOX     = "https://api-sandbox.doku.com"
-DOKU_PROD        = "https://api.doku.com"
-QRIS_QUERY_PATH  = "/snap-adapter/b2b/v1.0/qr/qr-mpm-query"
+DOKU_SANDBOX      = "https://api-sandbox.doku.com"
+DOKU_PROD         = "https://api.doku.com"
+QRIS_QUERY_PATH   = "/snap-adapter/b2b/v1.0/qr/qr-mpm-query"
 QRIS_SERVICE_CODE = "47"
 
 
@@ -48,19 +49,7 @@ def _get_gateway(db: Session) -> PaymentGatewayConfig | None:
     ).first()
 
 
-async def _query_doku_qris(
-    tx: Transaction,
-    gateway: PaymentGatewayConfig,
-) -> dict | None:
-    """
-    Panggil DOKU Query QRIS API.
-
-    Field mapping:
-      xendit_invoice_id = partnerReferenceNo (format CST-TX...-ts)
-                          Dipakai sebagai BOTH originalPartnerReferenceNo
-                          dan originalReferenceNo karena DOKU mengembalikan
-                          partnerReferenceNo sebagai referenceNo saat generate.
-    """
+async def _query_doku_qris(tx: Transaction, gateway: PaymentGatewayConfig) -> dict | None:
     creds         = gateway.credentials or {}
     client_id     = creds.get("client_id", "")
     private_key   = creds.get("private_key", "")
@@ -70,28 +59,27 @@ async def _query_doku_qris(
     base_url      = DOKU_PROD if is_prod else DOKU_SANDBOX
 
     if not all([client_id, private_key, client_secret, merchant_id]):
-        logger.warning("[DOKU:query] Kredensial tidak lengkap — skip query")
+        logger.warning("[DOKU:query] Kredensial tidak lengkap — skip")
         return None
 
-    # xendit_invoice_id menyimpan partnerReferenceNo (order_id)
-    partner_ref = tx.xendit_invoice_id
-    if not partner_ref:
-        logger.warning(f"[DOKU:query] TX {tx.transaction_code} tidak punya xendit_invoice_id")
+    ref = tx.xendit_invoice_id
+    if not ref:
+        logger.warning(f"[DOKU:query] TX {tx.transaction_code} xendit_invoice_id kosong")
         return None
 
     try:
         access_token = await get_token_b2b(base_url, client_id, private_key)
     except Exception as e:
-        logger.error(f"[DOKU:query] Gagal get token B2B: {e}")
+        logger.error(f"[DOKU:query] Gagal get token: {e}")
         return None
 
-    import time as _time, json
+    import time as _time
     timestamp   = _now_wib()
     external_id = str(int(_time.time() * 1000))
 
     body = {
-        "originalReferenceNo":        partner_ref,   # referenceNo = partnerReferenceNo di DOKU kita
-        "originalPartnerReferenceNo": partner_ref,
+        "originalReferenceNo":        ref,
+        "originalPartnerReferenceNo": ref,
         "serviceCode":                QRIS_SERVICE_CODE,
         "merchantId":                 merchant_id,
     }
@@ -112,8 +100,9 @@ async def _query_doku_qris(
     }
 
     logger.info(
-        f"[DOKU:query] TX={tx.transaction_code} "
-        f"partnerRef={partner_ref} merchantId={merchant_id}"
+        f"[DOKU:query:REQUEST] TX={tx.transaction_code} "
+        f"ref={ref} merchantId={merchant_id} "
+        f"X-EXTERNAL-ID={external_id} X-TIMESTAMP={timestamp}"
     )
 
     try:
@@ -124,35 +113,42 @@ async def _query_doku_qris(
                 headers=headers,
             )
         data = resp.json()
-        logger.info(
-            f"[DOKU:query] TX={tx.transaction_code} "
-            f"responseCode={data.get('responseCode')} "
-            f"latestStatus={data.get('latestTransactionStatus')}"
-        )
-        return data
     except Exception as e:
         logger.error(f"[DOKU:query] HTTP error: {e}")
         return None
 
+    # ---- FULL RESPONSE LOG ----
+    logger.info(
+        f"[DOKU:query:RESPONSE] TX={tx.transaction_code} "
+        f"HTTP={resp.status_code} "
+        f"responseCode={data.get('responseCode')} "
+        f"responseMessage={data.get('responseMessage')} "
+        f"latestTransactionStatus={data.get('latestTransactionStatus')} "
+        f"transactionStatusDesc={data.get('transactionStatusDesc')} "
+        f"paidTime={data.get('paidTime')} "
+        f"originalReferenceNo={data.get('originalReferenceNo')} "
+        f"originalPartnerReferenceNo={data.get('originalPartnerReferenceNo')} "
+        f"full={json.dumps(data, ensure_ascii=False)}"
+    )
 
-from decimal import Decimal
+    return data
+
 
 async def _settle_transaction(tx: Transaction, db: Session, doku_ref: str = "") -> None:
-    """Settle TX, kredit wallet guide, booking → completed."""
     from app.services.xendit import create_disbursement
 
     now = datetime.now(timezone.utc)
     tx.status     = "settled"
     tx.paid_at    = now
     tx.settled_at = now
-    if doku_ref and doku_ref != tx.xendit_invoice_id:
+    if doku_ref:
         tx.xendit_invoice_id = doku_ref
 
     guide = db.query(Guide).filter(Guide.id == tx.guide_id).first()
     if guide:
-        commission            = Decimal(str(tx.guide_commission))
-        guide.wallet_balance  = (guide.wallet_balance or Decimal(0)) + commission
-        guide.total_earnings  = (guide.total_earnings or Decimal(0)) + commission
+        commission           = Decimal(str(tx.guide_commission))
+        guide.wallet_balance = (guide.wallet_balance or Decimal(0)) + commission
+        guide.total_earnings = (guide.total_earnings or Decimal(0)) + commission
 
     booking = db.query(Booking).filter(Booking.id == tx.booking_id).first()
     if booking:
@@ -160,14 +156,12 @@ async def _settle_transaction(tx: Transaction, db: Session, doku_ref: str = "") 
         booking.completed_at = now
 
     db.commit()
-    logger.info(f"[DOKU:query] TX {tx.transaction_code} auto-settled via polling")
+    logger.info(f"[DOKU:query] TX {tx.transaction_code} auto-settled")
 
-    # Coba disbursement komisi guide (non-blocking)
     if guide and all([guide.bank_name, guide.bank_account_number, guide.bank_account_name]):
         try:
-            external_id = f"CUSTHERDS-COMM-{tx.transaction_code}"
             await create_disbursement(
-                external_id=external_id,
+                external_id=f"CUSTHERDS-COMM-{tx.transaction_code}",
                 bank_code=guide.bank_name,
                 account_number=guide.bank_account_number,
                 account_holder_name=guide.bank_account_name,
@@ -185,12 +179,6 @@ async def get_payment_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Any:
-    """
-    1. Cek status TX di DB.
-    2. Jika masih payment_pending, query ke DOKU API.
-    3. Jika DOKU bilang latestTransactionStatus=00 → auto-settle.
-    4. Return status terkini.
-    """
     if current_user.user_type == 2:
         vendor = db.query(Vendor).filter(Vendor.user_id == current_user.id).first()
         if not vendor:
@@ -205,7 +193,6 @@ async def get_payment_status(
     if not tx:
         raise HTTPException(404, "Transaksi tidak ditemukan")
 
-    # Sudah final — langsung return
     if tx.status in ("settled", "payment_failed", "rejected"):
         return {
             "tx_id":      str(tx.id),
@@ -214,22 +201,26 @@ async def get_payment_status(
             "settled_at": tx.settled_at.isoformat() if tx.settled_at else None,
         }
 
-    # Masih payment_pending — tanya DOKU
     if tx.status == "payment_pending":
         gateway = _get_gateway(db)
         if gateway:
             doku_resp = await _query_doku_qris(tx, gateway)
             if doku_resp:
-                tx_status_code = doku_resp.get("latestTransactionStatus", "")
-                doku_ref       = doku_resp.get("originalReferenceNo", "")
+                status_code = doku_resp.get("latestTransactionStatus", "")
+                doku_ref    = (
+                    doku_resp.get("originalReferenceNo")
+                    or doku_resp.get("originalPartnerReferenceNo")
+                    or ""
+                )
 
-                if tx_status_code == "00":                          # PAID
+                if status_code == "00":           # PAID
                     await _settle_transaction(tx, db, doku_ref)
                     db.refresh(tx)
-                elif tx_status_code in ("03", "05"):               # FAILED / EXPIRED
+                elif status_code in ("03", "05"): # FAILED / EXPIRED
                     tx.status = "payment_failed"
                     db.commit()
                     db.refresh(tx)
+                # status lain (pending, dll) — tidak diubah
 
     return {
         "tx_id":      str(tx.id),
