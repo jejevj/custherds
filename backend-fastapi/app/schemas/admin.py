@@ -20,6 +20,14 @@ class AdminUserList(BaseModel):
 
 class AdminTransactionList(BaseModel):
     id: uuid.UUID
+    transaction_code: str
+    booking_id: uuid.UUID
+    gross_amount: Decimal
+    extra_amount: Optional[Decimal] = None
+    vendor_amount: Decimal
+    guide_commission: Decimal
+    platform_fee: Decimal
+    payment_method: Optional[str] = None
     status: str
     created_at: datetime
 

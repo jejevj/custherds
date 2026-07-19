@@ -58,11 +58,14 @@ export interface AdminVendor {
 
 export interface AdminTransaction {
   id: string
+  transaction_code: string
   booking_id: string
-  amount: string
+  gross_amount: string
+  extra_amount: string | null
+  vendor_amount: string
+  guide_commission: string
   platform_fee: string
-  vendor_share: string
-  guide_share: string
+  payment_method: string | null
   status: string
   created_at: string
 }

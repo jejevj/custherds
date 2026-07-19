@@ -3,10 +3,31 @@ import { useEffect, useState } from "react"
 import { adminService, AdminTransaction } from "@/services/admin.service"
 import { Badge } from "@/components/ui/badge"
 
-const STATUS_VARIANT: Record<string, "default"|"secondary"|"destructive"> = {
-  completed: "default",
-  pending:   "secondary",
-  failed:    "destructive",
+const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
+  settled:          "default",
+  payment_pending:  "secondary",
+  payment_failed:   "destructive",
+  rejected:         "destructive",
+  pending_vendor_approval: "secondary",
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  settled:                 "Settled",
+  payment_pending:         "Menunggu Bayar",
+  payment_failed:          "Gagal",
+  rejected:                "Ditolak",
+  pending_vendor_approval: "Menunggu Vendor",
+}
+
+function fmt(n?: string | null) {
+  if (n == null || n === "") return "-"
+  const num = Number(n)
+  if (isNaN(num)) return "-"
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0,
+  }).format(num)
 }
 
 export default function AdminTransactionsPage() {
@@ -32,31 +53,42 @@ export default function AdminTransactionsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-muted-foreground border-b bg-muted/40">
-              <th className="px-4 py-3 font-medium">ID</th>
-              <th className="px-4 py-3 font-medium">Amount</th>
+              <th className="px-4 py-3 font-medium">Kode</th>
+              <th className="px-4 py-3 font-medium">Gross Total</th>
               <th className="px-4 py-3 font-medium">Vendor Share</th>
-              <th className="px-4 py-3 font-medium">Guide Share</th>
-              <th className="px-4 py-3 font-medium">Platform Fee</th>
+              <th className="px-4 py-3 font-medium">Komisi Guide</th>
+              <th className="px-4 py-3 font-medium">Fee Platform</th>
+              <th className="px-4 py-3 font-medium">Metode</th>
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium">Tanggal</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} className="text-center py-10 text-muted-foreground">Memuat...</td></tr>
+              <tr><td colSpan={8} className="text-center py-10 text-muted-foreground">Memuat...</td></tr>
             ) : data.length === 0 ? (
-              <tr><td colSpan={7} className="text-center py-10 text-muted-foreground">Tidak ada data.</td></tr>
+              <tr><td colSpan={8} className="text-center py-10 text-muted-foreground">Tidak ada data.</td></tr>
             ) : data.map(t => (
               <tr key={t.id} className="border-b last:border-0 hover:bg-muted/30">
-                <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{t.id.slice(0,8)}…</td>
-                <td className="px-4 py-3 font-medium">Rp {Number(t.amount).toLocaleString("id-ID")}</td>
-                <td className="px-4 py-3">Rp {Number(t.vendor_share).toLocaleString("id-ID")}</td>
-                <td className="px-4 py-3">Rp {Number(t.guide_share).toLocaleString("id-ID")}</td>
-                <td className="px-4 py-3">Rp {Number(t.platform_fee).toLocaleString("id-ID")}</td>
-                <td className="px-4 py-3">
-                  <Badge variant={STATUS_VARIANT[t.status] ?? "secondary"}>{t.status}</Badge>
+                <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                  <span className="block">{t.transaction_code}</span>
+                  <span className="text-[10px] text-muted-foreground/60">{t.id.slice(0, 8)}…</span>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{new Date(t.created_at).toLocaleDateString("id-ID")}</td>
+                <td className="px-4 py-3 font-medium">{fmt(t.gross_amount)}</td>
+                <td className="px-4 py-3 text-blue-400">{fmt(t.vendor_amount)}</td>
+                <td className="px-4 py-3">{fmt(t.guide_commission)}</td>
+                <td className="px-4 py-3">{fmt(t.platform_fee)}</td>
+                <td className="px-4 py-3 text-muted-foreground text-xs">
+                  {t.payment_method ?? "-"}
+                </td>
+                <td className="px-4 py-3">
+                  <Badge variant={STATUS_VARIANT[t.status] ?? "secondary"}>
+                    {STATUS_LABEL[t.status] ?? t.status}
+                  </Badge>
+                </td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {new Date(t.created_at).toLocaleDateString("id-ID")}
+                </td>
               </tr>
             ))}
           </tbody>
