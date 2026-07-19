@@ -1,7 +1,11 @@
 "use client"
 import { useEffect, useState, useCallback } from "react"
 import dynamic from "next/dynamic"
-import { transactionsService, Transaction, resolveReceiptUrl } from "@/services/transactions.service"
+import {
+  transactionsService,
+  Transaction,
+  resolveReceiptUrl,
+} from "@/services/transactions.service"
 import { Badge } from "@/components/ui/badge"
 
 const QrisPaymentModal = dynamic(
@@ -29,7 +33,11 @@ function formatRupiah(n?: number | string | null) {
   if (n == null || n === "") return "-"
   const num = Number(n)
   if (isNaN(num)) return "-"
-  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num)
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0,
+  }).format(num)
 }
 
 interface QrisModalState {
@@ -39,28 +47,46 @@ interface QrisModalState {
 }
 
 export default function VendorTransactionsPage() {
-  const [data,    setData]    = useState<Transaction[]>([])
-  const [loading, setLoading] = useState(true)
-  const [qrisModal, setQrisModal] = useState<QrisModalState | null>(null)
+  const [data,        setData]        = useState<Transaction[]>([])
+  const [loading,     setLoading]     = useState(true)
+  const [qrisModal,   setQrisModal]   = useState<QrisModalState | null>(null)
+  const [loadingTxId, setLoadingTxId] = useState<string | null>(null)
 
   const loadData = useCallback(() => {
+    setLoading(true)
     transactionsService.list().then(setData).finally(() => setLoading(false))
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
 
-  function handleShowQris(tx: Transaction) {
-    if (!tx.qris_string && !tx.xendit_invoice_url) return
-    setQrisModal({
-      txId:       tx.id,
-      qrisString: tx.qris_string || tx.xendit_invoice_url || "",
-      amount:     Number(tx.guide_commission) + Number(tx.platform_fee),
-    })
+  /**
+   * Fetch ulang invoice URL (berisi qris_string) saat tombol diklik.
+   * qris_string tidak disimpan di model Transaction — ada di TransactionInvoiceResponse.
+   */
+  async function handleShowQris(tx: Transaction) {
+    setLoadingTxId(tx.id)
+    try {
+      const invoice = await transactionsService.getInvoiceUrl(tx.id)
+      const qrisStr = invoice.qris_string ?? invoice.invoice_url ?? ""
+      if (!qrisStr) {
+        alert("QRIS tidak tersedia. Silakan coba lagi.")
+        return
+      }
+      setQrisModal({
+        txId:       tx.id,
+        qrisString: qrisStr,
+        amount:     Number(tx.guide_commission) + Number(tx.platform_fee),
+      })
+    } catch (err) {
+      console.error("[QrisPage] gagal load invoice", err)
+      alert("Gagal memuat QRIS. Silakan coba lagi.")
+    } finally {
+      setLoadingTxId(null)
+    }
   }
 
   function handlePaid() {
     setQrisModal(null)
-    setLoading(true)
     loadData()
   }
 
@@ -87,9 +113,13 @@ export default function VendorTransactionsPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} className="text-center py-10 text-muted-foreground">Memuat...</td></tr>
+              <tr>
+                <td colSpan={8} className="text-center py-10 text-muted-foreground">Memuat...</td>
+              </tr>
             ) : data.length === 0 ? (
-              <tr><td colSpan={8} className="text-center py-10 text-muted-foreground">Belum ada transaksi.</td></tr>
+              <tr>
+                <td colSpan={8} className="text-center py-10 text-muted-foreground">Belum ada transaksi.</td>
+              </tr>
             ) : data.map(t => (
               <tr key={t.id} className="border-b last:border-0 hover:bg-muted/30">
                 <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{t.transaction_code}</td>
@@ -100,9 +130,17 @@ export default function VendorTransactionsPage() {
                 </td>
                 <td className="px-4 py-3">
                   {t.receipt_image ? (
-                    <a href={resolveReceiptUrl(t.receipt_image)} target="_blank" rel="noopener noreferrer"
-                      className="text-amber-400 hover:underline text-xs">Lihat ↗</a>
-                  ) : <span className="text-muted-foreground text-xs">-</span>}
+                    <a
+                      href={resolveReceiptUrl(t.receipt_image)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-amber-400 hover:underline text-xs"
+                    >
+                      Lihat ↗
+                    </a>
+                  ) : (
+                    <span className="text-muted-foreground text-xs">-</span>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <Badge variant={STATUS_VARIANT[t.status] ?? "secondary"}>
@@ -110,12 +148,17 @@ export default function VendorTransactionsPage() {
                   </Badge>
                 </td>
                 <td className="px-4 py-3">
-                  {t.status === "payment_pending" && (t.qris_string || t.xendit_invoice_url) && (
+                  {t.status === "payment_pending" && (
                     <button
                       onClick={() => handleShowQris(t)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-xs font-semibold transition-colors"
+                      disabled={loadingTxId === t.id}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-black text-xs font-semibold transition-colors"
                     >
-                      <span>📱</span> Bayar QRIS
+                      {loadingTxId === t.id
+                        ? <span className="inline-block w-3 h-3 border-2 border-black/40 border-t-black rounded-full animate-spin" />
+                        : <span>📱</span>
+                      }
+                      Bayar QRIS
                     </button>
                   )}
                 </td>
