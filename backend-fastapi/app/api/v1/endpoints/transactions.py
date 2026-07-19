@@ -252,21 +252,14 @@ async def vendor_approve_transaction(
         creds: dict   = gateway.credentials or {}
         base_url      = "https://api.doku.com" if gateway.is_production else "https://api-sandbox.doku.com"
 
-        # client_id (BRN) = Brand ID, hanya untuk autentikasi (X-PARTNER-ID & token)
         client_id     = creds.get("client_id", "")
         private_key   = creds.get("private_key", "")
         client_secret = creds.get("secret_key") or creds.get("client_secret", "")
-
-        # merchant_id = numeric Merchant ID dari DOKU Dashboard
-        # Berbeda dari Brand ID (BRN) dan NMID (ID2026XXXXXXXXX)
-        # Diisi di credentials sebagai "qris_merchant_id" atau "merchant_id"
-        merchant_id = (
+        merchant_id   = (
             creds.get("qris_merchant_id")
             or creds.get("merchant_id")
         )
-
-        # terminal_id dari DOKU Dashboard (contoh: A01)
-        terminal_id = (
+        terminal_id   = (
             creds.get("qris_terminal_id")
             or creds.get("terminal_id")
             or "A01"
@@ -311,6 +304,8 @@ async def vendor_approve_transaction(
         tx.status             = "payment_pending"
         tx.payment_method     = "pay_as_you_go"
         tx.vendor_reviewed_at = datetime.now(timezone.utc)
+        # xendit_invoice_url = qris_string (QRIS content untuk QR code)
+        # xendit_invoice_id  = partnerReferenceNo / referenceNo (untuk query status)
         tx.xendit_invoice_url = doku_result.get("qris_string")
         tx.xendit_invoice_id  = doku_result.get("reference_no")
 
@@ -383,7 +378,63 @@ def get_invoice_url(
         payment_method=tx.payment_method,
         invoice_url=None,
         xendit_invoice_id=tx.xendit_invoice_id,
+        # xendit_invoice_url menyimpan qris_string
         qris_string=tx.xendit_invoice_url,
         doku_reference_no=tx.xendit_invoice_id,
         message="QRIS aktif.",
     )
+
+
+@router.post(
+    "/{tx_id}/manual-settle",
+    response_model=TransactionResponse,
+    summary="[Admin] Force-settle TX yang sudah paid di DOKU tapi stuck di DB",
+)
+async def manual_settle_transaction(
+    tx_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_user_type(0)),  # admin only
+) -> Any:
+    """
+    Digunakan admin untuk manual-settle transaksi yang sudah terbayar
+    di DOKU (terlihat di DOKU Dashboard) tapi status di DB masih payment_pending.
+
+    Contoh kasus: TX7297568553 — paid IDR 1 di DOKU 19 Jul 2026 18:26 WIB
+    tapi polling belum jalan / terjadi race condition.
+    """
+    tx = db.query(Transaction).filter(Transaction.id == tx_id).first()
+    if not tx:
+        raise HTTPException(404, "Transaksi tidak ditemukan")
+    if tx.status == "settled":
+        return tx  # idempotent
+    if tx.status not in ("payment_pending", "payment_failed"):
+        raise HTTPException(
+            400,
+            f"Hanya bisa settle TX dengan status payment_pending/payment_failed. "
+            f"Status saat ini: {tx.status}"
+        )
+
+    now = datetime.now(timezone.utc)
+    tx.status     = "settled"
+    tx.paid_at    = tx.paid_at or now
+    tx.settled_at = now
+
+    guide = db.query(Guide).filter(Guide.id == tx.guide_id).first()
+    if guide:
+        commission           = Decimal(str(tx.guide_commission))
+        guide.wallet_balance = (guide.wallet_balance or Decimal(0)) + commission
+        guide.total_earnings = (guide.total_earnings or Decimal(0)) + commission
+
+    booking = db.query(Booking).filter(Booking.id == tx.booking_id).first()
+    if booking:
+        booking.status       = "completed"
+        booking.completed_at = now
+
+    db.commit()
+    db.refresh(tx)
+    logger.info(f"[ManualSettle] TX {tx.transaction_code} di-settle oleh admin {current_user.id}")
+
+    await _disburse_guide_commission(tx, db)
+    db.commit()
+
+    return tx
