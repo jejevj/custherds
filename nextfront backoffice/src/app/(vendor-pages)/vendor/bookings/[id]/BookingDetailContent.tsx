@@ -15,9 +15,17 @@ import {
   CreditCard, Banknote, ZoomIn, ChevronLeft, ChevronRight, X, Loader2,
   QrCode,
 } from "lucide-react"
+import { api } from "@/services/api"
 
 const POLL_INTERVAL_MS  = 5000
 const POLL_MAX_ATTEMPTS = 60
+
+interface PaymentStatusResponse {
+  tx_id: string
+  status: string
+  paid_at: string | null
+  settled_at: string | null
+}
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
   confirmed: "default",
@@ -58,7 +66,7 @@ function parseExtraPhotos(notes: string | null | undefined): string[] {
   catch { return [] }
 }
 
-// ── Lightbox ────────────────────────────────────────────────────────────────
+// ── Lightbox ─────────────────────────────────────────────────────────────────
 function Lightbox({ images, initialIndex, onClose }: { images: string[]; initialIndex: number; onClose: () => void }) {
   const [idx, setIdx] = useState(initialIndex)
   const prev = () => setIdx(i => (i - 1 + images.length) % images.length)
@@ -159,7 +167,7 @@ function QrisModal({ qrisString, referenceNo, onClose }: { qrisString: string; r
   )
 }
 
-// ── Photo Grid ────────────────────────────────────────────────────────────────
+// ── Photo Grid ───────────────────────────────────────────────────────────────
 function PhotoGrid({ urls, label }: { urls: string[]; label: string }) {
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null)
   if (!urls.length) return null
@@ -203,15 +211,15 @@ export default function BookingDetailContent() {
   const [actionError, setActionError] = useState("")
   const [polling, setPolling]         = useState(false)
 
-  const [showReject, setShowReject]           = useState(false)
-  const [rejectReason, setRejectReason]       = useState("")
-  const [showTxReject, setShowTxReject]       = useState(false)
-  const [txRejectReason, setTxRejectReason]   = useState("")
-  const [showPayMethod, setShowPayMethod]     = useState(false)
+  const [showReject, setShowReject]         = useState(false)
+  const [rejectReason, setRejectReason]     = useState("")
+  const [showTxReject, setShowTxReject]     = useState(false)
+  const [txRejectReason, setTxRejectReason] = useState("")
+  const [showPayMethod, setShowPayMethod]   = useState(false)
 
   // QRIS state
-  const [qrisString, setQrisString]       = useState<string | null>(null)
-  const [dokuRefNo, setDokuRefNo]         = useState<string | null>(null)
+  const [qrisString, setQrisString]     = useState<string | null>(null)
+  const [dokuRefNo, setDokuRefNo]       = useState<string | null>(null)
   const [showQrisModal, setShowQrisModal] = useState(false)
 
   const pollTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -232,7 +240,6 @@ export default function BookingDetailContent() {
         try {
           const t = await transactionsService.getByBookingId(b.id)
           setTx(t)
-          // Jika TX payment_pending dan ada qris_string di xendit_invoice_url
           if (t?.status === "payment_pending" && t?.xendit_invoice_url) {
             setQrisString(t.xendit_invoice_url)
             setDokuRefNo(t.xendit_invoice_id ?? null)
@@ -246,57 +253,71 @@ export default function BookingDetailContent() {
     }
   }, [id])
 
-  // ── Polling ──────────────────────────────────────────────────────────────
-  const startPolling = useCallback((bookingId: string) => {
+  // ── Polling: hit /payment-status agar backend query DOKU ─────────────────
+  const startPolling = useCallback((txId: string) => {
     if (pollTimerRef.current) return
     setPolling(true)
     pollAttemptsRef.current = 0
 
     const tick = async () => {
-      if (pollAttemptsRef.current >= POLL_MAX_ATTEMPTS) { stopPolling(); return }
+      if (pollAttemptsRef.current >= POLL_MAX_ATTEMPTS) {
+        stopPolling()
+        return
+      }
       pollAttemptsRef.current++
+
       try {
-        const latestTx = await transactionsService.getByBookingId(bookingId)
-        if (!latestTx) { pollTimerRef.current = setTimeout(tick, POLL_INTERVAL_MS); return }
-        setTx(latestTx)
-        if (latestTx.status === "settled") {
-          const latestBooking = await bookingsService.get(id)
-          setBooking(latestBooking)
+        // Hit /payment-status — backend akan query DOKU dan auto-settle jika paid
+        const result = await api.get<PaymentStatusResponse>(`/transactions/${txId}/payment-status`)
+
+        if (result.status === "settled") {
           stopPolling()
           setShowQrisModal(false)
+          // Refresh full booking + tx dari DB
+          const [latestBooking, latestTx] = await Promise.all([
+            bookingsService.get(id),
+            transactionsService.getByBookingId(id),
+          ])
+          setBooking(latestBooking)
+          setTx(latestTx)
           toast.success("Pembayaran QRIS berhasil!", {
             description: "Transaksi telah settled dan booking selesai.",
             duration: 6000,
           })
           return
         }
-        if (latestTx.status === "pending_vendor_approval") {
-          const latestBooking = await bookingsService.get(id)
-          setBooking(latestBooking)
+
+        if (result.status === "payment_failed") {
           stopPolling()
           setShowQrisModal(false)
-          toast.error("QRIS kedaluwarsa", {
-            description: "QRIS sudah expired. Silakan pilih metode pembayaran kembali.",
+          setTx(prev => prev ? { ...prev, status: "payment_failed" } : prev)
+          toast.error("Pembayaran gagal atau kedaluwarsa.", {
+            description: "Silakan approve ulang transaksi untuk generate QRIS baru.",
             duration: 8000,
           })
           return
         }
-      } catch { /* silent */ }
+      } catch (e) {
+        console.error("[polling:payment-status]", e)
+      }
+
       pollTimerRef.current = setTimeout(tick, POLL_INTERVAL_MS)
     }
+
     pollTimerRef.current = setTimeout(tick, POLL_INTERVAL_MS)
   }, [id, stopPolling]) // eslint-disable-line
 
   useEffect(() => { fetchData() }, [fetchData])
 
+  // Mulai polling otomatis saat tx berubah ke payment_pending
   useEffect(() => {
-    if (tx?.status === "payment_pending" && booking?.id) {
-      startPolling(booking.id)
+    if (tx?.status === "payment_pending" && tx?.id) {
+      startPolling(tx.id)
     } else {
       stopPolling()
     }
     return () => { stopPolling() }
-  }, [tx?.status, booking?.id]) // eslint-disable-line
+  }, [tx?.status, tx?.id]) // eslint-disable-line
 
   const handleApprove = async () => {
     if (!booking) return
@@ -334,7 +355,6 @@ export default function BookingDetailContent() {
     try {
       const result = await transactionsService.approve(tx.id, method)
       setTx(result.transaction)
-      // Jika DOKU QRIS → ambil qris_string dan tampilkan modal
       if (result.qris_string) {
         setQrisString(result.qris_string)
         setDokuRefNo(result.doku_reference_no ?? null)
@@ -568,6 +588,7 @@ export default function BookingDetailContent() {
                   {tx!.status === "pending_vendor_approval" ? "Menunggu Approval" :
                    tx!.status === "settled"         ? "Settled" :
                    tx!.status === "payment_pending" ? "Menunggu Bayar" :
+                   tx!.status === "payment_failed"  ? "Gagal" :
                    tx!.status === "rejected"        ? "Ditolak" : tx!.status}
                 </Badge>
               </div>
