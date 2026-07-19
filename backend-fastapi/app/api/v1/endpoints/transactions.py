@@ -252,36 +252,42 @@ async def vendor_approve_transaction(
         creds: dict   = gateway.credentials or {}
         base_url      = "https://api.doku.com" if gateway.is_production else "https://api-sandbox.doku.com"
 
-        # client_id = Brand ID (BRN-XXXX), digunakan untuk:
-        #   - header X-PARTNER-ID
-        #   - body merchantId (Credential mall ID per DOKU SNAP spec)
+        # client_id (BRN) = untuk header X-PARTNER-ID dan autentikasi token
         client_id     = creds.get("client_id", "")
         private_key   = creds.get("private_key", "")
         client_secret = creds.get("secret_key") or creds.get("client_secret", "")
 
-        # merchantId untuk body request DOKU = client_id (BRN), bukan NMID
-        # Ref: DOKU SNAP spec - "Credential mall ID from DOKU"
-        merchant_id = client_id
+        # qris_nmid (ID2026XXXXXXXXX) = Credential mall ID / NMID
+        # Digunakan sebagai merchantId di body request qr-mpm-generate
+        # Terdaftar di DOKU Dashboard sebagai identitas QRIS merchant
+        merchant_id = (
+            creds.get("qris_nmid")
+            or creds.get("nmid")
+            or creds.get("merchant_id")
+        )
 
-        # terminal_id dari konfigurasi dashboard DOKU (contoh: A01)
+        # terminal_id dari DOKU Dashboard (contoh: A01)
         terminal_id = (
             creds.get("qris_terminal_id")
             or creds.get("terminal_id")
             or "A01"
         )
 
-        # qris_nmid hanya untuk identitas QRIS nasional, tidak dikirim ke API body
-        qris_nmid = creds.get("qris_nmid", "")
-
         logger.info(
-            f"[DOKU] client_id={client_id} merchant_id(body)={merchant_id} "
-            f"terminal_id={terminal_id} qris_nmid={qris_nmid} secret_len={len(client_secret)}"
+            f"[DOKU] client_id={client_id} merchant_id(nmid)={merchant_id} "
+            f"terminal_id={terminal_id} secret_len={len(client_secret)}"
         )
 
         if not client_id or not private_key:
             raise HTTPException(503, "Konfigurasi DOKU belum lengkap (client_id / private_key).")
         if not client_secret:
             raise HTTPException(503, "Konfigurasi DOKU belum lengkap (secret_key).")
+        if not merchant_id:
+            raise HTTPException(
+                503,
+                "Konfigurasi DOKU belum lengkap: 'qris_nmid' tidak ditemukan di credentials. "
+                "Isi field 'qris_nmid' dengan NMID dari DOKU Dashboard (contoh: ID2026XXXXXXXXX)."
+            )
 
         ts = int(datetime.now(timezone.utc).timestamp())
         order_id = f"CST-{tx.transaction_code}-{ts}"
