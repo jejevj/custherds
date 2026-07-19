@@ -252,17 +252,16 @@ async def vendor_approve_transaction(
         creds: dict   = gateway.credentials or {}
         base_url      = "https://api.doku.com" if gateway.is_production else "https://api-sandbox.doku.com"
 
-        # client_id (BRN) = untuk header X-PARTNER-ID dan autentikasi token
+        # client_id (BRN) = Brand ID, hanya untuk autentikasi (X-PARTNER-ID & token)
         client_id     = creds.get("client_id", "")
         private_key   = creds.get("private_key", "")
         client_secret = creds.get("secret_key") or creds.get("client_secret", "")
 
-        # qris_nmid (ID2026XXXXXXXXX) = Credential mall ID / NMID
-        # Digunakan sebagai merchantId di body request qr-mpm-generate
-        # Terdaftar di DOKU Dashboard sebagai identitas QRIS merchant
+        # merchant_id = numeric Merchant ID dari DOKU Dashboard
+        # Berbeda dari Brand ID (BRN) dan NMID (ID2026XXXXXXXXX)
+        # Diisi di credentials sebagai "qris_merchant_id" atau "merchant_id"
         merchant_id = (
-            creds.get("qris_nmid")
-            or creds.get("nmid")
+            creds.get("qris_merchant_id")
             or creds.get("merchant_id")
         )
 
@@ -274,7 +273,7 @@ async def vendor_approve_transaction(
         )
 
         logger.info(
-            f"[DOKU] client_id={client_id} merchant_id(nmid)={merchant_id} "
+            f"[DOKU] client_id={client_id} merchant_id={merchant_id} "
             f"terminal_id={terminal_id} secret_len={len(client_secret)}"
         )
 
@@ -285,8 +284,8 @@ async def vendor_approve_transaction(
         if not merchant_id:
             raise HTTPException(
                 503,
-                "Konfigurasi DOKU belum lengkap: 'qris_nmid' tidak ditemukan di credentials. "
-                "Isi field 'qris_nmid' dengan NMID dari DOKU Dashboard (contoh: ID2026XXXXXXXXX)."
+                "Konfigurasi DOKU belum lengkap: 'qris_merchant_id' tidak ditemukan di credentials. "
+                "Isi field 'qris_merchant_id' dengan numeric Merchant ID dari DOKU Dashboard."
             )
 
         ts = int(datetime.now(timezone.utc).timestamp())
