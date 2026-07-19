@@ -23,4 +23,3 @@ class Product(Base):
     updated_at  = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     vendor      = relationship("Vendor", back_populates="products")
-    bookings    = relationship("Booking", back_populates="product")
