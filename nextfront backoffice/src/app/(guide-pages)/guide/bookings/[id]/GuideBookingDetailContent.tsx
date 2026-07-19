@@ -223,14 +223,10 @@ export default function GuideBookingDetailContent() {
     if (!booking) return
     setShowTxForm(true)
     setTxFiles([])
+    // Direct booking: gross kosong — guide isi manual sesuai tagihan aktual
+    // Package booking: pre-fill subtotal_package sebagai base
     const isPackage = booking.booking_type === "package"
-    const isDirect  = booking.booking_type === "direct"
-    const base = isPackage
-      ? String(Number(booking.subtotal_package))
-      : isDirect && booking.subtotal_direct
-      ? String(Number(booking.subtotal_direct))
-      : ""
-    setTxGross(base)
+    setTxGross(isPackage ? String(Number(booking.subtotal_package)) : "")
     setTxExtra(""); setTxExtraNotes(""); setTxNotes(""); setTxError("")
   }
 
@@ -250,24 +246,20 @@ export default function GuideBookingDetailContent() {
   const isPackage = booking?.booking_type === "package"
   const isDirect  = booking?.booking_type === "direct"
 
-  // base subtotal untuk validasi: package pakai subtotal_package, direct pakai subtotal_direct
-  const baseSubtotal = isPackage
-    ? Number(booking?.subtotal_package ?? 0)
-    : isDirect
-    ? Number(booking?.subtotal_direct ?? 0)
-    : 0
+  // baseSubtotal hanya relevan untuk package (digunakan validasi + auto-hitung gross)
+  const baseSubtotal = isPackage ? Number(booking?.subtotal_package ?? 0) : 0
 
   const submitTransaction = async () => {
     if (!booking) return
     if (txFiles.length === 0) { setTxError("Minimal 1 foto bukti kunjungan wajib diupload."); return }
     if (!txGross || isNaN(grossNum) || grossNum <= 0) { setTxError("Nominal transaksi wajib diisi dan harus > 0."); return }
 
-    // Validasi gross = baseSubtotal + extra untuk package dan direct
-    if (baseSubtotal > 0) {
+    // Validasi gross == subtotal + extra hanya untuk package booking
+    if (isPackage && baseSubtotal > 0) {
       const expected = baseSubtotal + extraNum
       if (Math.abs(grossNum - expected) > 0.01) {
         setTxError(
-          `Nominal harus = subtotal ${formatRupiah(baseSubtotal)} + extra ${formatRupiah(extraNum)} = ${formatRupiah(expected)}`
+          `Nominal harus = subtotal package ${formatRupiah(baseSubtotal)} + extra ${formatRupiah(extraNum)} = ${formatRupiah(expected)}`
         )
         return
       }
@@ -278,8 +270,9 @@ export default function GuideBookingDetailContent() {
       await transactionsService.submitTransaction(booking.id, {
         receiptFiles: txFiles.map(fp => fp.file),
         grossAmount: grossNum,
-        extraAmount: txExtra ? extraNum : undefined,
-        extraNotes: txExtraNotes || undefined,
+        // extra hanya dikirim untuk package booking
+        extraAmount: isPackage && txExtra ? extraNum : undefined,
+        extraNotes: isPackage && txExtraNotes ? txExtraNotes : undefined,
         receiptNotes: txNotes || undefined,
       })
       await fetchData()
@@ -322,7 +315,6 @@ export default function GuideBookingDetailContent() {
   const txAttemptMax = booking.tx_attempt_max ?? 3
   const isRejectedByTx = booking.status === "rejected" && txAttempt >= txAttemptMax
 
-  // label subtotal sesuai tipe booking
   const subtotalLabel = booking.booking_type === "direct" ? "Subtotal Direct" : "Subtotal Package"
   const subtotalValue = booking.booking_type === "direct"
     ? booking.subtotal_direct
@@ -375,17 +367,24 @@ export default function GuideBookingDetailContent() {
             <InfoRow icon={<Users size={12}/>}        label="Jumlah Pax"       value={`${booking.pax_count} orang`} />
             {booking.tourist_nationality && <InfoRow label="Kewarganegaraan" value={booking.tourist_nationality} />}
 
-            {/* Package: tampilkan package_price_snapshot */}
             {booking.booking_type === "package" && booking.package_price_snapshot && (
               <InfoRow icon={<Package size={12}/>} label="Harga / Pax (Paket)" value={formatRupiah(booking.package_price_snapshot)} />
             )}
 
-            {/* Direct: tampilkan direct_price_snapshot */}
-            {booking.booking_type === "direct" && booking.direct_price_snapshot && (
-              <InfoRow icon={<Zap size={12}/>} label="Harga / Pax (Direct)" value={formatRupiah(booking.direct_price_snapshot)} highlight="amber" />
+            {/* Direct: tampilkan info bahwa harga diisi saat submit transaksi */}
+            {booking.booking_type === "direct" && (
+              <div className="flex justify-between items-center px-3 py-2 gap-4">
+                <span className="text-muted-foreground flex items-center gap-1.5 shrink-0 text-xs">
+                  <Zap size={12} /> Harga Direct
+                </span>
+                <span className="text-xs text-amber-400/70 italic">
+                  {booking.direct_price_snapshot
+                    ? formatRupiah(booking.direct_price_snapshot) + " / pax"
+                    : "Diisi saat submit transaksi"}
+                </span>
+              </div>
             )}
 
-            {/* Subtotal baris (package atau direct) */}
             {subtotalValue && (
               <InfoRow
                 icon={<Banknote size={12}/>}
@@ -406,7 +405,6 @@ export default function GuideBookingDetailContent() {
             )}
           </div>
 
-          {/* Komisi card */}
           {komisiBadge && !showTxPanel && (
             <div className={`rounded-xl border px-4 py-3 ${
               komisiBadge.real ? "border-emerald-500/40 bg-emerald-500/5" : "border-emerald-500/20 bg-emerald-500/5"
@@ -600,7 +598,7 @@ export default function GuideBookingDetailContent() {
         )}
       </div>
 
-      {/* Submit Transaksi Dialog */}
+      {/* ── Submit Transaksi Dialog ─────────────────────────────────────────── */}
       <Dialog open={showTxForm} onOpenChange={open => { if (!open) setShowTxForm(false) }}>
         <DialogContent className="sm:max-w-[700px] w-full p-0 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b bg-card">
@@ -610,6 +608,7 @@ export default function GuideBookingDetailContent() {
             </h5>
           </div>
           <div className="px-6 py-5 space-y-5 overflow-y-auto" style={{ maxHeight: "calc(100vh - 200px)" }}>
+
             {txAttempt > 0 && (
               <div className="rounded-lg border border-orange-500/30 bg-orange-500/5 px-4 py-3 text-sm flex items-start gap-2">
                 <AlertTriangle size={14} className="text-orange-400 mt-0.5 shrink-0" />
@@ -623,34 +622,36 @@ export default function GuideBookingDetailContent() {
               </div>
             )}
 
-            {/* Info subtotal — package atau direct */}
-            {baseSubtotal > 0 && (
-              <div className={`rounded-lg border px-4 py-3 text-sm ${
-                isDirect
-                  ? "border-amber-500/30 bg-amber-500/5"
-                  : "border-blue-500/30 bg-blue-500/5"
-              }`}>
-                <p className="text-xs text-muted-foreground mb-1">
-                  {isDirect ? "Subtotal Direct" : "Subtotal Package"}
-                </p>
-                <p className={`font-bold text-base ${ isDirect ? "text-amber-400" : "text-blue-400" }`}>
-                  {formatRupiah(baseSubtotal)}
-                </p>
+            {/* ── Info box berbeda untuk direct vs package ── */}
+            {isPackage && baseSubtotal > 0 && (
+              <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3 text-sm">
+                <p className="text-xs text-muted-foreground mb-1">Subtotal Package (terkunci)</p>
+                <p className="font-bold text-base text-blue-400">{formatRupiah(baseSubtotal)}</p>
                 {booking?.estimated_commission && (
                   <p className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
                     <TrendingUp size={10} /> Estimasi komisi kamu: {formatRupiah(booking.estimated_commission)}
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground mt-1">
-                  {isDirect
-                    ? `${booking?.pax_count} pax × ${formatRupiah(booking?.direct_price_snapshot)} (harga direct)`
-                    : `${booking?.pax_count} pax × ${formatRupiah(booking?.package_price_snapshot)}`
-                  }
-                  {" — Tambahkan extra di bawah jika ada biaya di luar"}
+                  {booking?.pax_count} pax × {formatRupiah(booking?.package_price_snapshot)}
+                  {" — Tambahkan extra di bawah jika ada biaya di luar paket"}
                 </p>
               </div>
             )}
 
+            {isDirect && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm">
+                <p className="text-xs text-amber-400 font-semibold flex items-center gap-1 mb-1">
+                  <Zap size={11} /> Direct Booking — Isi Harga Aktual
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Masukkan total tagihan yang benar-benar dibayar turis ke vendor.
+                  Nominal ini menjadi dasar perhitungan komisi kamu.
+                </p>
+              </div>
+            )}
+
+            {/* Upload foto */}
             <div className="space-y-2">
               <Label className="text-sm font-medium">
                 Foto Bukti Kunjungan <span className="text-red-500">*</span>
@@ -694,32 +695,52 @@ export default function GuideBookingDetailContent() {
                 multiple className="hidden" onChange={handleFilesChange} />
             </div>
 
+            {/* ── Gross amount ── */}
             <div className="space-y-1">
-              <Label htmlFor="tx-gross">Total Nominal Transaksi <span className="text-red-500">*</span></Label>
+              <Label htmlFor="tx-gross">
+                {isDirect ? "Total Tagihan Aktual" : "Total Nominal Transaksi"}
+                {" "}<span className="text-red-500">*</span>
+              </Label>
               <div className="relative">
                 <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">Rp</span>
-                <Input id="tx-gross" type="number" min="0" placeholder="0" className="pl-9"
-                  value={txGross} onChange={e => { setTxGross(e.target.value); setTxError("") }}
-                  readOnly={baseSubtotal > 0 && extraNum === 0} />
+                <Input
+                  id="tx-gross"
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  className="pl-9"
+                  value={txGross}
+                  onChange={e => { setTxGross(e.target.value); setTxError("") }}
+                  // Direct: bebas edit. Package: readonly kalau belum ada extra
+                  readOnly={isPackage && extraNum === 0}
+                />
               </div>
-              {baseSubtotal > 0 && <p className="text-xs text-muted-foreground">Otomatis = subtotal + extra</p>}
+              {isPackage && baseSubtotal > 0 && (
+                <p className="text-xs text-muted-foreground">Otomatis = subtotal package + extra</p>
+              )}
+              {isDirect && (
+                <p className="text-xs text-muted-foreground">Isi sesuai tagihan aktual dari vendor</p>
+              )}
             </div>
 
-            <div className="space-y-1">
-              <Label htmlFor="tx-extra">Biaya Tambahan <span className="text-muted-foreground text-xs font-normal">(opsional)</span></Label>
-              <div className="relative">
-                <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">Rp</span>
-                <Input id="tx-extra" type="number" min="0" placeholder="0" className="pl-9"
-                  value={txExtra}
-                  onChange={e => {
-                    setTxExtra(e.target.value); setTxError("")
-                    if (baseSubtotal > 0)
-                      setTxGross(String(baseSubtotal + (parseFloat(e.target.value) || 0)))
-                  }} />
+            {/* ── Biaya Tambahan — hanya untuk PACKAGE ── */}
+            {isPackage && (
+              <div className="space-y-1">
+                <Label htmlFor="tx-extra">Biaya Tambahan <span className="text-muted-foreground text-xs font-normal">(opsional)</span></Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">Rp</span>
+                  <Input id="tx-extra" type="number" min="0" placeholder="0" className="pl-9"
+                    value={txExtra}
+                    onChange={e => {
+                      setTxExtra(e.target.value); setTxError("")
+                      if (baseSubtotal > 0)
+                        setTxGross(String(baseSubtotal + (parseFloat(e.target.value) || 0)))
+                    }} />
+                </div>
               </div>
-            </div>
+            )}
 
-            {txExtra && parseFloat(txExtra) > 0 && (
+            {isPackage && txExtra && parseFloat(txExtra) > 0 && (
               <div className="space-y-1">
                 <Label htmlFor="tx-extra-notes">Keterangan Biaya Tambahan</Label>
                 <Textarea id="tx-extra-notes" placeholder="Contoh: makan siang, tiket masuk ekstra..." rows={2}
@@ -737,9 +758,9 @@ export default function GuideBookingDetailContent() {
               <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/5 px-4 py-3 flex justify-between items-center">
                 <div>
                   <p className="text-xs text-muted-foreground">Total Transaksi</p>
-                  {extraNum > 0 && (
+                  {isPackage && extraNum > 0 && (
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {formatRupiah(baseSubtotal || grossNum - extraNum)} + extra {formatRupiah(extraNum)}
+                      {formatRupiah(baseSubtotal)} + extra {formatRupiah(extraNum)}
                     </p>
                   )}
                 </div>
