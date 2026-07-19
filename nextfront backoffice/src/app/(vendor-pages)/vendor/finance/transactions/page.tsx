@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import dynamic from "next/dynamic"
 import {
   transactionsService,
@@ -51,19 +51,62 @@ export default function VendorTransactionsPage() {
   const [loading,     setLoading]     = useState(true)
   const [qrisModal,   setQrisModal]   = useState<QrisModalState | null>(null)
   const [loadingTxId, setLoadingTxId] = useState<string | null>(null)
+  const autoOpenedRef = useRef<string | null>(null)   // tx_id yang sudah di-auto-open
+  const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const loadData = useCallback(() => {
-    setLoading(true)
-    transactionsService.list().then(setData).finally(() => setLoading(false))
+  const loadData = useCallback(async () => {
+    try {
+      const txs = await transactionsService.list()
+      setData(txs)
+      return txs
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  useEffect(() => { loadData() }, [loadData])
+  // Initial load + auto-open modal jika ada TX payment_pending
+  useEffect(() => {
+    loadData().then((txs) => {
+      if (!txs) return
+      const pending = txs.find(
+        t => t.status === "payment_pending" && t.xendit_invoice_url
+      )
+      if (pending && autoOpenedRef.current !== pending.id) {
+        autoOpenedRef.current = pending.id
+        setQrisModal({
+          txId:       pending.id,
+          qrisString: pending.xendit_invoice_url!,
+          amount:     Number(pending.guide_commission) + Number(pending.platform_fee),
+        })
+      }
+    })
+  }, [loadData])
+
+  // Auto-refresh list tiap 10 detik sebagai fallback (saat modal tertutup)
+  useEffect(() => {
+    refreshTimerRef.current = setInterval(() => {
+      if (!qrisModal) loadData()   // jika modal terbuka, polling sudah ada di modal
+    }, 10_000)
+    return () => {
+      if (refreshTimerRef.current) clearInterval(refreshTimerRef.current)
+    }
+  }, [loadData, qrisModal])
 
   /**
    * Fetch ulang invoice URL (berisi qris_string) saat tombol diklik.
-   * qris_string tidak disimpan di model Transaction — ada di TransactionInvoiceResponse.
+   * Dipakai jika TX sudah payment_pending tapi xendit_invoice_url di DB null.
    */
   async function handleShowQris(tx: Transaction) {
+    // Jika qris_string sudah ada di model, gunakan langsung tanpa request tambahan
+    if (tx.xendit_invoice_url) {
+      setQrisModal({
+        txId:       tx.id,
+        qrisString: tx.xendit_invoice_url,
+        amount:     Number(tx.guide_commission) + Number(tx.platform_fee),
+      })
+      return
+    }
+
     setLoadingTxId(tx.id)
     try {
       const invoice = await transactionsService.getInvoiceUrl(tx.id)
@@ -86,6 +129,7 @@ export default function VendorTransactionsPage() {
   }
 
   function handlePaid() {
+    autoOpenedRef.current = null
     setQrisModal(null)
     loadData()
   }
