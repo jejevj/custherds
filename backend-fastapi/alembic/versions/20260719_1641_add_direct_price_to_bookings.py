@@ -1,6 +1,6 @@
 """add_direct_price_to_bookings
 
-Revision ID: a1b2c3d4e5f6
+Revision ID: 7d9f4e2c1b83
 Revises: 04d840a1d859
 Create Date: 2026-07-19 16:41:00
 
@@ -12,7 +12,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = 'a1b2c3d4e5f6'
+revision = '7d9f4e2c1b83'
 down_revision = '04d840a1d859'
 branch_labels = None
 depends_on = None
