@@ -4,6 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { vendorsBrowseService, VendorDetail, PackagePublic, resolveCoverPhoto } from '@/services/vendors.service'
 import { formatRupiah } from '@/services/packages-browse.service'
+import { bookingsService } from '@/services/bookings.service'
 import { Button } from '@/components/ui/button'
 import {
   ArrowLeft, MapPin, Clock, Globe, Phone, Zap,
@@ -300,21 +301,37 @@ function DirectBookingModal({ vendor, onClose }: { vendor: VendorDetail; onClose
   const [amount,      setAmount]      = useState('')
   const [submitting,  setSubmitting]  = useState(false)
   const [submitted,   setSubmitted]   = useState(false)
+  const [apiError,    setApiError]    = useState('')
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!date) return
     setSubmitting(true)
-    // TODO: ganti dengan real API call
-    // POST /api/guide/bookings
-    // payload: { vendor_id: vendor.id, product_id: null, booking_date: date,
-    //            booking_time: time || null, pax_count: pax,
-    //            tourist_names: tourists, tourist_nationality: nationality,
-    //            notes, estimated_amount: amount || null }
-    setTimeout(() => {
-      setSubmitting(false)
+    setApiError('')
+    try {
+      await bookingsService.create({
+        vendor_id:           vendor.id,
+        booking_type:        'direct',
+        booking_date:        date,
+        booking_time:        time || undefined,
+        pax_count:           pax,
+        tourist_names:       tourists || undefined,
+        tourist_nationality: nationality || undefined,
+        notes:               notes || undefined,
+        direct_price:        amount ? Number(amount) : undefined,
+      })
       setSubmitted(true)
-    }, 1000)
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { errors?: string; message?: string } } })
+          ?.response?.data?.errors ??
+        (err as { response?: { data?: { message?: string } } })
+          ?.response?.data?.message ??
+        'Gagal membuat booking. Coba lagi.'
+      setApiError(String(msg))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -357,6 +374,13 @@ function DirectBookingModal({ vendor, onClose }: { vendor: VendorDetail; onClose
               <strong>Direct Booking</strong> — tidak terikat paket. Turis bayar langsung ke vendor,
               lalu kamu tulis nominal tagihan secara manual saat upload kuitansi.
             </div>
+
+            {/* Error alert */}
+            {apiError && (
+              <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3 text-xs text-red-400">
+                {apiError}
+              </div>
+            )}
 
             {/* Tanggal & Jam */}
             <div className="grid grid-cols-2 gap-3">
