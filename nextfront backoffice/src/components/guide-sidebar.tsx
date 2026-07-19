@@ -21,7 +21,6 @@ const navMain = [
     title: "Bookings", url: "#", icon: <ClipboardList />,
     items: [
       { title: "All Bookings",   url: "/guide/bookings" },
-      { title: "Create Booking", url: "/guide/bookings/create" },
     ],
   },
   {
