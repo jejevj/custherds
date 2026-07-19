@@ -75,7 +75,7 @@ async def get_token_b2b(
         )
 
     raw = resp.json()
-    logger.error(f"[DOKU:token] status={resp.status_code} response={raw}")
+    logger.info(f"[DOKU:token] status={resp.status_code} responseCode={raw.get('responseCode')}")
 
     if resp.status_code != 200 or not raw.get("accessToken"):
         raise RuntimeError(
@@ -109,7 +109,8 @@ async def create_qris(
 
     validity_dt     = datetime.now(_WIB) + timedelta(minutes=expired_time)
     validity_period = validity_dt.strftime("%Y-%m-%dT%H:%M:%S+07:00")
-    amount_str      = f"{int(amount)}.00"
+    # DOKU requires decimal string format e.g. "10000.00"
+    amount_str = f"{int(amount)}.00"
 
     import time as _time
     external_id = str(int(_time.time() * 1000))
@@ -125,7 +126,7 @@ async def create_qris(
         "validityPeriod": validity_period,
         "additionalInfo": {
             "postalCode": postal_code,
-            "feeType": "1",
+            "feeType": 1,  # integer per DOKU SNAP spec: enum [1], bukan string "1"
         },
     }
 
@@ -141,7 +142,7 @@ async def create_qris(
         "CHANNEL-ID": "H2H",
     }
 
-    logger.error(
+    logger.info(
         f"[DOKU:qris:REQUEST] endpoint={endpoint} "
         f"X-PARTNER-ID={client_id} merchantId={merchant_id} "
         f"terminalId={terminal_id} amount={amount_str} orderId={order_id} "
@@ -157,18 +158,23 @@ async def create_qris(
     except Exception:
         raw = {"_raw_text": resp.text}
 
-    logger.error(
-        f"[DOKU:qris:RESPONSE] status={resp.status_code} "
-        f"responseCode={raw.get('responseCode')} "
-        f"responseMessage={raw.get('responseMessage')} "
-        f"full={json.dumps(raw, ensure_ascii=False)}"
-    )
-
     if resp.status_code not in (200, 201):
+        logger.error(
+            f"[DOKU:qris:RESPONSE ERROR] status={resp.status_code} "
+            f"responseCode={raw.get('responseCode')} "
+            f"responseMessage={raw.get('responseMessage')} "
+            f"full={json.dumps(raw, ensure_ascii=False)}"
+        )
         raise RuntimeError(
             f"DOKU create_qris gagal: {raw.get('responseMessage')} "
             f"(responseCode={raw.get('responseCode')}, HTTP {resp.status_code})"
         )
+
+    logger.info(
+        f"[DOKU:qris:RESPONSE OK] status={resp.status_code} "
+        f"responseCode={raw.get('responseCode')} "
+        f"referenceNo={raw.get('referenceNo')}"
+    )
 
     qris_string = raw.get("qrContent") or raw.get("additionalInfo", {}).get("qrContent")
 
