@@ -3,6 +3,7 @@
 Revision ID: f9a1b2c3d4e5
 Revises: a1f3c8d92e04
 Create Date: 2026-06-27 23:32:00
+
 """
 from alembic import op
 import sqlalchemy as sa
@@ -24,7 +25,7 @@ def upgrade() -> None:
     if result.fetchone() is None:
         op.add_column(
             'vendors',
-            sa.Column('gallery_urls', JSONB, nullable=True, server_default="'[]'")
+            sa.Column('gallery_urls', JSONB, nullable=True, server_default=sa.text("'[]'::jsonb"))
         )
 
     # Fix existing rows yang gallery_urls = NULL
