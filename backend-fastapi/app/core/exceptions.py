@@ -1,8 +1,13 @@
+import logging
+import traceback
+
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from jose import JWTError
+
+logger = logging.getLogger("app.exceptions")
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -55,6 +60,13 @@ def register_exception_handlers(app: FastAPI) -> None:
     # ------------------------------------------------------------------
     @app.exception_handler(SQLAlchemyError)
     async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
+        tb = traceback.format_exc()
+        logger.error(
+            "SQLAlchemyError on %s %s\n%s",
+            request.method,
+            request.url.path,
+            tb,
+        )
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={
@@ -72,6 +84,14 @@ def register_exception_handlers(app: FastAPI) -> None:
     # ------------------------------------------------------------------
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception):
+        tb = traceback.format_exc()
+        logger.error(
+            "Unhandled %s on %s %s\n%s",
+            type(exc).__name__,
+            request.method,
+            request.url.path,
+            tb,
+        )
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={
