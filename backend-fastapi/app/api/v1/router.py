@@ -8,12 +8,17 @@ from app.api.v1.endpoints import (
     packages,
     bookings,
     transactions,
+    transaction_status,
     withdrawals,
     admin,
     webhooks,
     payments,
     uploads,
     payment_gateway_config,
+    destinations,
+    reviews,
+    orders,
+    products,
 )
 
 api_router = APIRouter()
@@ -27,8 +32,13 @@ api_router.include_router(vendors.router,                  prefix="/vendors",   
 api_router.include_router(packages.router,                 prefix="/packages",                      tags=["Packages"])
 api_router.include_router(bookings.router,                 prefix="/bookings",                      tags=["Bookings"])
 api_router.include_router(transactions.router,             prefix="/transactions",                  tags=["Transactions"])
+api_router.include_router(transaction_status.router,       prefix="/transactions",                  tags=["Transactions"])
 api_router.include_router(withdrawals.router,              prefix="/withdrawals",                   tags=["Withdrawals"])
 api_router.include_router(admin.router,                    prefix="/admin",                         tags=["Admin"])
 api_router.include_router(webhooks.router,                 prefix="/webhooks",                      tags=["Webhooks"])
 api_router.include_router(payments.router,                 prefix="/payments",                      tags=["Payments"])
 api_router.include_router(payment_gateway_config.router,   prefix="/admin/payment-gateway-config",  tags=["Admin"])
+api_router.include_router(destinations.router,             prefix="/destinations",                  tags=["Destinations"])
+api_router.include_router(reviews.router,                  prefix="/reviews",                       tags=["Reviews"])
+api_router.include_router(orders.router,                   prefix="/orders",                        tags=["Orders"])
+api_router.include_router(products.router,                 prefix="/products",                      tags=["Products"])
