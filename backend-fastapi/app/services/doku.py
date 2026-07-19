@@ -124,12 +124,12 @@ async def create_qris(
         "validityPeriod": validity_period,
         "additionalInfo": {
             "postalCode": postal_code,
-            "feeType": 1,  # integer per DOKU SNAP spec
+            "feeType": "1",  # string per DOKU official Python sample code
         },
     }
 
-    # Minify body sekali — dipakai untuk signature DAN dikirim ke DOKU
-    # Ini memastikan body yang di-hash == body yang diterima DOKU
+    # Minify body sekali — dipakai untuk X-SIGNATURE DAN dikirim ke DOKU
+    # Memastikan body yang di-hash == body yang diterima DOKU
     body_minified = json.dumps(body, separators=(",", ":"), ensure_ascii=False)
 
     sym_sig = _symmetric_signature("POST", endpoint, access_token, body_minified, timestamp, client_secret)
@@ -153,8 +153,7 @@ async def create_qris(
     )
 
     async with httpx.AsyncClient(timeout=15) as client:
-        # Kirim sebagai raw string agar body yang diterima DOKU
-        # identik dengan body yang dipakai menghitung X-SIGNATURE
+        # Kirim raw bytes — persis sama dengan yang dipakai menghitung X-SIGNATURE
         resp = await client.post(
             f"{base_url}{endpoint}",
             content=body_minified.encode("utf-8"),
