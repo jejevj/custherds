@@ -1,6 +1,6 @@
 "use client"
 import { useEffect, useRef, useState, useCallback } from "react"
-import { apiClient } from "@/services/api-client"
+import { api } from "@/services/api"
 
 interface PaymentStatusResponse {
   tx_id: string
@@ -51,13 +51,13 @@ export default function QrisPaymentModal({ txId, qrisString, amount, onPaid, onC
   // Polling tiap 5 detik
   const checkStatus = useCallback(async () => {
     try {
-      const res = await apiClient.get<PaymentStatusResponse>(`/transactions/${txId}/payment-status`)
+      const data = await api.get<PaymentStatusResponse>(`/transactions/${txId}/payment-status`)
       setLastCheck(new Date().toLocaleTimeString("id-ID"))
-      if (res.data.status === "settled") {
+      if (data.status === "settled") {
         setStatus("paid")
         if (intervalRef.current) clearInterval(intervalRef.current)
         setTimeout(onPaid, 2000)
-      } else if (res.data.status === "payment_failed") {
+      } else if (data.status === "payment_failed") {
         setStatus("failed")
         if (intervalRef.current) clearInterval(intervalRef.current)
       }
