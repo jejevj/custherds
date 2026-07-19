@@ -75,9 +75,10 @@ def _get_active_split(db: Session) -> RevenueSplitConfig:
 
 def _inject_estimated_commission(booking: Booking, guide_percent: float) -> BookingResponse:
     resp = BookingResponse.model_validate(booking)
-    if booking.subtotal_package is not None:
+    base_amount = booking.subtotal_package if booking.subtotal_package is not None else booking.subtotal_direct
+    if base_amount is not None:
         resp.estimated_commission = (
-            Decimal(str(booking.subtotal_package))
+            Decimal(str(base_amount))
             * Decimal(str(guide_percent))
             / Decimal("100")
         ).quantize(Decimal("0.01"))
@@ -113,6 +114,7 @@ def create_booking(
             "Vendor ini tidak menerima direct booking. Silakan pilih salah satu package yang tersedia."
         )
 
+    # ── Package booking ─────────────────────────────────────────────────────────
     package_price_snapshot = None
     subtotal_package = None
 
@@ -138,6 +140,24 @@ def create_booking(
         package_price_snapshot = pkg.price_per_pax
         subtotal_package = (pkg.price_per_pax * Decimal(str(payload.pax_count))).quantize(Decimal("0.01"))
 
+    # ── Direct booking pricing (parity dengan package) ──────────────────────────
+    direct_price_snapshot = None
+    subtotal_direct = None
+
+    if payload.booking_type == "direct":
+        if payload.direct_price is not None:
+            if payload.direct_price <= 0:
+                raise HTTPException(400, "direct_price harus lebih dari 0")
+            direct_price_snapshot = payload.direct_price
+        elif vendor.vendor_min_spend:
+            # Fallback ke vendor_min_spend jika direct_price tidak dikirim
+            direct_price_snapshot = vendor.vendor_min_spend
+
+        if direct_price_snapshot is not None:
+            subtotal_direct = (
+                Decimal(str(direct_price_snapshot)) * Decimal(str(payload.pax_count))
+            ).quantize(Decimal("0.01"))
+
     booking = Booking(
         booking_code=_generate_booking_code(db),
         guide_id=guide.id,
@@ -146,6 +166,8 @@ def create_booking(
         package_id=payload.package_id if payload.booking_type == "package" else None,
         package_price_snapshot=package_price_snapshot,
         subtotal_package=subtotal_package,
+        direct_price_snapshot=direct_price_snapshot,
+        subtotal_direct=subtotal_direct,
         booking_date=payload.booking_date,
         booking_time=payload.booking_time,
         pax_count=payload.pax_count,
@@ -280,12 +302,12 @@ def vendor_checkin(
     "/{booking_id}/submit-transaction",
     response_model=TransactionResponse,
     status_code=201,
-    summary="Guide submit transaksi: upload 1–N bukti foto + nominal"
+    summary="Guide submit transaksi: upload 1-N bukti foto + nominal"
 )
 async def submit_transaction(
     booking_id: uuid.UUID,
     gross_amount: Decimal = Form(..., description="Total nominal transaksi"),
-    extra_amount: Optional[Decimal] = Form(None, description="Biaya tambahan di luar package (opsional)"),
+    extra_amount: Optional[Decimal] = Form(None, description="Biaya tambahan di luar package/direct (opsional)"),
     extra_notes: Optional[str] = Form(None, description="Keterangan biaya tambahan"),
     receipt_notes: Optional[str] = Form(None, description="Catatan tambahan bukti"),
     receipt_files: List[UploadFile] = File(..., description="Satu atau lebih file bukti kunjungan (jpg/png/webp/pdf, maks 5MB/file)"),
@@ -294,9 +316,11 @@ async def submit_transaction(
 ) -> Any:
     """
     Guide mengupload 1 atau lebih file bukti kunjungan dan menginput nominal transaksi.
+    - Untuk package booking: gross_amount harus == subtotal_package + extra_amount.
+    - Untuk direct booking: gross_amount harus == subtotal_direct + extra_amount
+      (jika subtotal_direct tersedia).
     - File pertama disimpan di receipt_image (kolom utama).
-    - File ke-2 dst disimpan, path-nya di-embed ke receipt_notes sebagai
-      JSON tag [extra_photos:[...]] agar backward-compatible.
+    - File ke-2 dst path-nya di-embed ke receipt_notes sebagai JSON tag [extra_photos:[...]].
     - Saat revisi (tx sebelumnya rejected), tx lama dibiarkan dengan status 'rejected',
       booking boleh submit tx baru selama status booking == 'pending_receipt'.
     """
@@ -353,7 +377,7 @@ async def submit_transaction(
         final_notes = final_notes.rstrip() + f"\n[extra_photos:{json.dumps(extra_paths)}]"
     final_notes = final_notes.strip() or None
 
-    # ── Validasi gross_amount untuk package booking ─────────────────────────────
+    # ── Validasi gross_amount (berlaku untuk PACKAGE dan DIRECT booking) ────────
     if booking.booking_type == "package" and booking.subtotal_package:
         extra = extra_amount or Decimal("0")
         expected_gross = booking.subtotal_package + extra
@@ -361,6 +385,15 @@ async def submit_transaction(
             raise HTTPException(
                 400,
                 f"gross_amount tidak sesuai. Subtotal package: {booking.subtotal_package}, "
+                f"extra: {extra}, total seharusnya: {expected_gross}"
+            )
+    elif booking.booking_type == "direct" and booking.subtotal_direct:
+        extra = extra_amount or Decimal("0")
+        expected_gross = booking.subtotal_direct + extra
+        if gross_amount != expected_gross:
+            raise HTTPException(
+                400,
+                f"gross_amount tidak sesuai. Subtotal direct: {booking.subtotal_direct}, "
                 f"extra: {extra}, total seharusnya: {expected_gross}"
             )
 

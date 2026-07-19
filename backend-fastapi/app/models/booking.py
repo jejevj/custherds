@@ -16,13 +16,13 @@ class Booking(Base):
 
     Status lifecycle:
     pending_vendor
-        → confirmed          (vendor approve)
-        → pending_receipt    (guide checkin hari-H)
-        → pending_completion (guide upload receipt/bukti kunjungan)
-        → completed          (vendor konfirmasi selesai)
+        -> confirmed          (vendor approve)
+        -> pending_receipt    (guide checkin hari-H)
+        -> pending_completion (guide upload receipt/bukti kunjungan)
+        -> completed          (vendor konfirmasi selesai)
 
-    Dari pending_vendor  : bisa → rejected
-    Dari confirmed/pending_receipt/pending_completion : bisa → cancelled
+    Dari pending_vendor  : bisa -> rejected
+    Dari confirmed/pending_receipt/pending_completion : bisa -> cancelled
 
     tx_attempt: jumlah berapa kali vendor reject transaksi guide.
     Jika tx_attempt >= 3 maka booking otomatis rejected.
@@ -40,6 +40,10 @@ class Booking(Base):
     package_price_snapshot  = Column(Numeric(15, 2), nullable=True)
     subtotal_package        = Column(Numeric(15, 2), nullable=True)
 
+    # Direct booking pricing (parity dengan package booking)
+    direct_price_snapshot   = Column(Numeric(15, 2), nullable=True)  # harga per-pax yang disepakati saat booking
+    subtotal_direct         = Column(Numeric(15, 2), nullable=True)  # direct_price_snapshot * pax_count
+
     # Jadwal & turis
     booking_date            = Column(Date, nullable=False)
     booking_time            = Column(Time, nullable=True)
@@ -56,11 +60,11 @@ class Booking(Base):
     cancelled_reason        = Column(Text, nullable=True)
     cancelled_at            = Column(DateTime(timezone=True), nullable=True)
 
-    # Checkin & Receipt (flow baru)
-    checkin_at              = Column(DateTime(timezone=True), nullable=True)   # saat guide checkin (confirmed → pending_receipt)
-    receipt_url             = Column(String(500), nullable=True)               # URL bukti kunjungan yang diupload guide
-    receipt_uploaded_at     = Column(DateTime(timezone=True), nullable=True)   # saat guide upload receipt (pending_receipt → pending_completion)
-    completed_at            = Column(DateTime(timezone=True), nullable=True)   # saat vendor mark completed (pending_completion → completed)
+    # Checkin & Receipt
+    checkin_at              = Column(DateTime(timezone=True), nullable=True)
+    receipt_url             = Column(String(500), nullable=True)
+    receipt_uploaded_at     = Column(DateTime(timezone=True), nullable=True)
+    completed_at            = Column(DateTime(timezone=True), nullable=True)
 
     # Revisi transaksi: berapa kali vendor reject tx guide (max 3)
     tx_attempt              = Column(Integer, default=0, nullable=False)

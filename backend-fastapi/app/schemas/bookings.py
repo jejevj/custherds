@@ -8,8 +8,10 @@ TX_MAX_ATTEMPT = 3
 
 class BookingCreate(BaseModel):
     """
-    booking_type = "direct"  : isi vendor_id + jadwal, package_id = None
-    booking_type = "package" : isi vendor_id + package_id + jadwal
+    booking_type = "direct"  : isi vendor_id + jadwal.
+                               Opsional: direct_price (harga per-pax yang disepakati).
+                               Jika tidak diisi, fallback ke vendor_min_spend.
+    booking_type = "package" : isi vendor_id + package_id + jadwal.
     """
     vendor_id: UUID4
     booking_type: str = "direct"          # "direct" | "package"
@@ -20,6 +22,9 @@ class BookingCreate(BaseModel):
     tourist_names: Optional[str] = None
     tourist_nationality: Optional[str] = None
     notes: Optional[str] = None
+    # Harga per-pax yang disepakati untuk direct booking.
+    # Jika None, akan di-fallback ke vendor_min_spend (jika ada).
+    direct_price: Optional[Decimal] = None
 
 
 class BookingVendorAction(BaseModel):
@@ -32,7 +37,7 @@ class BookingCancelRequest(BaseModel):
 
 
 class BookingCheckinRequest(BaseModel):
-    """Vendor checkin guide yang datang. confirmed → pending_receipt."""
+    """Vendor checkin guide yang datang. confirmed -> pending_receipt."""
     notes: Optional[str] = None
 
 
@@ -45,6 +50,11 @@ class BookingResponse(BaseModel):
     package_id: Optional[UUID4]
     package_price_snapshot: Optional[Decimal]
     subtotal_package: Optional[Decimal]
+
+    # Direct booking pricing
+    direct_price_snapshot: Optional[Decimal]
+    subtotal_direct: Optional[Decimal]
+
     booking_date: date
     booking_time: Optional[time]
     pax_count: int
@@ -71,14 +81,17 @@ class BookingResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    # Estimasi komisi guide: subtotal_package x guide_percent / 100
+    # Estimasi komisi guide: total_price x guide_percent / 100
     estimated_commission: Optional[Decimal] = None
 
     @computed_field
     @property
     def total_price(self) -> Optional[Decimal]:
+        """Harga total booking. Untuk package: subtotal_package. Untuk direct: subtotal_direct."""
         if self.subtotal_package is not None:
             return self.subtotal_package
+        if self.subtotal_direct is not None:
+            return self.subtotal_direct
         return None
 
     class Config:
