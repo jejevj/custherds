@@ -16,6 +16,7 @@ import {
   Upload, Receipt, Clock, Banknote, TrendingUp, ImageIcon,
   Image as ImageIcon2, CheckCircle2, AlertTriangle,
   ChevronLeft, ChevronRight, ZoomIn, ZoomOut, X, Plus, AlertCircle,
+  Zap,
 } from "lucide-react"
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
@@ -49,25 +50,15 @@ function formatRupiah(n?: number | string | null) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num)
 }
 
-/**
- * Parse extra_photos dari receipt_notes.
- * Format DB: [extra_photos:["/api/v1/uploads/xxx.jpg","/api/v1/uploads/yyy.png"]]
- * Gunakan JSON.parse agar path dengan karakter khusus tetap aman.
- */
 function parseExtraPhotos(notes: string | null | undefined): string[] {
   if (!notes) return []
   const tag = "[extra_photos:"
   const start = notes.indexOf(tag)
   if (start === -1) return []
-  const sub = notes.slice(start + tag.length) // dimulai tepat di '['
-  // Cari posisi ']' penutup array JSON
+  const sub = notes.slice(start + tag.length)
   const end = sub.indexOf("]")
   if (end === -1) return []
-  try {
-    return JSON.parse(sub.slice(0, end + 1)) as string[]
-  } catch {
-    return []
-  }
+  try { return JSON.parse(sub.slice(0, end + 1)) as string[] } catch { return [] }
 }
 
 function InfoRow({ icon, label, value, mono, highlight }: {
@@ -86,7 +77,6 @@ function InfoRow({ icon, label, value, mono, highlight }: {
   )
 }
 
-// ── Attempt Banner ────────────────────────────────────────────────────────────
 function TxAttemptBanner({ attempt, max }: { attempt: number; max: number }) {
   if (attempt === 0) return null
   const remaining = max - attempt
@@ -118,7 +108,6 @@ function TxAttemptBanner({ attempt, max }: { attempt: number; max: number }) {
   )
 }
 
-// ── Lightbox ──────────────────────────────────────────────────────────────────
 function Lightbox({ images, initialIndex, onClose }: { images: string[]; initialIndex: number; onClose: () => void }) {
   const [idx, setIdx]   = useState(initialIndex)
   const [zoom, setZoom] = useState(1)
@@ -182,15 +171,14 @@ function Lightbox({ images, initialIndex, onClose }: { images: string[]; initial
 
 interface FilePreview { file: File; url: string }
 
-// ── Main Component ────────────────────────────────────────────────────────────
 export default function GuideBookingDetailContent() {
   const { id } = useParams<{ id: string }>()
   const router  = useRouter()
 
-  const [booking,    setBooking]   = useState<Booking | null>(null)
-  const [tx,         setTx]        = useState<Transaction | null>(null)
-  const [loading,    setLoading]   = useState(true)
-  const [error,      setError]     = useState("")
+  const [booking,    setBooking]    = useState<Booking | null>(null)
+  const [tx,         setTx]         = useState<Transaction | null>(null)
+  const [loading,    setLoading]    = useState(true)
+  const [error,      setError]      = useState("")
   const [submitting, setSubmitting] = useState(false)
 
   const [lightboxImages, setLightboxImages] = useState<string[]>([])
@@ -232,9 +220,17 @@ export default function GuideBookingDetailContent() {
   useEffect(() => { fetchData() }, [fetchData])
 
   const openTxForm = () => {
+    if (!booking) return
     setShowTxForm(true)
     setTxFiles([])
-    setTxGross(booking?.subtotal_package ? String(Number(booking.subtotal_package)) : "")
+    const isPackage = booking.booking_type === "package"
+    const isDirect  = booking.booking_type === "direct"
+    const base = isPackage
+      ? String(Number(booking.subtotal_package))
+      : isDirect && booking.subtotal_direct
+      ? String(Number(booking.subtotal_direct))
+      : ""
+    setTxGross(base)
     setTxExtra(""); setTxExtraNotes(""); setTxNotes(""); setTxError("")
   }
 
@@ -252,18 +248,31 @@ export default function GuideBookingDetailContent() {
   const grossNum  = parseFloat(txGross) || 0
   const extraNum  = parseFloat(txExtra) || 0
   const isPackage = booking?.booking_type === "package"
+  const isDirect  = booking?.booking_type === "direct"
+
+  // base subtotal untuk validasi: package pakai subtotal_package, direct pakai subtotal_direct
+  const baseSubtotal = isPackage
+    ? Number(booking?.subtotal_package ?? 0)
+    : isDirect
+    ? Number(booking?.subtotal_direct ?? 0)
+    : 0
 
   const submitTransaction = async () => {
     if (!booking) return
     if (txFiles.length === 0) { setTxError("Minimal 1 foto bukti kunjungan wajib diupload."); return }
     if (!txGross || isNaN(grossNum) || grossNum <= 0) { setTxError("Nominal transaksi wajib diisi dan harus > 0."); return }
-    if (isPackage && booking.subtotal_package) {
-      const expected = Number(booking.subtotal_package) + extraNum
+
+    // Validasi gross = baseSubtotal + extra untuk package dan direct
+    if (baseSubtotal > 0) {
+      const expected = baseSubtotal + extraNum
       if (Math.abs(grossNum - expected) > 0.01) {
-        setTxError(`Nominal harus = subtotal ${formatRupiah(booking.subtotal_package)} + extra ${formatRupiah(extraNum)} = ${formatRupiah(expected)}`)
+        setTxError(
+          `Nominal harus = subtotal ${formatRupiah(baseSubtotal)} + extra ${formatRupiah(extraNum)} = ${formatRupiah(expected)}`
+        )
         return
       }
     }
+
     setSubmitting(true)
     try {
       await transactionsService.submitTransaction(booking.id, {
@@ -313,6 +322,12 @@ export default function GuideBookingDetailContent() {
   const txAttemptMax = booking.tx_attempt_max ?? 3
   const isRejectedByTx = booking.status === "rejected" && txAttempt >= txAttemptMax
 
+  // label subtotal sesuai tipe booking
+  const subtotalLabel = booking.booking_type === "direct" ? "Subtotal Direct" : "Subtotal Package"
+  const subtotalValue = booking.booking_type === "direct"
+    ? booking.subtotal_direct
+    : booking.subtotal_package
+
   return (
     <div className="space-y-6">
       {lightboxImages.length > 0 && (
@@ -333,28 +348,53 @@ export default function GuideBookingDetailContent() {
           </h1>
           <p className="text-muted-foreground font-mono text-sm">{booking.booking_code}</p>
         </div>
-        <Badge variant={STATUS_VARIANT[booking.status] ?? "secondary"} className="text-sm px-3 py-1 self-start">
-          {STATUS_LABEL[booking.status] ?? booking.status}
-        </Badge>
+        <div className="flex flex-col items-end gap-2">
+          <Badge variant={STATUS_VARIANT[booking.status] ?? "secondary"} className="text-sm px-3 py-1">
+            {STATUS_LABEL[booking.status] ?? booking.status}
+          </Badge>
+          <Badge variant="outline" className={`text-xs ${
+            booking.booking_type === "direct"
+              ? "border-amber-500/40 text-amber-400"
+              : "border-blue-500/40 text-blue-400"
+          }`}>
+            {booking.booking_type === "direct" ? <><Zap size={10} className="mr-1" />Direct</> : <><Package size={10} className="mr-1" />Package</>}
+          </Badge>
+        </div>
       </div>
 
-      {/* Banner percobaan */}
       <TxAttemptBanner attempt={txAttempt} max={txAttemptMax} />
 
-      {/* Content Grid */}
       <div className={`grid gap-6 ${ showTxPanel ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1" }`}>
 
         {/* Kolom Kiri */}
         <div className="space-y-5">
           <div className="rounded-xl border bg-card shadow-sm divide-y text-sm">
-            <InfoRow icon={<FileText size={12}/>}     label="Kode Booking"   value={booking.booking_code} mono />
-            <InfoRow icon={<CalendarDays size={12}/>} label="Tanggal"         value={new Date(booking.booking_date).toLocaleDateString("id-ID", { weekday:"long", year:"numeric", month:"long", day:"numeric" })} />
+            <InfoRow icon={<FileText size={12}/>}     label="Kode Booking"     value={booking.booking_code} mono />
+            <InfoRow icon={<CalendarDays size={12}/>} label="Tanggal"           value={new Date(booking.booking_date).toLocaleDateString("id-ID", { weekday:"long", year:"numeric", month:"long", day:"numeric" })} />
             {booking.booking_time && <InfoRow label="Waktu" value={booking.booking_time} />}
-            <InfoRow icon={<Users size={12}/>}        label="Jumlah Pax"     value={`${booking.pax_count} orang`} />
+            <InfoRow icon={<Users size={12}/>}        label="Jumlah Pax"       value={`${booking.pax_count} orang`} />
             {booking.tourist_nationality && <InfoRow label="Kewarganegaraan" value={booking.tourist_nationality} />}
+
+            {/* Package: tampilkan package_price_snapshot */}
             {booking.booking_type === "package" && booking.package_price_snapshot && (
-              <InfoRow icon={<Package size={12}/>} label="Harga / Pax" value={formatRupiah(booking.package_price_snapshot)} />
+              <InfoRow icon={<Package size={12}/>} label="Harga / Pax (Paket)" value={formatRupiah(booking.package_price_snapshot)} />
             )}
+
+            {/* Direct: tampilkan direct_price_snapshot */}
+            {booking.booking_type === "direct" && booking.direct_price_snapshot && (
+              <InfoRow icon={<Zap size={12}/>} label="Harga / Pax (Direct)" value={formatRupiah(booking.direct_price_snapshot)} highlight="amber" />
+            )}
+
+            {/* Subtotal baris (package atau direct) */}
+            {subtotalValue && (
+              <InfoRow
+                icon={<Banknote size={12}/>}
+                label={subtotalLabel}
+                value={formatRupiah(subtotalValue)}
+                highlight="amber"
+              />
+            )}
+
             {booking.checkin_at && (
               <InfoRow icon={<MapPin size={12}/>} label="Checkin" value={new Date(booking.checkin_at).toLocaleString("id-ID")} />
             )}
@@ -392,7 +432,6 @@ export default function GuideBookingDetailContent() {
             </div>
           )}
 
-          {/* Pending receipt setelah reject: warning + foto lama sebagai referensi */}
           {booking.status === "pending_receipt" && txAttempt > 0 && (
             <div className="rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3 text-sm flex items-start gap-2">
               <AlertTriangle size={14} className="text-orange-400 mt-0.5 shrink-0" />
@@ -405,7 +444,6 @@ export default function GuideBookingDetailContent() {
                   Silakan submit ulang dengan bukti yang lebih jelas.
                   Sisa percobaan: <span className="font-semibold text-orange-300">{txAttemptMax - txAttempt}x</span>
                 </p>
-
                 {showRejectedTxPhotos && (
                   <div className="mt-3">
                     <p className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
@@ -488,7 +526,7 @@ export default function GuideBookingDetailContent() {
           </div>
         </div>
 
-        {/* Kolom Kanan: Detail Transaksi aktif */}
+        {/* Kolom Kanan: Detail Transaksi */}
         {showTxPanel && (
           <div className="space-y-5">
             <h2 className="text-base font-semibold flex items-center gap-1.5 text-muted-foreground">
@@ -503,7 +541,7 @@ export default function GuideBookingDetailContent() {
                     <InfoRow label="Biaya Tambahan" value={formatRupiah(tx.extra_amount)} />
                   )}
                   {tx.extra_notes && <InfoRow label="Ket. Extra" value={tx.extra_notes} />}
-                  <InfoRow icon={<TrendingUp size={12}/>} label="Komisi Kamu"    value={formatRupiah(tx.guide_commission)} highlight="green" />
+                  <InfoRow icon={<TrendingUp size={12}/>} label="Komisi Kamu" value={formatRupiah(tx.guide_commission)} highlight="green" />
                   {Number(tx.guide_percent_snapshot) > 0 && (
                     <InfoRow label="Persentase Komisi" value={`${Number(tx.guide_percent_snapshot)}%`} highlight="amber" />
                   )}
@@ -585,18 +623,30 @@ export default function GuideBookingDetailContent() {
               </div>
             )}
 
-            {isPackage && booking?.subtotal_package && (
-              <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3 text-sm">
-                <p className="text-xs text-muted-foreground mb-1">Subtotal Package</p>
-                <p className="font-bold text-blue-400 text-base">{formatRupiah(booking.subtotal_package)}</p>
-                {booking.estimated_commission && (
+            {/* Info subtotal — package atau direct */}
+            {baseSubtotal > 0 && (
+              <div className={`rounded-lg border px-4 py-3 text-sm ${
+                isDirect
+                  ? "border-amber-500/30 bg-amber-500/5"
+                  : "border-blue-500/30 bg-blue-500/5"
+              }`}>
+                <p className="text-xs text-muted-foreground mb-1">
+                  {isDirect ? "Subtotal Direct" : "Subtotal Package"}
+                </p>
+                <p className={`font-bold text-base ${ isDirect ? "text-amber-400" : "text-blue-400" }`}>
+                  {formatRupiah(baseSubtotal)}
+                </p>
+                {booking?.estimated_commission && (
                   <p className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
                     <TrendingUp size={10} /> Estimasi komisi kamu: {formatRupiah(booking.estimated_commission)}
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground mt-1">
-                  {booking.pax_count} pax × {formatRupiah(booking.package_price_snapshot)}
-                  {" — Tambahkan extra di bawah jika ada biaya di luar package"}
+                  {isDirect
+                    ? `${booking?.pax_count} pax × ${formatRupiah(booking?.direct_price_snapshot)} (harga direct)`
+                    : `${booking?.pax_count} pax × ${formatRupiah(booking?.package_price_snapshot)}`
+                  }
+                  {" — Tambahkan extra di bawah jika ada biaya di luar"}
                 </p>
               </div>
             )}
@@ -650,9 +700,9 @@ export default function GuideBookingDetailContent() {
                 <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">Rp</span>
                 <Input id="tx-gross" type="number" min="0" placeholder="0" className="pl-9"
                   value={txGross} onChange={e => { setTxGross(e.target.value); setTxError("") }}
-                  readOnly={isPackage && extraNum === 0} />
+                  readOnly={baseSubtotal > 0 && extraNum === 0} />
               </div>
-              {isPackage && <p className="text-xs text-muted-foreground">Package: otomatis = subtotal + extra</p>}
+              {baseSubtotal > 0 && <p className="text-xs text-muted-foreground">Otomatis = subtotal + extra</p>}
             </div>
 
             <div className="space-y-1">
@@ -663,8 +713,8 @@ export default function GuideBookingDetailContent() {
                   value={txExtra}
                   onChange={e => {
                     setTxExtra(e.target.value); setTxError("")
-                    if (isPackage && booking?.subtotal_package)
-                      setTxGross(String(Number(booking.subtotal_package) + (parseFloat(e.target.value) || 0)))
+                    if (baseSubtotal > 0)
+                      setTxGross(String(baseSubtotal + (parseFloat(e.target.value) || 0)))
                   }} />
               </div>
             </div>
@@ -689,7 +739,7 @@ export default function GuideBookingDetailContent() {
                   <p className="text-xs text-muted-foreground">Total Transaksi</p>
                   {extraNum > 0 && (
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {formatRupiah(Number(booking?.subtotal_package ?? grossNum - extraNum))} + extra {formatRupiah(extraNum)}
+                      {formatRupiah(baseSubtotal || grossNum - extraNum)} + extra {formatRupiah(extraNum)}
                     </p>
                   )}
                 </div>
