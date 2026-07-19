@@ -1,13 +1,14 @@
 "use client"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { adminService, AdminTransaction } from "@/services/admin.service"
 import { Badge } from "@/components/ui/badge"
+import { ChevronLeft, ChevronRight, Search, SlidersHorizontal } from "lucide-react"
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
-  settled:          "default",
-  payment_pending:  "secondary",
-  payment_failed:   "destructive",
-  rejected:         "destructive",
+  settled:                 "default",
+  payment_pending:         "secondary",
+  payment_failed:          "destructive",
+  rejected:                "destructive",
   pending_vendor_approval: "secondary",
 }
 
@@ -18,6 +19,8 @@ const STATUS_LABEL: Record<string, string> = {
   rejected:                "Ditolak",
   pending_vendor_approval: "Menunggu Vendor",
 }
+
+const PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 function fmt(n?: string | null) {
   if (n == null || n === "") return "-"
@@ -35,6 +38,11 @@ export default function AdminTransactionsPage() {
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState("")
 
+  const [search,   setSearch]   = useState("")
+  const [statusF,  setStatusF]  = useState("")
+  const [perPage,  setPerPage]  = useState(25)
+  const [page,     setPage]     = useState(1)
+
   useEffect(() => {
     adminService.listTransactions()
       .then(setData)
@@ -42,57 +50,217 @@ export default function AdminTransactionsPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  const filtered = useMemo(() => {
+    let d = data
+    if (statusF) d = d.filter(t => t.status === statusF)
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      d = d.filter(t =>
+        t.transaction_code.toLowerCase().includes(q) ||
+        t.id.toLowerCase().includes(q)
+      )
+    }
+    return d
+  }, [data, statusF, search])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage))
+  const safePage   = Math.min(page, totalPages)
+  const slice      = filtered.slice((safePage - 1) * perPage, safePage * perPage)
+
+  const handleSearch = (v: string) => { setSearch(v); setPage(1) }
+  const handleStatus = (v: string) => { setStatusF(v); setPage(1) }
+  const handlePerPage = (v: number) => { setPerPage(v); setPage(1) }
+
+  const pageNumbers = () => {
+    const pages: (number | "...")[] = []
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i)
+    } else {
+      pages.push(1)
+      if (safePage > 3)             pages.push("...")
+      for (let i = Math.max(2, safePage - 1); i <= Math.min(totalPages - 1, safePage + 1); i++) pages.push(i)
+      if (safePage < totalPages - 2) pages.push("...")
+      pages.push(totalPages)
+    }
+    return pages
+  }
+
+  const uniqueStatuses = useMemo(() => Array.from(new Set(data.map(t => t.status))), [data])
+
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Transactions</h1>
-        <p className="text-muted-foreground">Seluruh transaksi di platform.</p>
+        <p className="text-muted-foreground text-sm">Seluruh transaksi di platform.</p>
       </div>
-      {error && <p className="text-sm text-red-500">{error}</p>}
-      <div className="rounded-xl border bg-card shadow-sm overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-muted-foreground border-b bg-muted/40">
-              <th className="px-4 py-3 font-medium">Kode</th>
-              <th className="px-4 py-3 font-medium">Gross Total</th>
-              <th className="px-4 py-3 font-medium">Vendor Share</th>
-              <th className="px-4 py-3 font-medium">Komisi Guide</th>
-              <th className="px-4 py-3 font-medium">Fee Platform</th>
-              <th className="px-4 py-3 font-medium">Metode</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Tanggal</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={8} className="text-center py-10 text-muted-foreground">Memuat...</td></tr>
-            ) : data.length === 0 ? (
-              <tr><td colSpan={8} className="text-center py-10 text-muted-foreground">Tidak ada data.</td></tr>
-            ) : data.map(t => (
-              <tr key={t.id} className="border-b last:border-0 hover:bg-muted/30">
-                <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                  <span className="block">{t.transaction_code}</span>
-                  <span className="text-[10px] text-muted-foreground/60">{t.id.slice(0, 8)}…</span>
-                </td>
-                <td className="px-4 py-3 font-medium">{fmt(t.gross_amount)}</td>
-                <td className="px-4 py-3 text-blue-400">{fmt(t.vendor_amount)}</td>
-                <td className="px-4 py-3">{fmt(t.guide_commission)}</td>
-                <td className="px-4 py-3">{fmt(t.platform_fee)}</td>
-                <td className="px-4 py-3 text-muted-foreground text-xs">
-                  {t.payment_method ?? "-"}
-                </td>
-                <td className="px-4 py-3">
-                  <Badge variant={STATUS_VARIANT[t.status] ?? "secondary"}>
-                    {STATUS_LABEL[t.status] ?? t.status}
-                  </Badge>
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {new Date(t.created_at).toLocaleDateString("id-ID")}
-                </td>
+
+      {error && (
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          {error}
+        </div>
+      )}
+
+      {/* Glass card */}
+      <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md shadow-xl overflow-hidden">
+
+        {/* Toolbar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-white/10 bg-white/5">
+          {/* Search */}
+          <div className="relative flex items-center">
+            <Search size={14} className="absolute left-3 text-muted-foreground pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Cari kode / ID..."
+              value={search}
+              onChange={e => handleSearch(e.target.value)}
+              className="pl-8 pr-3 py-1.5 text-sm rounded-lg bg-white/10 border border-white/15 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-white/30 w-52 transition"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Status filter */}
+            <div className="relative flex items-center">
+              <SlidersHorizontal size={13} className="absolute left-2.5 text-muted-foreground pointer-events-none" />
+              <select
+                value={statusF}
+                onChange={e => handleStatus(e.target.value)}
+                className="pl-7 pr-3 py-1.5 text-sm rounded-lg bg-white/10 border border-white/15 text-foreground focus:outline-none focus:ring-1 focus:ring-white/30 appearance-none cursor-pointer transition"
+              >
+                <option value="">Semua Status</option>
+                {uniqueStatuses.map(s => (
+                  <option key={s} value={s}>{STATUS_LABEL[s] ?? s}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Per-page */}
+            <select
+              value={perPage}
+              onChange={e => handlePerPage(Number(e.target.value))}
+              className="px-3 py-1.5 text-sm rounded-lg bg-white/10 border border-white/15 text-foreground focus:outline-none focus:ring-1 focus:ring-white/30 appearance-none cursor-pointer transition"
+            >
+              {PER_PAGE_OPTIONS.map(n => (
+                <option key={n} value={n}>{n} baris</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left border-b border-white/10 bg-white/5">
+                {["Kode Transaksi", "Gross Total", "Vendor Share", "Komisi Guide", "Fee Platform", "Metode", "Status", "Tanggal"].map(h => (
+                  <th key={h} className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground whitespace-nowrap">{h}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="py-16 text-center">
+                    <div className="inline-flex flex-col items-center gap-3 text-muted-foreground">
+                      <div className="w-8 h-8 rounded-full border-2 border-white/20 border-t-white/60 animate-spin" />
+                      <span className="text-sm">Memuat data...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : slice.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-16 text-center text-muted-foreground text-sm">
+                    Tidak ada transaksi ditemukan.
+                  </td>
+                </tr>
+              ) : slice.map((t, i) => (
+                <tr
+                  key={t.id}
+                  className={`border-b border-white/5 transition-colors hover:bg-white/5 ${
+                    i % 2 === 0 ? "bg-transparent" : "bg-white/[0.02]"
+                  }`}
+                >
+                  <td className="px-4 py-3">
+                    <span className="font-mono text-xs font-semibold text-foreground">{t.transaction_code}</span>
+                    <span className="block font-mono text-[10px] text-muted-foreground/60 mt-0.5">{t.id.slice(0, 8)}…</span>
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-foreground whitespace-nowrap">{fmt(t.gross_amount)}</td>
+                  <td className="px-4 py-3 text-blue-400 whitespace-nowrap">{fmt(t.vendor_amount)}</td>
+                  <td className="px-4 py-3 text-emerald-400 whitespace-nowrap">{fmt(t.guide_commission)}</td>
+                  <td className="px-4 py-3 text-amber-400 whitespace-nowrap">{fmt(t.platform_fee)}</td>
+                  <td className="px-4 py-3">
+                    <span className="text-xs text-muted-foreground">
+                      {t.payment_method === "deposit" ? "Deposit" :
+                       t.payment_method === "pay_as_you_go" ? "QRIS" :
+                       t.payment_method ?? "-"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge variant={STATUS_VARIANT[t.status] ?? "secondary"} className="text-xs">
+                      {STATUS_LABEL[t.status] ?? t.status}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                    {new Date(t.created_at).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination footer */}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-white/10 bg-white/5">
+          <p className="text-xs text-muted-foreground">
+            Menampilkan{" "}
+            <span className="font-semibold text-foreground">
+              {filtered.length === 0 ? 0 : (safePage - 1) * perPage + 1}
+            </span>
+            {" "}–{" "}
+            <span className="font-semibold text-foreground">
+              {Math.min(safePage * perPage, filtered.length)}
+            </span>
+            {" "}dari{" "}
+            <span className="font-semibold text-foreground">{filtered.length}</span>
+            {" "}transaksi
+          </p>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={safePage === 1}
+              className="p-1.5 rounded-lg border border-white/15 bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition"
+            >
+              <ChevronLeft size={14} />
+            </button>
+
+            {pageNumbers().map((p, i) =>
+              p === "..." ? (
+                <span key={`ellipsis-${i}`} className="px-2 text-muted-foreground text-xs select-none">…</span>
+              ) : (
+                <button
+                  key={p}
+                  onClick={() => setPage(p as number)}
+                  className={`min-w-[32px] h-8 px-2 rounded-lg text-xs font-medium border transition ${
+                    safePage === p
+                      ? "bg-white/20 border-white/30 text-foreground shadow-inner"
+                      : "border-white/10 bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-foreground"
+                  }`}
+                >
+                  {p}
+                </button>
+              )
+            )}
+
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={safePage === totalPages}
+              className="p-1.5 rounded-lg border border-white/15 bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )
