@@ -255,18 +255,23 @@ async def vendor_approve_transaction(
         private_key   = creds.get("private_key", "")
         client_secret = creds.get("secret_key") or creds.get("client_secret", "")
 
+        # nmid = Merchant ID yang terdaftar di DOKU (field ID2026XXXXXXXXX dari dashboard DOKU)
+        # Berbeda dengan client_id (BRN-XXXX). Wajib untuk endpoint qr-mpm-generate.
         merchant_id = (
-            creds.get("qris_merchant_id")
+            creds.get("qris_nmid")
+            or creds.get("nmid")
+            or creds.get("qris_merchant_id")
             or creds.get("merchant_id")
-            or client_id
         )
+        # terminal_id = Terminal ID dari DOKU Dashboard (misal: A01)
         terminal_id = (
             creds.get("qris_terminal_id")
-            or creds.get("terminal_id", "TERM001")
+            or creds.get("terminal_id")
+            or "A01"
         )
 
         logger.info(
-            f"[DOKU] client_id={client_id} merchant_id={merchant_id} "
+            f"[DOKU] client_id={client_id} merchant_id(nmid)={merchant_id} "
             f"terminal_id={terminal_id} secret_len={len(client_secret)}"
         )
 
@@ -274,6 +279,12 @@ async def vendor_approve_transaction(
             raise HTTPException(503, "Konfigurasi DOKU belum lengkap (client_id / private_key).")
         if not client_secret:
             raise HTTPException(503, "Konfigurasi DOKU belum lengkap (secret_key).")
+        if not merchant_id:
+            raise HTTPException(
+                503,
+                "Konfigurasi DOKU belum lengkap: 'qris_nmid' tidak ditemukan di credentials. "
+                "Isi field 'qris_nmid' dengan NMID dari DOKU Dashboard (contoh: ID2026XXXXXXXXX)."
+            )
 
         ts = int(datetime.now(timezone.utc).timestamp())
         order_id = f"CST-{tx.transaction_code}-{ts}"
