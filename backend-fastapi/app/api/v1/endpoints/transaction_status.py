@@ -1,22 +1,18 @@
 """
 Polling endpoint: GET /api/v1/transactions/{tx_id}/payment-status
 
-Field mapping TX model:
-  xendit_invoice_id  = referenceNo DOKU (dari response generate);
-                       jika DOKU tidak kembalikan referenceNo, fallback ke partnerReferenceNo
-                       (format CST-TX...-timestamp)
-  xendit_invoice_url = qris_string (konten QRIS untuk render QR code)
-
-Query DOKU:
-  originalReferenceNo        = xendit_invoice_id  (referenceNo DOKU)
-  originalPartnerReferenceNo = xendit_invoice_id  (sama, karena mungkin DOKU echo partnerRef)
+DOKU latestTransactionStatus mapping:
+  00 = Paid/Success       -> settle TX
+  03 = Pending            -> no-op (keep payment_pending)
+  05 = Canceled/Expired   -> payment_failed
+  anything else           -> no-op
 """
 from __future__ import annotations
 
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -41,6 +37,9 @@ DOKU_SANDBOX      = "https://api-sandbox.doku.com"
 DOKU_PROD         = "https://api.doku.com"
 QRIS_QUERY_PATH   = "/snap-adapter/b2b/v1.0/qr/qr-mpm-query"
 QRIS_SERVICE_CODE = "47"
+
+# Minimum interval (seconds) antara dua query DOKU untuk TX yang sama
+MIN_QUERY_INTERVAL_SEC = 4
 
 
 def _get_gateway(db: Session) -> PaymentGatewayConfig | None:
@@ -117,7 +116,6 @@ async def _query_doku_qris(tx: Transaction, gateway: PaymentGatewayConfig) -> di
         logger.error(f"[DOKU:query] HTTP error: {e}")
         return None
 
-    # ---- FULL RESPONSE LOG ----
     logger.info(
         f"[DOKU:query:RESPONSE] TX={tx.transaction_code} "
         f"HTTP={resp.status_code} "
@@ -193,6 +191,7 @@ async def get_payment_status(
     if not tx:
         raise HTTPException(404, "Transaksi tidak ditemukan")
 
+    # Jika sudah terminal, kembalikan langsung tanpa query DOKU
     if tx.status in ("settled", "payment_failed", "rejected"):
         return {
             "tx_id":      str(tx.id),
@@ -202,6 +201,23 @@ async def get_payment_status(
         }
 
     if tx.status == "payment_pending":
+        # Rate-limit: jangan query DOKU jika request terakhir < MIN_QUERY_INTERVAL_SEC yang lalu
+        now_utc = datetime.now(timezone.utc)
+        last_updated = tx.updated_at
+        if last_updated and last_updated.tzinfo is None:
+            last_updated = last_updated.replace(tzinfo=timezone.utc)
+        if last_updated and (now_utc - last_updated).total_seconds() < MIN_QUERY_INTERVAL_SEC:
+            logger.debug(
+                f"[DOKU:query] TX {tx.transaction_code} — skip, last update "
+                f"{(now_utc - last_updated).total_seconds():.1f}s ago"
+            )
+            return {
+                "tx_id":      str(tx.id),
+                "status":     tx.status,
+                "paid_at":    None,
+                "settled_at": None,
+            }
+
         gateway = _get_gateway(db)
         if gateway:
             doku_resp = await _query_doku_qris(tx, gateway)
@@ -213,14 +229,22 @@ async def get_payment_status(
                     or ""
                 )
 
-                if status_code == "00":           # PAID
+                if status_code == "00":
+                    # Paid/Success — settle
                     await _settle_transaction(tx, db, doku_ref)
                     db.refresh(tx)
-                elif status_code in ("03", "05"): # FAILED / EXPIRED
+                elif status_code == "05":
+                    # Canceled/Expired — tandai gagal
                     tx.status = "payment_failed"
                     db.commit()
                     db.refresh(tx)
-                # status lain (pending, dll) — tidak diubah
+                    logger.info(f"[DOKU:query] TX {tx.transaction_code} marked payment_failed (status=05)")
+                else:
+                    # 03 = Pending, atau status lain — no-op, biarkan payment_pending
+                    logger.info(
+                        f"[DOKU:query] TX {tx.transaction_code} still pending "
+                        f"(latestTransactionStatus={status_code})"
+                    )
 
     return {
         "tx_id":      str(tx.id),
