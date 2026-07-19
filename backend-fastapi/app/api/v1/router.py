@@ -15,10 +15,6 @@ from app.api.v1.endpoints import (
     payments,
     uploads,
     payment_gateway_config,
-    destinations,
-    reviews,
-    orders,
-    products,
 )
 
 api_router = APIRouter()
@@ -38,7 +34,3 @@ api_router.include_router(admin.router,                    prefix="/admin",     
 api_router.include_router(webhooks.router,                 prefix="/webhooks",                      tags=["Webhooks"])
 api_router.include_router(payments.router,                 prefix="/payments",                      tags=["Payments"])
 api_router.include_router(payment_gateway_config.router,   prefix="/admin/payment-gateway-config",  tags=["Admin"])
-api_router.include_router(destinations.router,             prefix="/destinations",                  tags=["Destinations"])
-api_router.include_router(reviews.router,                  prefix="/reviews",                       tags=["Reviews"])
-api_router.include_router(orders.router,                   prefix="/orders",                        tags=["Orders"])
-api_router.include_router(products.router,                 prefix="/products",                      tags=["Products"])
