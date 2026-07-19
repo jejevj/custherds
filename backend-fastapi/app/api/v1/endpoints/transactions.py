@@ -74,6 +74,65 @@ async def _disburse_guide_commission(tx: Transaction, db: Session) -> None:
         logger.error(f"[Disbursement] GAGAL | guide={guide.id} | tx={tx.transaction_code} | error={str(e)}")
 
 
+async def _create_doku_qris(tx: Transaction, tagihan: Decimal, db: Session) -> dict:
+    """Generate DOKU QRIS untuk TX. Return dict dengan qris_string, doku_ref, partner_ref."""
+    gateway = _get_active_gateway(db)
+    if not gateway:
+        raise HTTPException(503, "Tidak ada payment gateway aktif. Hubungi admin.")
+
+    creds: dict   = gateway.credentials or {}
+    base_url      = "https://api.doku.com" if gateway.is_production else "https://api-sandbox.doku.com"
+    client_id     = creds.get("client_id", "")
+    private_key   = creds.get("private_key", "")
+    client_secret = creds.get("secret_key") or creds.get("client_secret", "")
+    merchant_id   = creds.get("qris_merchant_id") or creds.get("merchant_id")
+    terminal_id   = creds.get("qris_terminal_id") or creds.get("terminal_id") or "A01"
+
+    if not client_id or not private_key:
+        raise HTTPException(503, "Konfigurasi DOKU belum lengkap (client_id / private_key).")
+    if not client_secret:
+        raise HTTPException(503, "Konfigurasi DOKU belum lengkap (secret_key).")
+    if not merchant_id:
+        raise HTTPException(503, "Konfigurasi DOKU belum lengkap: 'qris_merchant_id' tidak ditemukan.")
+
+    ts       = int(datetime.now(timezone.utc).timestamp())
+    order_id = f"CST-{tx.transaction_code}-{ts}"
+
+    try:
+        from app.services.doku import create_qris
+        doku_result = await create_qris(
+            base_url=base_url,
+            client_id=client_id,
+            private_key_pem=private_key,
+            client_secret=client_secret,
+            order_id=order_id,
+            amount=int(tagihan),
+            merchant_id=merchant_id,
+            terminal_id=terminal_id,
+            expired_time=30,
+        )
+    except Exception as e:
+        logger.error(f"[DOKU QRIS] Gagal buat QRIS untuk TX {tx.transaction_code}: {e}")
+        raise HTTPException(502, f"Gagal membuat QRIS DOKU: {str(e)}")
+
+    doku_ref    = doku_result.get("doku_reference_no") or doku_result.get("reference_no", "")
+    partner_ref = doku_result.get("partner_reference_no") or order_id
+    qris_string = doku_result.get("qris_string") or ""
+
+    logger.info(
+        f"[DOKU QRIS] TX={tx.transaction_code} "
+        f"doku_referenceNo={doku_ref} "
+        f"partnerReferenceNo={partner_ref} "
+        f"qris_string_len={len(qris_string)}"
+    )
+
+    return {
+        "qris_string":   qris_string,
+        "doku_ref":      doku_ref or partner_ref,
+        "partner_ref":   partner_ref,
+    }
+
+
 @router.post("", response_model=TransactionResponse, status_code=201, summary="Guide submit nota transaksi")
 def create_transaction(
     payload: TransactionCreate,
@@ -202,7 +261,7 @@ async def vendor_approve_transaction(
 
     tagihan = tx.guide_commission + tx.platform_fee
 
-    # ── DEPOSIT ─────────────────────────────────────────────────────────────
+    # ── DEPOSIT ────────────────────────────────────────────────────────────
     if payload.payment_method == "deposit":
         if vendor.deposit_balance < tagihan:
             raise HTTPException(
@@ -243,74 +302,15 @@ async def vendor_approve_transaction(
             message="Pembayaran via deposit berhasil. Komisi guide sedang diproses ke rekening.",
         )
 
-    # ── PAY AS YOU GO — DOKU SNAP QRIS ─────────────────────────────────────
+    # ── PAY AS YOU GO — DOKU SNAP QRIS ────────────────────────────────────
     elif payload.payment_method == "pay_as_you_go":
-        gateway = _get_active_gateway(db)
-        if not gateway:
-            raise HTTPException(503, "Tidak ada payment gateway aktif. Hubungi admin.")
-
-        creds: dict   = gateway.credentials or {}
-        base_url      = "https://api.doku.com" if gateway.is_production else "https://api-sandbox.doku.com"
-        client_id     = creds.get("client_id", "")
-        private_key   = creds.get("private_key", "")
-        client_secret = creds.get("secret_key") or creds.get("client_secret", "")
-        merchant_id   = creds.get("qris_merchant_id") or creds.get("merchant_id")
-        terminal_id   = creds.get("qris_terminal_id") or creds.get("terminal_id") or "A01"
-
-        logger.info(
-            f"[DOKU] client_id={client_id} merchant_id={merchant_id} "
-            f"terminal_id={terminal_id} secret_len={len(client_secret)}"
-        )
-
-        if not client_id or not private_key:
-            raise HTTPException(503, "Konfigurasi DOKU belum lengkap (client_id / private_key).")
-        if not client_secret:
-            raise HTTPException(503, "Konfigurasi DOKU belum lengkap (secret_key).")
-        if not merchant_id:
-            raise HTTPException(503, "Konfigurasi DOKU belum lengkap: 'qris_merchant_id' tidak ditemukan.")
-
-        ts       = int(datetime.now(timezone.utc).timestamp())
-        order_id = f"CST-{tx.transaction_code}-{ts}"
-
-        try:
-            from app.services.doku import create_qris
-            doku_result = await create_qris(
-                base_url=base_url,
-                client_id=client_id,
-                private_key_pem=private_key,
-                client_secret=client_secret,
-                order_id=order_id,
-                amount=int(tagihan),
-                merchant_id=merchant_id,
-                terminal_id=terminal_id,
-                expired_time=30,
-            )
-        except Exception as e:
-            logger.error(f"[DOKU QRIS] Gagal buat QRIS untuk TX {tx.transaction_code}: {e}")
-            raise HTTPException(502, f"Gagal membuat QRIS DOKU: {str(e)}")
-
-        # Simpan referenceNo DOKU asli di xendit_invoice_id (untuk query status)
-        # Simpan partnerReferenceNo (order_id kita) di vendor_rejection_reason sementara
-        # karena tidak ada field terpisah — log saja
-        doku_ref     = doku_result.get("doku_reference_no") or doku_result.get("reference_no", "")
-        partner_ref  = doku_result.get("partner_reference_no") or order_id
-        qris_string  = doku_result.get("qris_string") or ""
-
-        logger.info(
-            f"[DOKU QRIS] TX={tx.transaction_code} "
-            f"doku_referenceNo={doku_ref} "
-            f"partnerReferenceNo={partner_ref} "
-            f"qris_string_len={len(qris_string)}"
-        )
+        qris = await _create_doku_qris(tx, tagihan, db)
 
         tx.status             = "payment_pending"
         tx.payment_method     = "pay_as_you_go"
         tx.vendor_reviewed_at = datetime.now(timezone.utc)
-        # xendit_invoice_url = qris_string (konten QRIS untuk di-render QR)
-        # xendit_invoice_id  = referenceNo DOKU (untuk query status)
-        #                       jika DOKU tidak kembalikan referenceNo, fallback ke partnerReferenceNo
-        tx.xendit_invoice_url = qris_string
-        tx.xendit_invoice_id  = doku_ref or partner_ref
+        tx.xendit_invoice_url = qris["qris_string"]
+        tx.xendit_invoice_id  = qris["doku_ref"]
 
         db.commit()
         db.refresh(tx)
@@ -319,14 +319,65 @@ async def vendor_approve_transaction(
             transaction=tx,
             payment_method="pay_as_you_go",
             invoice_url=None,
-            xendit_invoice_id=doku_ref or partner_ref,
-            qris_string=qris_string,
-            doku_reference_no=doku_ref or partner_ref,
+            xendit_invoice_id=qris["doku_ref"],
+            qris_string=qris["qris_string"],
+            doku_reference_no=qris["doku_ref"],
             message="QRIS DOKU berhasil dibuat. Silakan scan QR untuk menyelesaikan pembayaran.",
         )
 
     else:
         raise HTTPException(400, "payment_method harus 'deposit' atau 'pay_as_you_go'")
+
+
+@router.post("/{tx_id}/retry-payment", response_model=TransactionInvoiceResponse, summary="Vendor retry QRIS setelah expired/gagal")
+async def retry_payment(
+    tx_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_user_type(2)),
+) -> Any:
+    """
+    Generate ulang QRIS untuk TX yang statusnya payment_failed atau payment_pending
+    (QRIS lama expired). Reset ke payment_pending dengan QRIS baru.
+    """
+    vendor = db.query(Vendor).filter(Vendor.user_id == current_user.id).first()
+    if not vendor:
+        raise HTTPException(404, "Vendor tidak ditemukan")
+
+    tx = db.query(Transaction).filter(
+        Transaction.id == tx_id,
+        Transaction.vendor_id == vendor.id,
+    ).first()
+    if not tx:
+        raise HTTPException(404, "Transaksi tidak ditemukan")
+
+    if tx.status not in ("payment_failed", "payment_pending"):
+        raise HTTPException(
+            400,
+            f"Retry hanya bisa untuk TX payment_failed atau payment_pending. "
+            f"Status saat ini: {tx.status}"
+        )
+
+    tagihan = tx.guide_commission + tx.platform_fee
+    qris = await _create_doku_qris(tx, tagihan, db)
+
+    tx.status             = "payment_pending"
+    tx.xendit_invoice_url = qris["qris_string"]
+    tx.xendit_invoice_id  = qris["doku_ref"]
+
+    db.commit()
+    db.refresh(tx)
+
+    logger.info(f"[RetryPayment] TX {tx.transaction_code} QRIS baru dibuat oleh vendor {vendor.id}")
+
+    return TransactionInvoiceResponse(
+        transaction=tx,
+        payment_method="pay_as_you_go",
+        invoice_url=None,
+        xendit_invoice_id=qris["doku_ref"],
+        qris_string=qris["qris_string"],
+        doku_reference_no=qris["doku_ref"],
+        message="QRIS baru berhasil dibuat. Silakan scan ulang untuk menyelesaikan pembayaran.",
+    )
 
 
 @router.post("/{tx_id}/reject", response_model=TransactionResponse, summary="Vendor reject transaksi")
@@ -381,7 +432,7 @@ def get_invoice_url(
         payment_method=tx.payment_method,
         invoice_url=None,
         xendit_invoice_id=tx.xendit_invoice_id,
-        qris_string=tx.xendit_invoice_url,   # xendit_invoice_url = qris_string
+        qris_string=tx.xendit_invoice_url,
         doku_reference_no=tx.xendit_invoice_id,
         message="QRIS aktif.",
     )
@@ -395,7 +446,7 @@ def get_invoice_url(
 async def manual_settle_transaction(
     tx_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_user_type(0)),  # admin only
+    current_user: User = Depends(require_user_type(0)),
 ) -> Any:
     tx = db.query(Transaction).filter(Transaction.id == tx_id).first()
     if not tx:

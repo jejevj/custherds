@@ -13,7 +13,7 @@ import {
   ArrowLeft, FileText, CalendarDays, Users, Package, MapPin,
   Upload, CheckCircle, XCircle, CheckCircle2, Receipt, AlertCircle,
   CreditCard, Banknote, ZoomIn, ChevronLeft, ChevronRight, X, Loader2,
-  QrCode,
+  QrCode, RefreshCw,
 } from "lucide-react"
 import { api } from "@/services/api"
 
@@ -133,33 +133,21 @@ function QrisModal({ qrisString, referenceNo, onClose }: { qrisString: string; r
             <X size={18} />
           </button>
         </div>
-
         <div className="border-4 border-emerald-500 rounded-xl p-2 bg-white">
-          <QRCode
-            value={qrisString}
-            size={220}
-            level="M"
-            includeMargin={false}
-          />
+          <QRCode value={qrisString} size={220} level="M" includeMargin={false} />
         </div>
-
         <div className="text-center space-y-1">
           <p className="text-xs text-gray-500">Gunakan aplikasi bank / e-wallet apapun</p>
           {referenceNo && (
             <p className="text-[10px] text-gray-400 font-mono">Ref: {referenceNo}</p>
           )}
         </div>
-
         <div className="w-full rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
           <p className="text-[11px] text-amber-700 text-center">
             QR berlaku <strong>30 menit</strong>. Halaman otomatis update setelah pembayaran.
           </p>
         </div>
-
-        <button
-          onClick={onClose}
-          className="w-full text-sm text-gray-500 hover:text-gray-700 py-1"
-        >
+        <button onClick={onClose} className="w-full text-sm text-gray-500 hover:text-gray-700 py-1">
           Tutup
         </button>
       </div>
@@ -208,6 +196,7 @@ export default function BookingDetailContent() {
   const [loading, setLoading]         = useState(true)
   const [error, setError]             = useState("")
   const [submitting, setSubmitting]   = useState(false)
+  const [retrying, setRetrying]       = useState(false)
   const [actionError, setActionError] = useState("")
   const [polling, setPolling]         = useState(false)
 
@@ -217,9 +206,8 @@ export default function BookingDetailContent() {
   const [txRejectReason, setTxRejectReason] = useState("")
   const [showPayMethod, setShowPayMethod]   = useState(false)
 
-  // QRIS state
-  const [qrisString, setQrisString]     = useState<string | null>(null)
-  const [dokuRefNo, setDokuRefNo]       = useState<string | null>(null)
+  const [qrisString, setQrisString]       = useState<string | null>(null)
+  const [dokuRefNo, setDokuRefNo]         = useState<string | null>(null)
   const [showQrisModal, setShowQrisModal] = useState(false)
 
   const pollTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -267,13 +255,11 @@ export default function BookingDetailContent() {
       pollAttemptsRef.current++
 
       try {
-        // Hit /payment-status — backend akan query DOKU dan auto-settle jika paid
         const result = await api.get<PaymentStatusResponse>(`/transactions/${txId}/payment-status`)
 
         if (result.status === "settled") {
           stopPolling()
           setShowQrisModal(false)
-          // Refresh full booking + tx dari DB
           const [latestBooking, latestTx] = await Promise.all([
             bookingsService.get(id),
             transactionsService.getByBookingId(id),
@@ -291,8 +277,8 @@ export default function BookingDetailContent() {
           stopPolling()
           setShowQrisModal(false)
           setTx(prev => prev ? { ...prev, status: "payment_failed" } : prev)
-          toast.error("Pembayaran gagal atau kedaluwarsa.", {
-            description: "Silakan approve ulang transaksi untuk generate QRIS baru.",
+          toast.error("QRIS expired atau pembayaran gagal.", {
+            description: "Klik \"Bayar Ulang\" untuk generate QRIS baru.",
             duration: 8000,
           })
           return
@@ -309,7 +295,6 @@ export default function BookingDetailContent() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  // Mulai polling otomatis saat tx berubah ke payment_pending
   useEffect(() => {
     if (tx?.status === "payment_pending" && tx?.id) {
       startPolling(tx.id)
@@ -318,6 +303,27 @@ export default function BookingDetailContent() {
     }
     return () => { stopPolling() }
   }, [tx?.status, tx?.id]) // eslint-disable-line
+
+  // ── Retry QRIS ─────────────────────────────────────────────────────────
+  const handleRetryPayment = async () => {
+    if (!tx) return
+    setRetrying(true)
+    try {
+      const result = await transactionsService.retryPayment(tx.id)
+      setTx(result.transaction)
+      if (result.qris_string) {
+        setQrisString(result.qris_string)
+        setDokuRefNo(result.doku_reference_no ?? null)
+        setShowQrisModal(true)
+      }
+      toast.success("QRIS baru berhasil dibuat!", { description: "Silakan scan QR untuk menyelesaikan pembayaran.", duration: 5000 })
+    } catch (err: unknown) {
+      const detail = (err as { detail?: string })?.detail ?? "Gagal membuat QRIS baru."
+      toast.error("Gagal retry pembayaran", { description: detail, duration: 6000 })
+    } finally {
+      setRetrying(false)
+    }
+  }
 
   const handleApprove = async () => {
     if (!booking) return
@@ -413,6 +419,7 @@ export default function BookingDetailContent() {
   const isNeedTxReview    = booking.status === "pending_completion"
   const txPendingApproval = tx?.status === "pending_vendor_approval"
   const txPaymentPending  = tx?.status === "payment_pending"
+  const txPaymentFailed   = tx?.status === "payment_failed"
 
   const txPhotos: string[] = tx
     ? [
@@ -427,7 +434,6 @@ export default function BookingDetailContent() {
   return (
     <div className="w-full space-y-5 py-6 px-4">
 
-      {/* ── QR Modal ── */}
       {showQrisModal && activeQris && (
         <QrisModal
           qrisString={activeQris}
@@ -453,6 +459,7 @@ export default function BookingDetailContent() {
         </Badge>
       </div>
 
+      {/* Banner: menunggu QRIS */}
       {txPaymentPending && polling && (
         <div className="flex items-center gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-300">
           <Loader2 size={14} className="animate-spin shrink-0" />
@@ -465,6 +472,24 @@ export default function BookingDetailContent() {
               <QrCode size={13} /> Lihat QR
             </button>
           )}
+        </div>
+      )}
+
+      {/* Banner: QRIS expired — tawarkan retry */}
+      {txPaymentFailed && isNeedTxReview && (
+        <div className="flex items-center gap-2.5 rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-3 text-sm text-red-300">
+          <XCircle size={14} className="shrink-0" />
+          <span>QRIS expired atau pembayaran gagal. Generate QRIS baru untuk melanjutkan.</span>
+          <button
+            onClick={handleRetryPayment}
+            disabled={retrying}
+            className="ml-auto shrink-0 flex items-center gap-1.5 text-xs bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white px-3 py-1.5 rounded-lg transition"
+          >
+            {retrying
+              ? <Loader2 size={12} className="animate-spin" />
+              : <RefreshCw size={12} />}
+            Bayar Ulang
+          </button>
         </div>
       )}
 
@@ -571,6 +596,18 @@ export default function BookingDetailContent() {
                 </div>
               </div>
             )}
+            {/* Tombol Bayar Ulang di area aksi (fallback jika banner tidak terlihat) */}
+            {isNeedTxReview && txPaymentFailed && (
+              <Button
+                onClick={handleRetryPayment}
+                disabled={retrying}
+                className="bg-orange-500 hover:bg-orange-400 text-black font-semibold"
+              >
+                {retrying
+                  ? <><Loader2 size={14} className="mr-1 animate-spin" /> Membuat QRIS...</>
+                  : <><RefreshCw size={14} className="mr-1" /> Bayar Ulang (QRIS Baru)</>}
+              </Button>
+            )}
           </div>
         </div>
 
@@ -588,7 +625,7 @@ export default function BookingDetailContent() {
                   {tx!.status === "pending_vendor_approval" ? "Menunggu Approval" :
                    tx!.status === "settled"         ? "Settled" :
                    tx!.status === "payment_pending" ? "Menunggu Bayar" :
-                   tx!.status === "payment_failed"  ? "Gagal" :
+                   tx!.status === "payment_failed"  ? "Gagal / Expired" :
                    tx!.status === "rejected"        ? "Ditolak" : tx!.status}
                 </Badge>
               </div>
@@ -628,22 +665,35 @@ export default function BookingDetailContent() {
                 </div>
               </div>
 
-              {/* ── QRIS Payment Panel ── */}
+              {/* QRIS aktif */}
               {txPaymentPending && activeQris && (
                 <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 space-y-3">
                   <div className="flex items-center gap-2 text-xs text-emerald-300">
                     {polling && <Loader2 size={12} className="animate-spin" />}
                     <span>Menunggu pembayaran QRIS — halaman otomatis update setelah lunas.</span>
                   </div>
-                  <Button
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-                    onClick={() => setShowQrisModal(true)}
-                  >
+                  <Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => setShowQrisModal(true)}>
                     <QrCode size={15} className="mr-2" /> Tampilkan QR Code
                   </Button>
                   {tx?.xendit_invoice_id && (
                     <p className="text-[10px] text-muted-foreground font-mono">Ref DOKU: {tx.xendit_invoice_id}</p>
                   )}
+                </div>
+              )}
+
+              {/* QRIS expired / failed */}
+              {txPaymentFailed && (
+                <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-3 space-y-2">
+                  <p className="text-xs text-red-300">QRIS sudah expired atau pembayaran gagal.</p>
+                  <Button
+                    className="w-full bg-orange-500 hover:bg-orange-400 text-black font-semibold"
+                    onClick={handleRetryPayment}
+                    disabled={retrying}
+                  >
+                    {retrying
+                      ? <><Loader2 size={14} className="mr-1 animate-spin" /> Membuat QRIS baru...</>
+                      : <><RefreshCw size={14} className="mr-1" /> Generate QRIS Baru</>}
+                  </Button>
                 </div>
               )}
 
