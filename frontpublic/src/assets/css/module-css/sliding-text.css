@@ -26,7 +26,7 @@
 }
 
 .sliding-text__list li {
-    osition: relative;
+    position: relative;
     display: block;
     float: left;
     margin-right: 35px;
@@ -111,7 +111,7 @@
 }
 
 .sliding-text-two__list li {
-    osition: relative;
+    position: relative;
     display: block;
     float: left;
     margin-right: 35px;
