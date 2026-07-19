@@ -1,6 +1,5 @@
 "use client"
 import { useEffect, useRef, useState, useCallback } from "react"
-import QRCode from "qrcode"
 import { apiClient } from "@/services/api-client"
 
 interface PaymentStatusResponse {
@@ -27,32 +26,22 @@ function formatRupiah(n: number) {
   }).format(n)
 }
 
+function buildQrUrl(text: string) {
+  // quickchart.io QR — gratis, no API key, no npm install
+  return `https://quickchart.io/qr?text=${encodeURIComponent(text)}&size=260&margin=2&ecLevel=M`
+}
+
 export default function QrisPaymentModal({ txId, qrisString, amount, onPaid, onClose }: Props) {
-  const canvasRef   = useRef<HTMLCanvasElement>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const [status, setStatus]     = useState<"pending" | "paid" | "failed">("pending")
+  const [status, setStatus]       = useState<"pending" | "paid" | "failed">("pending")
   const [countdown, setCountdown] = useState(30 * 60) // 30 menit
   const [lastCheck, setLastCheck] = useState<string>("")
-
-  // Render QR code ke canvas
-  useEffect(() => {
-    if (!canvasRef.current || !qrisString) return
-    QRCode.toCanvas(canvasRef.current, qrisString, {
-      width: 260,
-      margin: 2,
-      color: { dark: "#000000", light: "#ffffff" },
-    }).catch(console.error)
-  }, [qrisString])
 
   // Countdown timer
   useEffect(() => {
     const timer = setInterval(() => {
       setCountdown(c => {
-        if (c <= 1) {
-          clearInterval(timer)
-          setStatus("failed")
-          return 0
-        }
+        if (c <= 1) { clearInterval(timer); setStatus("failed"); return 0 }
         return c - 1
       })
     }, 1000)
@@ -62,17 +51,13 @@ export default function QrisPaymentModal({ txId, qrisString, amount, onPaid, onC
   // Polling tiap 5 detik
   const checkStatus = useCallback(async () => {
     try {
-      const res = await apiClient.get<PaymentStatusResponse>(
-        `/transactions/${txId}/payment-status`
-      )
-      const data = res.data
+      const res = await apiClient.get<PaymentStatusResponse>(`/transactions/${txId}/payment-status`)
       setLastCheck(new Date().toLocaleTimeString("id-ID"))
-
-      if (data.status === "settled") {
+      if (res.data.status === "settled") {
         setStatus("paid")
         if (intervalRef.current) clearInterval(intervalRef.current)
         setTimeout(onPaid, 2000)
-      } else if (data.status === "payment_failed") {
+      } else if (res.data.status === "payment_failed") {
         setStatus("failed")
         if (intervalRef.current) clearInterval(intervalRef.current)
       }
@@ -82,11 +67,9 @@ export default function QrisPaymentModal({ txId, qrisString, amount, onPaid, onC
   }, [txId, onPaid])
 
   useEffect(() => {
-    checkStatus() // cek langsung
+    checkStatus()
     intervalRef.current = setInterval(checkStatus, 5000)
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
-    }
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
   }, [checkStatus])
 
   const mm = String(Math.floor(countdown / 60)).padStart(2, "0")
@@ -101,11 +84,7 @@ export default function QrisPaymentModal({ txId, qrisString, amount, onPaid, onC
             <h2 className="text-white font-bold text-lg">Bayar via QRIS</h2>
             <p className="text-amber-100 text-sm">{formatRupiah(amount)}</p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-white/80 hover:text-white text-2xl leading-none"
-            aria-label="Tutup"
-          >
+          <button onClick={onClose} className="text-white/80 hover:text-white text-2xl leading-none" aria-label="Tutup">
             ×
           </button>
         </div>
@@ -113,9 +92,16 @@ export default function QrisPaymentModal({ txId, qrisString, amount, onPaid, onC
         <div className="p-6 flex flex-col items-center gap-4">
           {status === "pending" && (
             <>
-              {/* QR Canvas */}
+              {/* QR Code via quickchart.io — no npm install needed */}
               <div className="rounded-xl border-2 border-amber-200 p-2 bg-white">
-                <canvas ref={canvasRef} />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={buildQrUrl(qrisString)}
+                  alt="QRIS Code"
+                  width={260}
+                  height={260}
+                  className="block"
+                />
               </div>
 
               {/* Countdown */}
