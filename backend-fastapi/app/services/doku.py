@@ -39,13 +39,12 @@ def _symmetric_signature(
     http_method: str,
     endpoint: str,
     access_token: str,
-    request_body: dict,
+    request_body_minified: str,
     timestamp: str,
     client_secret: str,
 ) -> str:
     import hmac as _hmac
-    minified_body = json.dumps(request_body, separators=(",", ":"), ensure_ascii=False)
-    body_hash = hashlib.sha256(minified_body.encode()).hexdigest().lower()
+    body_hash = hashlib.sha256(request_body_minified.encode()).hexdigest().lower()
     string_to_sign = f"{http_method.upper()}:{endpoint}:{access_token}:{body_hash}:{timestamp}"
     sig = _hmac.new(client_secret.encode(), string_to_sign.encode(), hashlib.sha512).digest()
     return base64.b64encode(sig).decode()
@@ -109,8 +108,7 @@ async def create_qris(
 
     validity_dt     = datetime.now(_WIB) + timedelta(minutes=expired_time)
     validity_period = validity_dt.strftime("%Y-%m-%dT%H:%M:%S+07:00")
-    # DOKU requires decimal string format e.g. "10000.00"
-    amount_str = f"{int(amount)}.00"
+    amount_str      = f"{int(amount)}.00"
 
     import time as _time
     external_id = str(int(_time.time() * 1000))
@@ -126,11 +124,15 @@ async def create_qris(
         "validityPeriod": validity_period,
         "additionalInfo": {
             "postalCode": postal_code,
-            "feeType": 1,  # integer per DOKU SNAP spec: enum [1], bukan string "1"
+            "feeType": 1,  # integer per DOKU SNAP spec
         },
     }
 
-    sym_sig = _symmetric_signature("POST", endpoint, access_token, body, timestamp, client_secret)
+    # Minify body sekali — dipakai untuk signature DAN dikirim ke DOKU
+    # Ini memastikan body yang di-hash == body yang diterima DOKU
+    body_minified = json.dumps(body, separators=(",", ":"), ensure_ascii=False)
+
+    sym_sig = _symmetric_signature("POST", endpoint, access_token, body_minified, timestamp, client_secret)
 
     headers = {
         "Content-Type": "application/json",
@@ -147,11 +149,17 @@ async def create_qris(
         f"X-PARTNER-ID={client_id} merchantId={merchant_id} "
         f"terminalId={terminal_id} amount={amount_str} orderId={order_id} "
         f"X-EXTERNAL-ID={external_id} X-TIMESTAMP={timestamp} "
-        f"body={json.dumps(body, ensure_ascii=False)}"
+        f"body={body_minified}"
     )
 
     async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(f"{base_url}{endpoint}", json=body, headers=headers)
+        # Kirim sebagai raw string agar body yang diterima DOKU
+        # identik dengan body yang dipakai menghitung X-SIGNATURE
+        resp = await client.post(
+            f"{base_url}{endpoint}",
+            content=body_minified.encode("utf-8"),
+            headers=headers,
+        )
 
     try:
         raw = resp.json()
