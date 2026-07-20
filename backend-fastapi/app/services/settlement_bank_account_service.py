@@ -13,22 +13,23 @@ Format string_to_sign (DOKU Non-SNAP standard):
     Client-Id:{client_id}\n
     Request-Id:{request_id}\n
     Request-Timestamp:{timestamp}\n
-    Request-Target:{path}\n
-    Digest:{base64(SHA256(body))}   <-- plain base64, NO prefix
+    Request-Target:{full_path}     <-- FULL path: /fc-h2h-api/v2/settlement-bank-account
+    Digest:{base64(SHA256(body))}  <-- plain base64, NO prefix
 
   GET:
     Client-Id:{client_id}\n
     Request-Id:{request_id}\n
     Request-Timestamp:{timestamp}\n
-    Request-Target:{path}
+    Request-Target:{full_path}
 
 PENTING:
-  - Digest di string_to_sign adalah plain base64(SHA256(body)) tanpa prefix apapun
+  - Request-Target HARUS full path termasuk /fc-h2h-api prefix
+    BENAR : /fc-h2h-api/v2/settlement-bank-account
+    SALAH : /v2/settlement-bank-account
+  - Digest plain base64(SHA256(body)) tanpa prefix apapun
   - Header Digest TIDAK dikirim sebagai request header terpisah
-  - bank_account.number dikirim sebagai INTEGER (sesuai contoh di docs DOKU)
-    contoh docs: "number": 1081214141456  <-- integer, bukan string
+  - bank_account.number dikirim sebagai INTEGER (sesuai contoh docs DOKU)
   - credentials (client_id, secret_key) HARUS str as-is, JANGAN konversi float
-    karena akan merusak BRN-0272-1782809889702 menjadi scientific notation
 """
 
 import base64
@@ -50,15 +51,17 @@ from app.models.settlement_bank_account import SettlementBankAccount
 logger = logging.getLogger(__name__)
 
 
-# ─── Constants ────────────────────────────────────────────────────────────
-BASE_URL = "https://api.doku.com/fc-h2h-api"
+# ─── Constants ───────────────────────────────────────────────────────────────
+BASE_URL        = "https://api.doku.com"
+API_PREFIX      = "/fc-h2h-api"
+SBA_ENDPOINT    = "/v2/settlement-bank-account"
 
 
-# ─── Helpers ────────────────────────────────────────────────────────────
+# ─── Helpers ─────────────────────────────────────────────────────────────────
 
 def _get_doku_creds(db: Session) -> dict:
     """Ambil credentials DOKU dari DB. Semua nilai dikembalikan sebagai str as-is.
-    
+
     PENTING: Jangan konversi float karena merusak nilai seperti
     BRN-0272-1782809889702 menjadi BRN-0272-1.782809889702e+12
     """
@@ -97,16 +100,13 @@ def _sanitize_doku_payload(body: dict) -> dict:
     """Sanitize payload sesuai docs DOKU:
     - bank_account.number dikirim sebagai INTEGER (bukan string)
       Contoh di docs: "number": 1081214141456
-      Leading zeros otomatis hilang — ini memang yang DOKU harapkan.
     """
     if "bank_account" in body:
         ba = dict(body["bank_account"])
         if "number" in ba:
             num_str = str(ba["number"]).strip()
-            # Hapus trailing .0 jika ada (dari float)
             if num_str.endswith(".0"):
                 num_str = num_str[:-2]
-            # Kirim sebagai integer — sesuai contoh docs DOKU
             ba["number"] = int(num_str)
         ba.setdefault("currency", "IDR")
         ba.setdefault("country", "Indonesia")
@@ -117,15 +117,16 @@ def _sanitize_doku_payload(body: dict) -> dict:
 def _make_h2h_headers_and_body(
     client_id: str,
     secret_key: str,
-    request_target: str,
+    endpoint: str,          # contoh: /v2/settlement-bank-account
     body: Optional[dict] = None,
 ) -> tuple[dict, Optional[bytes]]:
-    # strip whitespace saja — JANGAN konversi tipe lagi
     client_id  = str(client_id).strip()
     secret_key = str(secret_key).strip()
 
-    request_id = str(uuid.uuid4())
-    timestamp  = _utc_now_str()
+    request_id     = str(uuid.uuid4())
+    timestamp      = _utc_now_str()
+    # Request-Target HARUS full path termasuk /fc-h2h-api
+    request_target = f"{API_PREFIX}{endpoint}"
 
     logger.warning("[DOKU DEBUG] === STEP 1: CREDENTIALS ===")
     logger.warning("[DOKU DEBUG] client_id      = %r", client_id)
@@ -267,7 +268,7 @@ def _apply_doku_response_to_record(rec: SettlementBankAccount, doku_data: dict) 
         rec.verified_at = datetime.now(timezone.utc)
 
 
-# ─── Local DB ────────────────────────────────────────────────────────────
+# ─── Local DB ────────────────────────────────────────────────────────────────
 
 def list_settlement_bank_accounts(
     db: Session, page: int = 1, size: int = 20, status: Optional[str] = None,
@@ -296,26 +297,24 @@ async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dic
     if not client_id or not secret_key:
         raise HTTPException(400, detail="Credentials DOKU tidak lengkap (client_id, secret_key).")
 
-    endpoint       = "/v2/settlement-bank-account"
-    request_target = endpoint
-    doku_payload   = _sanitize_doku_payload(doku_payload)
+    doku_payload = _sanitize_doku_payload(doku_payload)
 
     logger.warning("[DOKU DEBUG] === CREATE SBA START ===")
-    logger.warning("[DOKU DEBUG] full_url = %r", f"{BASE_URL}{endpoint}")
+    logger.warning("[DOKU DEBUG] full_url = %r", f"{BASE_URL}{API_PREFIX}{SBA_ENDPOINT}")
     logger.warning("[DOKU DEBUG] doku_payload = %s", json.dumps(doku_payload))
 
     headers, body_bytes = _make_h2h_headers_and_body(
-        client_id, secret_key, request_target=request_target, body=doku_payload
+        client_id, secret_key, endpoint=SBA_ENDPOINT, body=doku_payload
     )
 
     logger.warning("[DOKU DEBUG] === STEP 7: FULL REQUEST ===")
     logger.warning("[DOKU DEBUG] method  = POST")
-    logger.warning("[DOKU DEBUG] url     = %r", f"{BASE_URL}{endpoint}")
+    logger.warning("[DOKU DEBUG] url     = %r", f"{BASE_URL}{API_PREFIX}{SBA_ENDPOINT}")
     logger.warning("[DOKU DEBUG] body    = %r", body_bytes)
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
-            f"{BASE_URL}{endpoint}",
+            f"{BASE_URL}{API_PREFIX}{SBA_ENDPOINT}",
             content=body_bytes,
             headers=headers,
         )
@@ -372,14 +371,13 @@ async def _fetch_from_doku(db: Session, doku_sba_id: str) -> dict:
     if not client_id or not secret_key:
         raise HTTPException(400, detail="Credentials DOKU tidak lengkap.")
 
-    endpoint       = f"/v2/settlement-bank-account/{doku_sba_id}"
-    request_target = endpoint
-    headers, _     = _make_h2h_headers_and_body(
-        client_id, secret_key, request_target=request_target, body=None
+    endpoint = f"{SBA_ENDPOINT}/{doku_sba_id}"
+    headers, _ = _make_h2h_headers_and_body(
+        client_id, secret_key, endpoint=endpoint, body=None
     )
 
     async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(f"{BASE_URL}{endpoint}", headers=headers)
+        resp = await client.get(f"{BASE_URL}{API_PREFIX}{endpoint}", headers=headers)
 
     if not resp.is_success:
         _raise_doku_error(resp, f"GET SBA {doku_sba_id}")
@@ -446,16 +444,14 @@ async def update_settlement_bank_account(db: Session, sba_id: str, doku_payload:
     client_id  = creds.get("client_id", "")
     secret_key = creds.get("secret_key", "") or creds.get("client_secret", "")
 
-    endpoint       = "/v2/settlement-bank-account"
-    request_target = endpoint
-    doku_payload   = _sanitize_doku_payload(doku_payload)
+    doku_payload = _sanitize_doku_payload(doku_payload)
     headers, body_bytes = _make_h2h_headers_and_body(
-        client_id, secret_key, request_target=request_target, body=doku_payload
+        client_id, secret_key, endpoint=SBA_ENDPOINT, body=doku_payload
     )
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.put(
-            f"{BASE_URL}{endpoint}",
+            f"{BASE_URL}{API_PREFIX}{SBA_ENDPOINT}",
             content=body_bytes,
             headers=headers,
         )
