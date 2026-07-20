@@ -30,10 +30,7 @@ async def list_settlement_bank_accounts(
     status: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    """
-    List semua settlement bank account dari DB lokal.
-    Data tersimpan otomatis saat create, dan di-sync saat GET /{id} atau POST /{id}/sync.
-    """
+    """List semua settlement bank account dari DB lokal."""
     return sba_service.list_settlement_bank_accounts(db, page=page, size=size, status=status)
 
 
@@ -43,8 +40,16 @@ async def create_settlement_bank_account(
     db: Session = Depends(get_db),
 ):
     """Daftarkan settlement bank account baru ke DOKU dan simpan ke DB lokal."""
-    body = payload.model_dump(exclude_none=True)
-    return await sba_service.create_settlement_bank_account(db, body)
+    # Transform ke camelCase sesuai spesifikasi DOKU SNAP API
+    doku_body = {
+        "bankCode":          payload.bank_code,
+        "accountNo":         payload.account_number,
+        "accountName":       payload.account_name,
+    }
+    if payload.merchant_reference:
+        doku_body["merchantReference"] = payload.merchant_reference
+
+    return await sba_service.create_settlement_bank_account(db, doku_body)
 
 
 @router.get("/{sba_id}")
@@ -52,10 +57,7 @@ async def get_settlement_bank_account(
     sba_id: str,
     db: Session = Depends(get_db),
 ):
-    """
-    Get settlement bank account dari DB lokal.
-    Jika ada doku_sba_id, otomatis sync status terbaru dari DOKU.
-    """
+    """Get dari DB lokal + auto-sync status jika masih pending."""
     return await sba_service.get_and_sync_settlement_bank_account(db, sba_id)
 
 
@@ -66,10 +68,16 @@ async def update_settlement_bank_account(
     db: Session = Depends(get_db),
 ):
     """Update settlement bank account di DOKU. Hanya bisa untuk status verified."""
-    body = payload.model_dump(exclude_none=True)
-    if not body:
+    doku_body: dict = {}
+    if payload.account_name:
+        doku_body["accountName"] = payload.account_name
+    if payload.merchant_reference:
+        doku_body["merchantReference"] = payload.merchant_reference
+
+    if not doku_body:
         raise HTTPException(status_code=400, detail="Tidak ada field yang diupdate.")
-    return await sba_service.update_settlement_bank_account(db, sba_id, body)
+
+    return await sba_service.update_settlement_bank_account(db, sba_id, doku_body)
 
 
 @router.post("/{sba_id}/sync")
@@ -77,8 +85,5 @@ async def sync_settlement_bank_account(
     sba_id: str,
     db: Session = Depends(get_db),
 ):
-    """
-    Force sync status settlement bank account dari DOKU ke DB lokal.
-    Gunakan ini jika status di DB lokal tidak up-to-date.
-    """
+    """Force sync status settlement bank account dari DOKU ke DB lokal."""
     return await sba_service.sync_from_doku(db, sba_id)
