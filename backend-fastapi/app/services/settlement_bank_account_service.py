@@ -22,6 +22,8 @@ KRITIS:
   Body yang dikirim ke DOKU harus byte-per-byte IDENTIK dengan body yang di-hash.
   Oleh karena itu kita serialize sekali ke bytes, lalu kirim raw bytes tersebut
   (bukan json=payload, melainkan content=body_bytes dengan Content-Type=application/json).
+
+  number field: HARUS string (min 10, max 25 karakter) sesuai docs DOKU H2H.
 """
 
 import base64
@@ -77,6 +79,25 @@ def _serialize_body(body: dict) -> bytes:
     return json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
+def _sanitize_doku_payload(body: dict) -> dict:
+    """
+    Pastikan payload sesuai DOKU H2H spec:
+    - bank_account.number HARUS string (bukan int)
+    - bank_account.country HARUS 'Indonesia'
+    - bank_account.currency HARUS 'IDR'
+    """
+    if "bank_account" in body:
+        ba = dict(body["bank_account"])
+        # number HARUS string sesuai docs DOKU H2H
+        if "number" in ba:
+            ba["number"] = str(ba["number"])
+        # pastikan country dan currency benar
+        ba.setdefault("currency", "IDR")
+        ba.setdefault("country", "Indonesia")
+        return {**body, "bank_account": ba}
+    return body
+
+
 def _make_h2h_headers_and_body(
     client_id: str,
     secret_key: str,
@@ -113,10 +134,19 @@ def _make_h2h_headers_and_body(
         "Signature":         signature,
     }
 
-    logger.debug(
-        "[DOKU SIGN] string_to_sign=%r  signature=%s",
-        string_to_sign,
+    # Log INFO untuk memudahkan debugging signature
+    logger.info(
+        "[DOKU SIGN] client_id=%s request_id=%s timestamp=%s body_hash=%s signature=%s",
+        client_id,
+        request_id,
+        timestamp,
+        hashlib.sha256(body_bytes).hexdigest() if body_bytes else "(no body)",
         signature,
+    )
+    logger.debug(
+        "[DOKU SIGN] string_to_sign=%r  body_bytes=%r",
+        string_to_sign,
+        body_bytes,
     )
 
     return headers, body_bytes
@@ -230,6 +260,9 @@ async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dic
 
     base_url = BASE_URL_PROD if is_production else BASE_URL_SANDBOX
     endpoint = "/v2/settlement-bank-account"
+
+    # Sanitize payload: pastikan number=string, currency/country default
+    doku_payload = _sanitize_doku_payload(doku_payload)
 
     logger.info(
         "[DOKU CREATE SBA] base_url=%s payload=%s",
@@ -371,6 +404,9 @@ async def update_settlement_bank_account(db: Session, sba_id: str, doku_payload:
 
     base_url = BASE_URL_PROD if is_production else BASE_URL_SANDBOX
     endpoint = "/v2/settlement-bank-account"
+
+    # Sanitize payload sebelum dikirim
+    doku_payload = _sanitize_doku_payload(doku_payload)
 
     headers, body_bytes = _make_h2h_headers_and_body(client_id, secret_key, body=doku_payload)
 
