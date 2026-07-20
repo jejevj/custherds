@@ -14,7 +14,7 @@ Format string_to_sign (DOKU Non-SNAP standard):
     Request-Id:{request_id}\n
     Request-Timestamp:{timestamp}\n
     Request-Target:{path}\n
-    Digest:{base64(SHA256(body))}
+    Digest:SHA-256={base64(SHA256(body))}
 
   GET:
     Client-Id:{client_id}\n
@@ -22,8 +22,10 @@ Format string_to_sign (DOKU Non-SNAP standard):
     Request-Timestamp:{timestamp}\n
     Request-Target:{path}
 
-PENTING: Header Digest HARUS dikirim sebagai request header tersendiri
-         (sesuai docs DOKU), tidak hanya dimasukkan ke string_to_sign.
+PENTING:
+  - Digest di string_to_sign HARUS menggunakan prefix "SHA-256="
+  - Header Digest TIDAK dikirim sebagai request header (sesuai spec DOKU H2H SBA)
+  - bank_account.number dikirim sebagai integer (sesuai docs DOKU)
 """
 
 import base64
@@ -88,7 +90,9 @@ def _serialize_body(body: dict) -> bytes:
 
 
 def _make_digest(body_bytes: bytes) -> str:
-    return base64.b64encode(hashlib.sha256(body_bytes).digest()).decode()
+    """Return Digest string with required SHA-256= prefix for DOKU Non-SNAP."""
+    b64 = base64.b64encode(hashlib.sha256(body_bytes).digest()).decode()
+    return f"SHA-256={b64}"
 
 
 def _sanitize_doku_payload(body: dict) -> dict:
@@ -98,7 +102,8 @@ def _sanitize_doku_payload(body: dict) -> dict:
             num_str = str(ba["number"]).strip()
             if num_str.endswith(".0"):
                 num_str = num_str[:-2]
-            ba["number"] = num_str
+            # DOKU H2H docs: bank_account.number must be integer
+            ba["number"] = int(num_str)
         ba.setdefault("currency", "IDR")
         ba.setdefault("country", "Indonesia")
         return {**body, "bank_account": ba}
@@ -127,6 +132,7 @@ def _make_h2h_headers_and_body(
 
     if body is not None:
         body_bytes = _serialize_body(body)
+        # digest includes "SHA-256=" prefix — required by DOKU Non-SNAP spec
         digest     = _make_digest(body_bytes)
         string_to_sign = (
             f"Client-Id:{client_id}\n"
@@ -162,6 +168,7 @@ def _make_h2h_headers_and_body(
     logger.warning("[DOKU DEBUG] === STEP 4: SIGNATURE ===")
     logger.warning("[DOKU DEBUG] signature = %r", signature)
 
+    # DOKU H2H SBA spec: only these 5 headers — no separate Digest header
     headers = {
         "Content-Type":      "application/json",
         "Client-Id":         client_id,
@@ -169,10 +176,6 @@ def _make_h2h_headers_and_body(
         "Request-Timestamp": timestamp,
         "Signature":         signature,
     }
-
-    # Tambahkan header Digest untuk POST/PUT — WAJIB sesuai DOKU docs
-    if digest is not None:
-        headers["Digest"] = digest
 
     logger.warning("[DOKU DEBUG] === STEP 5: HEADERS ===")
     for k, v in headers.items():
