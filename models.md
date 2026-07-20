@@ -338,6 +338,46 @@ Riwayat semua aksi penting (approval, rejection, perubahan config) untuk keperlu
 
 ---
 
+## 12. Settlement Bank Account (Tabel: `settlement_bank_accounts`)
+
+Menyimpan data rekening bank settlement yang didaftarkan ke **DOKU Bulk Registration Bank H2H API**.
+Satu guide atau vendor bisa punya banyak rekening, tetapi hanya satu yang `is_primary = True`.
+
+> **Referensi DOKU API:** `POST /v2/settlement-bank-account` · `PUT /v2/settlement-bank-account` · `GET /v2/settlement-bank-account/{bank_account_settlement_id}`
+
+| Field | Type | Wajib | Keterangan |
+|-------|------|-------|------------|
+| `id` | UUID PK | ✅ | Primary key internal |
+| `guide_id` | FK → guides.id | ❌ | Rekening milik Guide (nullable jika milik Vendor) |
+| `vendor_id` | FK → vendors.id | ❌ | Rekening milik Vendor (nullable jika milik Guide) |
+| `bank_code` | VARCHAR(20) | ✅ | Kode bank DOKU, e.g. `"014"` = BCA, `"002"` = BRI |
+| `account_number` | VARCHAR(50) | ✅ | Nomor rekening bank |
+| `account_name` | VARCHAR(255) | ✅ | Nama pemilik rekening |
+| `account_email` | VARCHAR(255) | ❌ | Email terkait rekening (dari response DOKU) |
+| `doku_sba_id` | VARCHAR(255) UNIQUE | ❌ | `bank_account_settlement_id` dari response DOKU |
+| `doku_reference_no` | VARCHAR(255) | ❌ | Reference number dari response DOKU |
+| `doku_status` | VARCHAR(50) | ❌ | Status dari DOKU: `PENDING`, `VERIFIED`, `REJECTED` |
+| `doku_rejection_reason` | TEXT | ❌ | Alasan penolakan jika DOKU return `REJECTED` |
+| `doku_raw_response` | TEXT | ❌ | JSON response mentah dari DOKU (untuk debugging) |
+| `status` | VARCHAR(30) | ✅ | Status internal: `pending` → `verified` / `rejected` (default: `pending`) |
+| `is_primary` | BOOLEAN | ✅ | Rekening utama untuk disbursement (default: `False`) |
+| `registered_at` | TIMESTAMP | ❌ | Waktu DOKU menerima pendaftaran |
+| `verified_at` | TIMESTAMP | ❌ | Waktu DOKU memverifikasi rekening |
+| `created_at` | TIMESTAMP | ✅ | |
+| `updated_at` | TIMESTAMP | ✅ | |
+
+### Status Flow Settlement Bank Account
+```
+pending   (baru didaftarkan via POST DOKU API)
+    ├── [DOKU verifikasi] → verified  (siap dipakai disbursement)
+    └── [DOKU tolak]      → rejected  (perlu update data, lalu PUT DOKU API)
+```
+
+> **Constraint:** Hanya satu record per guide/vendor yang boleh `is_primary = True`.
+> **Catatan:** `guide_id` dan `vendor_id` tidak boleh keduanya diisi sekaligus — salah satu harus `NULL`.
+
+---
+
 ## Relasi Antar Tabel
 
 ```
@@ -358,6 +398,8 @@ commission_disbursement_items (N) ──── (1) commission_disbursements
 commission_disbursements      (N) ──── (1) guides
 
 vendors (1) ──── (N) destinations
+guides  (1) ──── (N) settlement_bank_accounts
+vendors (1) ──── (N) settlement_bank_accounts
 
 audit_logs (N) ──── (1) users
 ```
@@ -395,7 +437,8 @@ audit_logs (N) ──── (1) users
 [7] Superadmin/sistem buat batch disbursement (mingguan/bulanan)
       → INSERT commission_disbursements
       → INSERT commission_disbursement_items (per transaksi)
-      → Kirim via Xendit Disbursement API
+      → Cek settlement_bank_accounts WHERE guide_id = X AND is_primary = True AND status = 'verified'
+      → Kirim via DOKU Bulk Registration Bank / Xendit Disbursement API
       → Update guides.total_earnings, guides.pending_earnings
       → commission_disbursements.status = completed
 ```
@@ -411,3 +454,4 @@ audit_logs (N) ──── (1) users
 - `revenue_split_configs`: hanya **satu record** yang boleh `is_active = True`. Saat superadmin buat config baru, record lama otomatis di-set `is_active = False`
 - Total validasi: `vendor_percent + guide_percent + platform_percent == 100.0` dilakukan di **backend (FastAPI)**, bukan hanya di DB
 - Kode booking (`BK-YYYYMMDD-XXXX`) dan kode transaksi (`TRX-YYYYMMDD-XXXX`) di-generate di backend, **bukan auto-increment**
+- `settlement_bank_accounts.doku_raw_response` menyimpan JSON response mentah DOKU untuk keperluan debugging dan audit

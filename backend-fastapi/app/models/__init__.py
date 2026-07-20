@@ -12,3 +12,4 @@ from app.models.destination import Destination
 from app.models.commission_disbursement import CommissionDisbursement
 from app.models.audit_log import AuditLog
 from app.models.api_log import ApiLog
+from app.models.settlement_bank_account import SettlementBankAccount
