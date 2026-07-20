@@ -3,7 +3,7 @@ DOKU Bulk Registration Bank — Settlement Bank Account Service
 
 API: H2H (fc-h2h-api) — BUKAN SNAP.
 Ref: https://developers.doku.com/accept-payments/finance-and-settlement/bulk-registration-bank
-Ref Signature: https://dashboard.doku.com/docs/docs/technical-references/generate-signature
+Ref Signature: https://developers.doku.com/get-started-with-doku-api/signature-component/non-snap/signature-component-from-request-header
 
 Base URL:
   https://api.doku.com/fc-h2h-api
@@ -14,7 +14,7 @@ Format string_to_sign (DOKU Non-SNAP standard):
     Request-Id:{request_id}\n
     Request-Timestamp:{timestamp}\n
     Request-Target:{path}\n
-    Digest:SHA-256={base64(SHA256(body))}
+    Digest:{base64_sha256_of_body}        <-- plain base64, NO "SHA-256=" prefix
 
   GET:
     Client-Id:{client_id}\n
@@ -23,8 +23,8 @@ Format string_to_sign (DOKU Non-SNAP standard):
     Request-Target:{path}
 
 PENTING:
-  - Digest di string_to_sign HARUS menggunakan prefix "SHA-256="
-  - Header Digest TIDAK dikirim sebagai request header (sesuai spec DOKU H2H SBA)
+  - Digest di string_to_sign adalah plain base64(SHA256(body)) — TANPA prefix "SHA-256="
+  - Header Digest TIDAK dikirim sebagai request header terpisah
   - bank_account.number dikirim sebagai integer (sesuai docs DOKU)
 """
 
@@ -90,9 +90,8 @@ def _serialize_body(body: dict) -> bytes:
 
 
 def _make_digest(body_bytes: bytes) -> str:
-    """Return Digest string with required SHA-256= prefix for DOKU Non-SNAP."""
-    b64 = base64.b64encode(hashlib.sha256(body_bytes).digest()).decode()
-    return f"SHA-256={b64}"
+    """Return plain base64(SHA256(body)) — NO 'SHA-256=' prefix, per DOKU Non-SNAP docs."""
+    return base64.b64encode(hashlib.sha256(body_bytes).digest()).decode()
 
 
 def _sanitize_doku_payload(body: dict) -> dict:
@@ -132,7 +131,7 @@ def _make_h2h_headers_and_body(
 
     if body is not None:
         body_bytes = _serialize_body(body)
-        # digest includes "SHA-256=" prefix — required by DOKU Non-SNAP spec
+        # plain base64 SHA256 — no prefix — per DOKU Non-SNAP signature docs
         digest     = _make_digest(body_bytes)
         string_to_sign = (
             f"Client-Id:{client_id}\n"
