@@ -1,12 +1,25 @@
 """
-Settlement Bank Account endpoints — proxy ke DOKU Bulk Registration Bank API.
+Settlement Bank Account endpoints — proxy ke DOKU Bulk Registration Bank H2H API.
 
 Route:
   GET    /settlement-bank-account/           → list dari DB lokal
-  POST   /settlement-bank-account/           → create via DOKU + simpan ke DB lokal
+  POST   /settlement-bank-account/           → create via DOKU H2H + simpan ke DB lokal
   GET    /settlement-bank-account/{id}       → get dari DB lokal, sync dari DOKU jika perlu
-  PUT    /settlement-bank-account/{id}       → update via DOKU
+  PUT    /settlement-bank-account/{id}       → update via DOKU H2H
   POST   /settlement-bank-account/{id}/sync  → force sync status dari DOKU ke DB lokal
+
+Payload ke DOKU H2H (bukan SNAP):
+  POST/PUT body:
+    {
+      "bank_account": {
+        "code"    : "002",           # bank code
+        "number"  : "1234567890",   # nomor rekening (string)
+        "name"    : "JOHN DOE",     # nama pemilik rekening (UPPER)
+        "currency": "IDR",
+        "country" : "ID"
+      }
+    }
+Ref: https://developers.doku.com/accept-payments/finance-and-settlement/bulk-registration-bank
 """
 
 from typing import Optional
@@ -39,16 +52,17 @@ async def create_settlement_bank_account(
     payload: SettlementBankAccountCreate,
     db: Session = Depends(get_db),
 ):
-    """Daftarkan settlement bank account baru ke DOKU dan simpan ke DB lokal."""
-    # Transform ke camelCase sesuai spesifikasi DOKU SNAP API
+    """Daftarkan settlement bank account baru ke DOKU H2H API dan simpan ke DB lokal."""
+    # DOKU H2H format — snake_case, dibungkus key bank_account
     doku_body = {
-        "bankCode":          payload.bank_code,
-        "accountNo":         payload.account_number,
-        "accountName":       payload.account_name,
+        "bank_account": {
+            "code"    : payload.bank_code,
+            "number"  : payload.account_number,
+            "name"    : payload.account_name.upper(),  # DOKU requires UPPERCASE
+            "currency": "IDR",
+            "country" : "ID",
+        }
     }
-    if payload.merchant_reference:
-        doku_body["merchantReference"] = payload.merchant_reference
-
     return await sba_service.create_settlement_bank_account(db, doku_body)
 
 
@@ -67,15 +81,25 @@ async def update_settlement_bank_account(
     payload: SettlementBankAccountUpdate,
     db: Session = Depends(get_db),
 ):
-    """Update settlement bank account di DOKU. Hanya bisa untuk status verified."""
-    doku_body: dict = {}
+    """Update settlement bank account di DOKU H2H. Hanya bisa untuk status verified."""
+    ba_update: dict = {}
     if payload.account_name:
-        doku_body["accountName"] = payload.account_name
-    if payload.merchant_reference:
-        doku_body["merchantReference"] = payload.merchant_reference
+        ba_update["name"] = payload.account_name.upper()
+    if getattr(payload, "bank_code", None):
+        ba_update["code"] = payload.bank_code
+    if getattr(payload, "account_number", None):
+        ba_update["number"] = payload.account_number
 
-    if not doku_body:
+    if not ba_update:
         raise HTTPException(status_code=400, detail="Tidak ada field yang diupdate.")
+
+    doku_body = {
+        "bank_account": {
+            "currency": "IDR",
+            "country" : "ID",
+            **ba_update,
+        }
+    }
 
     return await sba_service.update_settlement_bank_account(db, sba_id, doku_body)
 
