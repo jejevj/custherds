@@ -25,7 +25,9 @@ Format string_to_sign (DOKU Non-SNAP standard):
 PENTING:
   - Digest di string_to_sign adalah plain base64(SHA256(body)) tanpa prefix apapun
   - Header Digest TIDAK dikirim sebagai request header terpisah
-  - bank_account.number HARUS string agar leading zeros (misal: 002001148037507) tidak hilang
+  - bank_account.number HARUS string agar leading zeros tidak hilang
+  - credentials (client_id, secret_key) harus diambil as-is sebagai string
+    JANGAN konversi float karena akan merusak nilai seperti BRN-0272-1782809889702
 """
 
 import base64
@@ -33,7 +35,6 @@ import hashlib
 import hmac as hmac_lib
 import json
 import logging
-import math
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -54,15 +55,8 @@ BASE_URL = "https://api.doku.com/fc-h2h-api"
 
 # ─── Helpers ────────────────────────────────────────────────────────────
 
-def _safe_str_credential(v) -> str:
-    if v is None:
-        return ""
-    if isinstance(v, float) and math.isfinite(v) and v == math.floor(v):
-        return str(int(v))
-    return str(v)
-
-
 def _get_doku_creds(db: Session) -> dict:
+    """Ambil credentials DOKU dari DB. Semua nilai dikembalikan sebagai str as-is."""
     config = (
         db.query(PaymentGatewayConfig)
         .filter(
@@ -77,7 +71,9 @@ def _get_doku_creds(db: Session) -> dict:
             detail="Gateway DOKU belum dikonfigurasi atau belum aktif.",
         )
     raw = config.credentials or {}
-    sanitized = {k: _safe_str_credential(v) for k, v in raw.items()}
+    # Konversi ke str murni — JANGAN konversi float karena merusak
+    # nilai seperti BRN-0272-1782809889702 menjadi scientific notation
+    sanitized = {k: str(v) if v is not None else "" for k, v in raw.items()}
     return sanitized
 
 
@@ -99,11 +95,11 @@ def _sanitize_doku_payload(body: dict) -> dict:
         ba = dict(body["bank_account"])
         if "number" in ba:
             num_str = str(ba["number"]).strip()
-            # Hapus trailing .0 jika ada (dari float), tapi JANGAN konversi ke int
-            # karena leading zeros seperti "002001148037507" harus tetap utuh
+            # Hapus trailing .0 jika ada (dari float), tapi TETAP string
+            # agar leading zeros seperti "002001148037507" tidak hilang
             if num_str.endswith(".0"):
                 num_str = num_str[:-2]
-            ba["number"] = num_str  # tetap string, leading zeros aman
+            ba["number"] = num_str
         ba.setdefault("currency", "IDR")
         ba.setdefault("country", "Indonesia")
         return {**body, "bank_account": ba}
@@ -116,8 +112,9 @@ def _make_h2h_headers_and_body(
     request_target: str,
     body: Optional[dict] = None,
 ) -> tuple[dict, Optional[bytes]]:
-    client_id  = _safe_str_credential(client_id).strip()
-    secret_key = _safe_str_credential(secret_key).strip()
+    # strip whitespace saja — JANGAN konversi tipe lagi
+    client_id  = str(client_id).strip()
+    secret_key = str(secret_key).strip()
 
     request_id = str(uuid.uuid4())
     timestamp  = _utc_now_str()
@@ -145,7 +142,6 @@ def _make_h2h_headers_and_body(
         logger.warning("[DOKU DEBUG] digest     = %r", digest)
     else:
         body_bytes = None
-        digest     = None
         string_to_sign = (
             f"Client-Id:{client_id}\n"
             f"Request-Id:{request_id}\n"
@@ -167,7 +163,6 @@ def _make_h2h_headers_and_body(
     logger.warning("[DOKU DEBUG] === STEP 4: SIGNATURE ===")
     logger.warning("[DOKU DEBUG] signature = %r", signature)
 
-    # DOKU H2H SBA: hanya 5 header ini, tidak ada Digest header terpisah
     headers = {
         "Content-Type":      "application/json",
         "Client-Id":         client_id,
