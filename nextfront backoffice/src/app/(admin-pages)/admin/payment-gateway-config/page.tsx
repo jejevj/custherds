@@ -23,10 +23,13 @@ const CREDENTIAL_FIELDS: Record<string, { key: string; label: string; placeholde
     { key: 'webhook_token', label: 'Webhook Token', placeholder: 'Token dari dashboard Xendit' },
   ],
   doku: [
-    { key: 'client_id',   label: 'Client ID',   placeholder: 'Client ID dari DOKU' },
-    { key: 'secret_key',  label: 'Secret Key',  placeholder: 'Secret Key dari DOKU' },
-    { key: 'private_key', label: 'Private Key', placeholder: 'Private Key (PEM)' },
-    { key: 'public_key',  label: 'Public Key',  placeholder: 'Public Key (PEM)' },
+    { key: 'client_id',        label: 'Client ID',        placeholder: 'BRN-XXXX-XXXX' },
+    { key: 'secret_key',       label: 'Secret Key',       placeholder: 'SK-...' },
+    { key: 'private_key',      label: 'Private Key (PEM)', placeholder: '-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----' },
+    { key: 'public_key',       label: 'Public Key (PEM)',  placeholder: '-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----' },
+    { key: 'qris_nmid',        label: 'QRIS NMID',        placeholder: 'ID20XXXXXXXXXX' },
+    { key: 'qris_merchant_id', label: 'QRIS Merchant ID', placeholder: 'Merchant ID dari DOKU' },
+    { key: 'qris_terminal_id', label: 'QRIS Terminal ID', placeholder: 'A01' },
   ],
 }
 
@@ -184,7 +187,7 @@ export default function PaymentGatewayConfigPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Payment Gateway Config</h1>
-          <p className="text-muted-foreground">Kelola dan aktifkan payment gateway (DOKU / Xendit).</p>
+          <p className="text-muted-foreground">Kelola dan aktifkan payment gateway (DOKU SNAP / Xendit).</p>
         </div>
         <Button onClick={openAddForm}>+ Tambah Gateway</Button>
       </div>
@@ -312,7 +315,7 @@ export default function PaymentGatewayConfigPage() {
           <div className="rounded-lg border bg-muted/40 divide-y">
             {Object.entries(detail.credentials).map(([k, v]) => (
               <div key={k} className="flex items-start gap-4 px-4 py-3">
-                <span className="text-muted-foreground font-mono text-xs w-36 shrink-0 pt-0.5">{k}</span>
+                <span className="text-muted-foreground font-mono text-xs w-40 shrink-0 pt-0.5">{k}</span>
                 <span className="font-mono text-xs break-all">{v}</span>
               </div>
             ))}
@@ -352,7 +355,7 @@ export default function PaymentGatewayConfigPage() {
                 value={formLabel}
                 onChange={(e) => setFormLabel(e.target.value)}
                 className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
-                placeholder="Contoh: Xendit Invoice"
+                placeholder="Contoh: DOKU SNAP"
               />
             </div>
 
@@ -375,12 +378,22 @@ export default function PaymentGatewayConfigPage() {
               {credFields.map((f) => (
                 <div key={f.key} className="space-y-1">
                   <label className="text-xs text-muted-foreground font-mono">{f.label}</label>
-                  <input
-                    value={formFields[f.key] ?? ''}
-                    onChange={(e) => setFormFields({ ...formFields, [f.key]: e.target.value })}
-                    placeholder={f.placeholder}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background font-mono"
-                  />
+                  {f.key === 'private_key' || f.key === 'public_key' ? (
+                    <textarea
+                      value={formFields[f.key] ?? ''}
+                      onChange={(e) => setFormFields({ ...formFields, [f.key]: e.target.value })}
+                      placeholder={f.placeholder}
+                      rows={4}
+                      className="w-full border rounded-lg px-3 py-2 text-sm bg-background font-mono resize-y"
+                    />
+                  ) : (
+                    <input
+                      value={formFields[f.key] ?? ''}
+                      onChange={(e) => setFormFields({ ...formFields, [f.key]: e.target.value })}
+                      placeholder={f.placeholder}
+                      className="w-full border rounded-lg px-3 py-2 text-sm bg-background font-mono"
+                    />
+                  )}
                 </div>
               ))}
             </div>
