@@ -1,4 +1,3 @@
-
 """
 DOKU Bulk Registration Bank — Settlement Bank Account Service
 
@@ -6,7 +5,7 @@ API: H2H (fc-h2h-api) — BUKAN SNAP.
 Ref: https://developers.doku.com/accept-payments/finance-and-settlement/bulk-registration-bank
 
 Base URL (hardcoded production):
-  https://production.doku.com/fc-h2h-api
+  https://api.doku.com/fc-h2h-api
 
 Auth Headers (setiap request):
   Client-Id         : client_id dari credentials
@@ -54,8 +53,8 @@ logger = logging.getLogger(__name__)
 
 
 # ─── Constants ────────────────────────────────────────────────────────────
-# Hardcoded production sesuai DOKU H2H docs
-BASE_URL = "https://production.doku.com/fc-h2h-api"
+# api.doku.com adalah hostname production yang valid (production.doku.com tidak resolve)
+BASE_URL = "https://api.doku.com/fc-h2h-api"
 
 
 # ─── Helpers ────────────────────────────────────────────────────────────
@@ -105,7 +104,6 @@ def _get_doku_creds(db: Session) -> dict:
             detail="Gateway DOKU belum dikonfigurasi atau belum aktif.",
         )
     raw = config.credentials or {}
-    # Cast semua value ke str dengan aman (float besar → int → str)
     sanitized = {k: _safe_str_credential(v) for k, v in raw.items()}
     return sanitized
 
@@ -301,14 +299,14 @@ def list_settlement_bank_accounts(
 # ─── DOKU H2H API Calls ──────────────────────────────────────────────────────
 
 async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dict:
-    creds     = _get_doku_creds(db)
+    creds      = _get_doku_creds(db)
     client_id  = creds.get("client_id", "")
     secret_key = creds.get("secret_key", "") or creds.get("client_secret", "")
 
     if not client_id or not secret_key:
         raise HTTPException(400, detail="Credentials DOKU tidak lengkap (client_id, secret_key).")
 
-    endpoint = "/v2/settlement-bank-account"
+    endpoint     = "/v2/settlement-bank-account"
     doku_payload = _sanitize_doku_payload(doku_payload)
 
     logger.info(
@@ -367,14 +365,14 @@ async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dic
 
 
 async def _fetch_from_doku(db: Session, doku_sba_id: str) -> dict:
-    creds     = _get_doku_creds(db)
+    creds      = _get_doku_creds(db)
     client_id  = creds.get("client_id", "")
     secret_key = creds.get("secret_key", "") or creds.get("client_secret", "")
 
     if not client_id or not secret_key:
         raise HTTPException(400, detail="Credentials DOKU tidak lengkap.")
 
-    endpoint = f"/v2/settlement-bank-account/{doku_sba_id}"
+    endpoint   = f"/v2/settlement-bank-account/{doku_sba_id}"
     headers, _ = _make_h2h_headers_and_body(client_id, secret_key, body=None)
 
     async with httpx.AsyncClient(timeout=30) as client:
@@ -441,11 +439,11 @@ async def update_settlement_bank_account(db: Session, sba_id: str, doku_payload:
     if rec.status != "verified":
         raise HTTPException(400, detail="Hanya rekening berstatus verified yang bisa diupdate.")
 
-    creds     = _get_doku_creds(db)
+    creds      = _get_doku_creds(db)
     client_id  = creds.get("client_id", "")
     secret_key = creds.get("secret_key", "") or creds.get("client_secret", "")
 
-    endpoint = "/v2/settlement-bank-account"
+    endpoint     = "/v2/settlement-bank-account"
     doku_payload = _sanitize_doku_payload(doku_payload)
     headers, body_bytes = _make_h2h_headers_and_body(client_id, secret_key, body=doku_payload)
 
