@@ -1,6 +1,6 @@
 """add settlement_bank_accounts table
 
-Revision ID: 0012_add_settlement_bank_accounts
+Revision ID: sba20260720
 Revises: 7d9f4e2c1b83
 Create Date: 2026-07-20
 """
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers
-revision = '0012_add_settlement_bank_accounts'
+revision = 'sba20260720'
 down_revision = '7d9f4e2c1b83'
 branch_labels = None
 depends_on = None
@@ -38,7 +38,6 @@ def upgrade() -> None:
         sa.Column('updated_at',            sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
     )
 
-    # Index untuk query cepat
     op.create_index('ix_sba_guide_id',    'settlement_bank_accounts', ['guide_id'])
     op.create_index('ix_sba_vendor_id',   'settlement_bank_accounts', ['vendor_id'])
     op.create_index('ix_sba_status',      'settlement_bank_accounts', ['status'])
