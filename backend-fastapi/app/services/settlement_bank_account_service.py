@@ -21,15 +21,13 @@ KRITIS:
   1. Body yang dikirim ke DOKU harus byte-per-byte IDENTIK dengan body yang di-hash.
      Gunakan content=body_bytes (bukan json=payload) agar byte-identical.
 
-  2. number field HARUS integer (bukan string) sesuai docs DOKU H2H.
-     Contoh docs: "number": 1081214141456
+  2. number field HARUS STRING sesuai docs DOKU H2H (min 10, max 25 chars).
+     Leading zero harus dipertahankan: "002001148037507" bukan 2001148037507.
+     Endpoint handler sudah melakukan str(payload.account_number).
 
   3. MASALAH SCIENTIFIC NOTATION:
      PostgreSQL JSONB mengembalikan angka besar sebagai Python float.
-     json.dumps({"n": 1782809889702.0}) → '{"n": 1.782809889702e+12}'  <- SALAH
-     Solusi: pre-process dict dengan _fix_floats() sebelum json.dumps,
-     mengubah float bulat → int agar tidak ada scientific notation.
-     Dan credentials harus di-cast via _safe_str_credential (float→int→str).
+     Kredensial (client_id, secret_key) harus di-cast via _safe_str_credential.
 """
 
 import base64
@@ -53,7 +51,6 @@ logger = logging.getLogger(__name__)
 
 
 # ─── Constants ────────────────────────────────────────────────────────────
-# api.doku.com adalah hostname production yang valid (production.doku.com tidak resolve)
 BASE_URL = "https://api.doku.com/fc-h2h-api"
 
 
@@ -71,22 +68,6 @@ def _safe_str_credential(v) -> str:
     if isinstance(v, float) and math.isfinite(v) and v == math.floor(v):
         return str(int(v))
     return str(v)
-
-
-def _fix_floats(obj):
-    """
-    Pre-process dict/list secara rekursif: ubah float bulat → int
-    sebelum json.dumps agar tidak ada scientific notation.
-    json.dumps({"n": 2001148037507.0}) → 2.001148037507e+12  <- SALAH
-    json.dumps({"n": 2001148037507})   → 2001148037507        <- BENAR
-    """
-    if isinstance(obj, float) and math.isfinite(obj) and obj == math.floor(obj):
-        return int(obj)
-    if isinstance(obj, dict):
-        return {k: _fix_floats(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_fix_floats(i) for i in obj]
-    return obj
 
 
 def _get_doku_creds(db: Session) -> dict:
@@ -115,29 +96,28 @@ def _utc_now_str() -> str:
 
 def _serialize_body(body: dict) -> bytes:
     """
-    Serialize body ke bytes tanpa scientific notation.
-    Pre-process dulu dengan _fix_floats() sebelum json.dumps.
+    Serialize body ke bytes.
     Bytes ini HARUS dikirim apa adanya (content=) dan di-hash — harus byte-identical.
     """
-    return json.dumps(_fix_floats(body), separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
 def _sanitize_doku_payload(body: dict) -> dict:
     """
     Pastikan payload sesuai DOKU H2H spec:
-    - bank_account.number HARUS integer (sesuai docs DOKU H2H)
-      Contoh docs: "number": 1081214141456
-      Leading zero dihapus otomatis karena int("002001148037507") = 2001148037507
+    - bank_account.number HARUS STRING (min 10, max 25) — leading zero dipertahankan.
+      Contoh: "002001148037507", bukan integer 2001148037507.
     - bank_account.country default 'Indonesia'
     - bank_account.currency default 'IDR'
     """
     if "bank_account" in body:
         ba = dict(body["bank_account"])
         if "number" in ba:
-            try:
-                ba["number"] = int(str(ba["number"]).replace(".0", "").strip())
-            except (ValueError, TypeError):
-                pass
+            # Pastikan string, strip whitespace, buang .0 jika float
+            num_str = str(ba["number"]).strip()
+            if num_str.endswith(".0"):
+                num_str = num_str[:-2]
+            ba["number"] = num_str
         ba.setdefault("currency", "IDR")
         ba.setdefault("country", "Indonesia")
         return {**body, "bank_account": ba}
@@ -312,7 +292,7 @@ async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dic
     logger.info(
         "[DOKU CREATE SBA] base_url=%s payload=%s",
         BASE_URL,
-        json.dumps(_fix_floats(doku_payload)),
+        json.dumps(doku_payload),
     )
 
     headers, body_bytes = _make_h2h_headers_and_body(client_id, secret_key, body=doku_payload)
