@@ -6,18 +6,18 @@ import type {
   SBAListResponse,
 } from '@/types/settlementBankAccount.types'
 
-const BASE = '/settlement-bank-account'
+const BASE = '/settlement-bank-account/'
 
 export const settlementBankAccountService = {
   list: (params?: { page?: number; size?: number; status?: string }) =>
     api.get<SBAListResponse>(BASE, { params }),
 
   getById: (id: string) =>
-    api.get<SettlementBankAccount>(`${BASE}/${id}`),
+    api.get<SettlementBankAccount>(`${BASE}${id}`),
 
   create: (body: SettlementBankAccountCreate) =>
     api.post<SettlementBankAccount>(BASE, body),
 
   update: (id: string, body: SettlementBankAccountUpdate) =>
-    api.put<SettlementBankAccount>(`${BASE}/${id}`, body),
+    api.put<SettlementBankAccount>(`${BASE}${id}`, body),
 }
