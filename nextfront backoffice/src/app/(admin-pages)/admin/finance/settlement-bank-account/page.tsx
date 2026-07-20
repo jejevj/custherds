@@ -11,6 +11,47 @@ import type {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 
+// ─── Error normalizer ─────────────────────────────────────────────────
+/**
+ * Selalu kembalikan string dari error apapun:
+ * - string               → langsung
+ * - { detail: string }   → detail
+ * - { detail: object }   → JSON.stringify
+ * - { detail: array }    → gabung pesan validasi FastAPI
+ * - object lain          → JSON.stringify
+ * - unknown              → fallback
+ */
+function parseErrMsg(err: unknown, fallback = 'Terjadi kesalahan.'): string {
+  if (!err) return fallback
+  if (typeof err === 'string') return err || fallback
+
+  const e = err as Record<string, unknown>
+
+  // FastAPI validation error: { detail: [{loc, msg, type}, ...] }
+  if (Array.isArray(e.detail)) {
+    const msgs = (e.detail as Array<{ msg?: string; message?: string }>)
+      .map(d => d.msg ?? d.message ?? JSON.stringify(d))
+      .filter(Boolean)
+    return msgs.length ? msgs.join('; ') : fallback
+  }
+
+  // { detail: string }
+  if (typeof e.detail === 'string') return e.detail || fallback
+
+  // { detail: { message, type } } ← penyebab React error #31
+  if (e.detail && typeof e.detail === 'object') {
+    const d = e.detail as Record<string, unknown>
+    if (typeof d.message === 'string') return d.message
+    return JSON.stringify(d)
+  }
+
+  // { message: string }
+  if (typeof e.message === 'string') return e.message || fallback
+
+  return JSON.stringify(err)
+}
+
+// ─── Constants ────────────────────────────────────────────────────
 const STATUS_LABELS: Record<SBAStatus, string> = {
   pending_verification: 'Pending Verifikasi',
   verified: 'Terverifikasi',
@@ -91,41 +132,37 @@ export default function SettlementBankAccountPage() {
   const [syncingAll, setSyncingAll]     = useState(false)
   const [feedback, setFeedback]         = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
 
-  // Detail panel
-  const [detailItem, setDetailItem] = useState<SettlementBankAccount | null>(null)
-
-  // Create form
+  const [detailItem, setDetailItem]     = useState<SettlementBankAccount | null>(null)
   const [showCreateForm, setShowCreateForm] = useState(false)
-  const [createForm, setCreateForm] = useState<SettlementBankAccountCreate>({
+  const [createForm, setCreateForm]     = useState<SettlementBankAccountCreate>({
     bank_code: '', account_number: '', account_name: '', merchant_reference: '',
   })
-
-  // Edit form (only for verified)
-  const [editItem, setEditItem] = useState<SettlementBankAccount | null>(null)
-  const [editForm, setEditForm] = useState<SettlementBankAccountUpdate>({})
+  const [editItem, setEditItem]         = useState<SettlementBankAccount | null>(null)
+  const [editForm, setEditForm]         = useState<SettlementBankAccountUpdate>({})
 
   const SIZE = 20
 
+  // ─ helpers ───────────────────────────────────────────────────────────────
+  const errFeedback = (err: unknown, fallback: string) =>
+    setFeedback({ type: 'error', msg: parseErrMsg(err, fallback) })
+
+  // ─ fetch ───────────────────────────────────────────────────────────────
   const fetchList = useCallback(async () => {
     setPageLoading(true)
     try {
-      const res = await settlementBankAccountService.list({
-        page,
-        size: SIZE,
-        status: filterStatus || undefined,
-      })
+      const res = await settlementBankAccountService.list({ page, size: SIZE, status: filterStatus || undefined })
       setItems(res.items ?? [])
       setTotal(res.total ?? 0)
-    } catch {
-      setFeedback({ type: 'error', msg: 'Gagal memuat daftar settlement bank account.' })
+    } catch (err) {
+      errFeedback(err, 'Gagal memuat daftar settlement bank account.')
     } finally {
       setPageLoading(false)
     }
-  }, [page, filterStatus])
+  }, [page, filterStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchList() }, [fetchList])
 
-  // ── Sync single record dari DOKU ────────────────────────────────────────
+  // ─ sync single ─────────────────────────────────────────────────────────
   const handleSync = async (item: SettlementBankAccount) => {
     setSyncingId(item.id)
     setFeedback(null)
@@ -133,15 +170,14 @@ export default function SettlementBankAccountPage() {
       await settlementBankAccountService.sync(item.id)
       setFeedback({ type: 'success', msg: `Sync berhasil untuk rekening ${item.account_number}.` })
       fetchList()
-    } catch (err: unknown) {
-      const msg = (err as { detail?: string })?.detail ?? 'Gagal sync status dari DOKU.'
-      setFeedback({ type: 'error', msg })
+    } catch (err) {
+      errFeedback(err, 'Gagal sync status dari DOKU.')
     } finally {
       setSyncingId(null)
     }
   }
 
-  // ── Sync semua yang masih pending ───────────────────────────────────────
+  // ─ sync all pending ───────────────────────────────────────────────
   const handleSyncAll = async () => {
     const pendingItems = items.filter(i => i.status === 'pending_verification')
     if (pendingItems.length === 0) {
@@ -150,24 +186,20 @@ export default function SettlementBankAccountPage() {
     }
     setSyncingAll(true)
     setFeedback(null)
-    let successCount = 0
-    let failCount = 0
+    let ok = 0, fail = 0
     for (const item of pendingItems) {
-      try {
-        await settlementBankAccountService.sync(item.id)
-        successCount++
-      } catch {
-        failCount++
-      }
+      try { await settlementBankAccountService.sync(item.id); ok++ }
+      catch { fail++ }
     }
     setSyncingAll(false)
     setFeedback({
-      type: failCount === 0 ? 'success' : 'error',
-      msg: `Sync selesai: ${successCount} berhasil${failCount > 0 ? `, ${failCount} gagal` : ''}.`,
+      type: fail === 0 ? 'success' : 'error',
+      msg: `Sync selesai: ${ok} berhasil${fail > 0 ? `, ${fail} gagal` : ''}.`,
     })
     fetchList()
   }
 
+  // ─ create ──────────────────────────────────────────────────────────────
   const handleCreate = async () => {
     setLoading(true)
     try {
@@ -179,14 +211,14 @@ export default function SettlementBankAccountPage() {
       setShowCreateForm(false)
       setCreateForm({ bank_code: '', account_number: '', account_name: '', merchant_reference: '' })
       fetchList()
-    } catch (err: unknown) {
-      const msg = (err as { detail?: string })?.detail ?? 'Gagal membuat settlement bank account.'
-      setFeedback({ type: 'error', msg })
+    } catch (err) {
+      errFeedback(err, 'Gagal membuat settlement bank account.')
     } finally {
       setLoading(false)
     }
   }
 
+  // ─ update ──────────────────────────────────────────────────────────────
   const handleUpdate = async () => {
     if (!editItem) return
     setLoading(true)
@@ -195,9 +227,8 @@ export default function SettlementBankAccountPage() {
       setFeedback({ type: 'success', msg: 'Settlement bank account berhasil diperbarui.' })
       setEditItem(null)
       fetchList()
-    } catch (err: unknown) {
-      const msg = (err as { detail?: string })?.detail ?? 'Gagal memperbarui. Hanya akun berstatus verified yang bisa diupdate.'
-      setFeedback({ type: 'error', msg })
+    } catch (err) {
+      errFeedback(err, 'Gagal memperbarui. Hanya akun berstatus verified yang bisa diupdate.')
     } finally {
       setLoading(false)
     }
@@ -213,8 +244,8 @@ export default function SettlementBankAccountPage() {
     try {
       const data = await settlementBankAccountService.getById(item.id)
       setDetailItem(data)
-    } catch {
-      setFeedback({ type: 'error', msg: 'Gagal memuat detail.' })
+    } catch (err) {
+      errFeedback(err, 'Gagal memuat detail.')
     }
   }
 
@@ -230,16 +261,13 @@ export default function SettlementBankAccountPage() {
           <p className="text-muted-foreground text-sm">Kelola rekening bank settlement merchant via DOKU Bulk Registration Bank API.</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          {/* Sync All Pending */}
           <Button
             variant="outline"
             onClick={handleSyncAll}
             disabled={syncingAll || pageLoading}
             title="Sync semua rekening berstatus Pending Verifikasi dari DOKU"
           >
-            {syncingAll
-              ? '⏳ Syncing...'
-              : `🔄 Sync Pending${pendingCount > 0 ? ` (${pendingCount})` : ''}`}
+            {syncingAll ? '⏳ Syncing...' : `🔄 Sync Pending${pendingCount > 0 ? ` (${pendingCount})` : ''}`}
           </Button>
           <Button onClick={() => { setShowCreateForm(true); setFeedback(null) }}>
             + Tambah Rekening
@@ -247,7 +275,7 @@ export default function SettlementBankAccountPage() {
         </div>
       </div>
 
-      {/* Feedback */}
+      {/* Feedback — msg dijamin string, tidak akan trigger React #31 */}
       {feedback && (
         <div className={`rounded-lg px-4 py-3 text-sm ${
           feedback.type === 'success'
@@ -316,11 +344,9 @@ export default function SettlementBankAccountPage() {
                     <Button size="sm" variant="outline" onClick={() => openDetail(item)}>
                       {detailItem?.id === item.id ? 'Tutup' : 'Detail'}
                     </Button>
-                    {/* Tombol Sync — tampil untuk pending & rejected */}
                     {(item.status === 'pending_verification' || item.status === 'rejected') && (
                       <Button
-                        size="sm"
-                        variant="outline"
+                        size="sm" variant="outline"
                         onClick={() => handleSync(item)}
                         disabled={syncingId === item.id}
                         title="Perbarui status dari DOKU"
@@ -359,9 +385,7 @@ export default function SettlementBankAccountPage() {
             <h2 className="font-semibold tracking-tight">Detail: {detailItem.account_name}</h2>
             <div className="flex gap-2">
               {(detailItem.status === 'pending_verification' || detailItem.status === 'rejected') && (
-                <Button
-                  size="sm"
-                  variant="outline"
+                <Button size="sm" variant="outline"
                   onClick={() => handleSync(detailItem)}
                   disabled={syncingId === detailItem.id}
                 >
@@ -373,15 +397,15 @@ export default function SettlementBankAccountPage() {
           </div>
           <div className="rounded-lg border bg-muted/40 divide-y text-sm">
             {([
-              ['ID', detailItem.id],
-              ['Bank Code', detailItem.bank_code],
-              ['Bank Name', detailItem.bank_name ?? '-'],
-              ['No. Rekening', detailItem.account_number],
-              ['Nama Rekening', detailItem.account_name],
+              ['ID',                 detailItem.id],
+              ['Bank Code',          detailItem.bank_code],
+              ['Bank Name',          detailItem.bank_name ?? '-'],
+              ['No. Rekening',       detailItem.account_number],
+              ['Nama Rekening',      detailItem.account_name],
               ['Merchant Reference', detailItem.merchant_reference ?? '-'],
-              ['Status', STATUS_LABELS[detailItem.status]],
-              ['Dibuat', new Date(detailItem.created_at).toLocaleString('id-ID')],
-              ['Diperbarui', new Date(detailItem.updated_at).toLocaleString('id-ID')],
+              ['Status',             STATUS_LABELS[detailItem.status]],
+              ['Dibuat',             new Date(detailItem.created_at).toLocaleString('id-ID')],
+              ['Diperbarui',         new Date(detailItem.updated_at).toLocaleString('id-ID')],
             ] as [string, string][]).map(([k, v]) => (
               <div key={k} className="flex items-start gap-4 px-4 py-2.5">
                 <span className="text-muted-foreground text-xs font-medium w-40 shrink-0 pt-0.5">{k}</span>
@@ -433,7 +457,10 @@ export default function SettlementBankAccountPage() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-sm font-medium">Merchant Reference <span className="text-muted-foreground text-xs">(opsional)</span></label>
+              <label className="text-sm font-medium">
+                Merchant Reference{' '}
+                <span className="text-muted-foreground text-xs">(opsional)</span>
+              </label>
               <input
                 value={createForm.merchant_reference}
                 onChange={(e) => setCreateForm({ ...createForm, merchant_reference: e.target.value })}
@@ -455,7 +482,7 @@ export default function SettlementBankAccountPage() {
         </div>
       )}
 
-      {/* Edit Modal (verified only) */}
+      {/* Edit Modal */}
       {editItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-background rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4 mx-4">
@@ -472,7 +499,10 @@ export default function SettlementBankAccountPage() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-sm font-medium">Merchant Reference <span className="text-muted-foreground text-xs">(opsional)</span></label>
+              <label className="text-sm font-medium">
+                Merchant Reference{' '}
+                <span className="text-muted-foreground text-xs">(opsional)</span>
+              </label>
               <input
                 value={editForm.merchant_reference ?? ''}
                 onChange={(e) => setEditForm({ ...editForm, merchant_reference: e.target.value })}
