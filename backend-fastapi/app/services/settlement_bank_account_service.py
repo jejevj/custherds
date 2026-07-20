@@ -18,26 +18,15 @@ String to sign:
   Client-Id:Request-Id:Request-Timestamp:SHA256Hex(minifiedBody)  <- ada body
   Client-Id:Request-Id:Request-Timestamp                          <- GET (tanpa body)
 
-Payload (sesuai docs resmi):
-  POST /v2/settlement-bank-account
-  PUT  /v2/settlement-bank-account
-  {
-    bank_account: {
-      code    : "008",           # string, max 4 char
-      number  : "1081214141456", # STRING (bukan int), min 10 max 25
-      name    : "Test Edwin",    # string, max 100
-      currency: "IDR",
-      country : "Indonesia"
-    }
-  }
-
-Response:
-  { bank_account: { code, number, name, currency, country, status, bank_account_settlement_id } }
+KRITIS:
+  Body yang dikirim ke DOKU harus byte-per-byte IDENTIK dengan body yang di-hash.
+  Oleh karena itu kita serialize sekali ke bytes, lalu kirim raw bytes tersebut
+  (bukan json=payload, melainkan content=body_bytes dengan Content-Type=application/json).
 """
 
 import base64
 import hashlib
-import hmac
+import hmac as hmac_lib
 import json
 import logging
 import uuid
@@ -83,44 +72,40 @@ def _utc_now_str() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _make_h2h_signature(
-    client_id: str,
-    request_id: str,
-    timestamp: str,
-    secret_key: str,
-    body: Optional[dict] = None,
-) -> str:
-    """
-    Signature = HMACSHA256=<base64(HMAC-SHA256(stringToSign, secret_key))>
-
-    stringToSign:
-      Dengan body : Client-Id:Request-Id:Request-Timestamp:SHA256Hex(minifiedBody)
-      Tanpa body  : Client-Id:Request-Id:Request-Timestamp
-    """
-    if body is not None:
-        body_str   = json.dumps(body, separators=(",", ":"))
-        body_hash  = hashlib.sha256(body_str.encode()).hexdigest()
-        string_to_sign = f"{client_id}:{request_id}:{timestamp}:{body_hash}"
-    else:
-        string_to_sign = f"{client_id}:{request_id}:{timestamp}"
-
-    sig_bytes = hmac.new(
-        secret_key.encode(),
-        string_to_sign.encode(),
-        hashlib.sha256,
-    ).digest()
-    return "HMACSHA256=" + base64.b64encode(sig_bytes).decode()
+def _serialize_body(body: dict) -> bytes:
+    """Serialize body sekali ke bytes. Bytes ini HARUS dikirim apa adanya (content=) dan di-hash."""
+    return json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
-def _make_h2h_headers(
+def _make_h2h_headers_and_body(
     client_id: str,
     secret_key: str,
     body: Optional[dict] = None,
-) -> dict:
+) -> tuple[dict, Optional[bytes]]:
+    """
+    Return (headers, body_bytes).
+    body_bytes adalah serialized body yang SAMA persis dengan yang di-hash untuk signature.
+    Gunakan content=body_bytes pada httpx (bukan json=payload) agar byte-identical.
+    """
     request_id = str(uuid.uuid4())
     timestamp  = _utc_now_str()
-    signature  = _make_h2h_signature(client_id, request_id, timestamp, secret_key, body)
-    return {
+
+    if body is not None:
+        body_bytes = _serialize_body(body)
+        body_hash  = hashlib.sha256(body_bytes).hexdigest()
+        string_to_sign = f"{client_id}:{request_id}:{timestamp}:{body_hash}"
+    else:
+        body_bytes     = None
+        string_to_sign = f"{client_id}:{request_id}:{timestamp}"
+
+    sig_bytes = hmac_lib.new(
+        secret_key.encode("utf-8"),
+        string_to_sign.encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    signature = "HMACSHA256=" + base64.b64encode(sig_bytes).decode()
+
+    headers = {
         "Content-Type":      "application/json",
         "Client-Id":         client_id,
         "Request-Id":        request_id,
@@ -128,9 +113,16 @@ def _make_h2h_headers(
         "Signature":         signature,
     }
 
+    logger.debug(
+        "[DOKU SIGN] string_to_sign=%r  signature=%s",
+        string_to_sign,
+        signature,
+    )
+
+    return headers, body_bytes
+
 
 def _raise_doku_error(resp: httpx.Response, context: str) -> None:
-    """Log full response dan raise HTTPException dengan pesan yang bisa dibaca user."""
     try:
         body = resp.json()
     except Exception:
@@ -193,10 +185,6 @@ def _serialize_record(rec: SettlementBankAccount) -> dict:
 
 
 def _apply_doku_response_to_record(rec: SettlementBankAccount, doku_data: dict) -> None:
-    """
-    Update field DB lokal dari response body DOKU H2H.
-    Response: { bank_account: { code, number, name, currency, country, status, bank_account_settlement_id } }
-    """
     ba = doku_data.get("bank_account") or doku_data
     sba_id = ba.get("bank_account_settlement_id")
     if sba_id:
@@ -233,18 +221,6 @@ def list_settlement_bank_accounts(
 # ─── DOKU H2H API Calls ─────────────────────────────────────────────────────
 
 async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dict:
-    """
-    doku_payload (sudah dalam format H2H dari endpoint layer):
-    {
-      bank_account: {
-        code    : "002",
-        number  : "2001148037507",   # STRING sesuai docs
-        name    : "JOHN DOE",
-        currency: "IDR",
-        country : "Indonesia"
-      }
-    }
-    """
     creds, is_production = _get_doku_creds(db)
     client_id  = creds.get("client_id", "")
     secret_key = creds.get("secret_key", "") or creds.get("client_secret", "")
@@ -261,10 +237,15 @@ async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dic
         json.dumps(doku_payload),
     )
 
-    headers = _make_h2h_headers(client_id, secret_key, body=doku_payload)
+    # Serialize sekali — body_bytes di-hash DAN dikirim apa adanya
+    headers, body_bytes = _make_h2h_headers_and_body(client_id, secret_key, body=doku_payload)
 
     async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(f"{base_url}{endpoint}", json=doku_payload, headers=headers)
+        resp = await client.post(
+            f"{base_url}{endpoint}",
+            content=body_bytes,   # <— raw bytes, bukan json=
+            headers=headers,
+        )
 
     if resp.status_code not in (200, 201):
         _raise_doku_error(resp, "CREATE SBA")
@@ -317,7 +298,8 @@ async def _fetch_from_doku(db: Session, doku_sba_id: str) -> dict:
     base_url = BASE_URL_PROD if is_production else BASE_URL_SANDBOX
     endpoint = f"/v2/settlement-bank-account/{doku_sba_id}"
 
-    headers = _make_h2h_headers(client_id, secret_key, body=None)
+    # GET — tanpa body
+    headers, _ = _make_h2h_headers_and_body(client_id, secret_key, body=None)
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.get(f"{base_url}{endpoint}", headers=headers)
@@ -338,7 +320,7 @@ async def sync_from_doku(db: Session, record_id: str) -> dict:
     if not rec:
         raise HTTPException(404, detail=f"Record '{record_id}' tidak ditemukan di DB lokal.")
     if not rec.doku_sba_id:
-        raise HTTPException(400, detail="Record belum punya doku_sba_id. Create ke DOKU mungkin belum berhasil.")
+        raise HTTPException(400, detail="Record belum punya doku_sba_id.")
 
     doku_data = await _fetch_from_doku(db, rec.doku_sba_id)
     _apply_doku_response_to_record(rec, doku_data)
@@ -390,10 +372,14 @@ async def update_settlement_bank_account(db: Session, sba_id: str, doku_payload:
     base_url = BASE_URL_PROD if is_production else BASE_URL_SANDBOX
     endpoint = "/v2/settlement-bank-account"
 
-    headers = _make_h2h_headers(client_id, secret_key, body=doku_payload)
+    headers, body_bytes = _make_h2h_headers_and_body(client_id, secret_key, body=doku_payload)
 
     async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.put(f"{base_url}{endpoint}", json=doku_payload, headers=headers)
+        resp = await client.put(
+            f"{base_url}{endpoint}",
+            content=body_bytes,
+            headers=headers,
+        )
 
     if resp.status_code not in (200, 201):
         _raise_doku_error(resp, f"UPDATE SBA {rec.doku_sba_id}")
