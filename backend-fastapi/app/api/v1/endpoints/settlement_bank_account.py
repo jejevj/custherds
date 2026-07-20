@@ -13,11 +13,11 @@ Payload ke DOKU H2H (sesuai docs resmi):
   PUT  /v2/settlement-bank-account
   {
     "bank_account": {
-      "code"    : "008",          # string
-      "number"  : 1081214141456,  # INTEGER (bukan string)
+      "code"    : "008",            # string
+      "number"  : "1081214141456",  # STRING (bukan int), min 10 max 25
       "name"    : "JOHN DOE",
       "currency": "IDR",
-      "country" : "Indonesia"     # bukan "ID"
+      "country" : "Indonesia"
     }
   }
 Ref: https://developers.doku.com/accept-payments/finance-and-settlement/bulk-registration-bank
@@ -54,18 +54,13 @@ async def create_settlement_bank_account(
     db: Session = Depends(get_db),
 ):
     """Daftarkan settlement bank account baru ke DOKU H2H API dan simpan ke DB lokal."""
-    # Sesuai docs resmi DOKU:
-    # - number  : INTEGER (bukan string)
-    # - country : "Indonesia" (bukan "ID")
-    try:
-        account_number_int = int(payload.account_number)
-    except (ValueError, TypeError):
-        raise HTTPException(status_code=400, detail="account_number harus berupa angka.")
-
+    # Sesuai docs resmi DOKU H2H:
+    # - number  : STRING (min 10, max 25)
+    # - country : "Indonesia"
     doku_body = {
         "bank_account": {
             "code"    : payload.bank_code,
-            "number"  : account_number_int,
+            "number"  : str(payload.account_number),  # pastikan string
             "name"    : payload.account_name.upper(),
             "currency": "IDR",
             "country" : "Indonesia",
@@ -96,10 +91,7 @@ async def update_settlement_bank_account(
     if getattr(payload, "bank_code", None):
         ba_update["code"] = payload.bank_code
     if getattr(payload, "account_number", None):
-        try:
-            ba_update["number"] = int(payload.account_number)
-        except (ValueError, TypeError):
-            raise HTTPException(status_code=400, detail="account_number harus berupa angka.")
+        ba_update["number"] = str(payload.account_number)
 
     if not ba_update:
         raise HTTPException(status_code=400, detail="Tidak ada field yang diupdate.")

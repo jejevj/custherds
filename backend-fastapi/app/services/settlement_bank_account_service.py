@@ -5,7 +5,7 @@ API: H2H (fc-h2h-api) — BUKAN SNAP.
 Ref: https://developers.doku.com/accept-payments/finance-and-settlement/bulk-registration-bank
 
 Base URL:
-  Production : https://production.doku.com/fc-h2h-api
+  Production : https://api.doku.com/fc-h2h-api
   Sandbox    : https://sandbox.doku.com/fc-h2h-api
 
 Auth Headers (setiap request):
@@ -15,13 +15,21 @@ Auth Headers (setiap request):
   Signature         : HMACSHA256=<base64(HMAC-SHA256(stringToSign, secret_key))>
 
 String to sign:
-  Client-Id:Request-Id:Request-Timestamp:SHA256Hex(minifiedBody)  ← kalau ada body
-  Client-Id:Request-Id:Request-Timestamp                          ← GET (tanpa body)
+  Client-Id:Request-Id:Request-Timestamp:SHA256Hex(minifiedBody)  <- ada body
+  Client-Id:Request-Id:Request-Timestamp                          <- GET (tanpa body)
 
 Payload (sesuai docs resmi):
   POST /v2/settlement-bank-account
   PUT  /v2/settlement-bank-account
-  { bank_account: { code, number(int), name, currency, country } }
+  {
+    bank_account: {
+      code    : "008",           # string, max 4 char
+      number  : "1081214141456", # STRING (bukan int), min 10 max 25
+      name    : "Test Edwin",    # string, max 100
+      currency: "IDR",
+      country : "Indonesia"
+    }
+  }
 
 Response:
   { bank_account: { code, number, name, currency, country, status, bank_account_settlement_id } }
@@ -47,7 +55,7 @@ logger = logging.getLogger(__name__)
 
 
 # ─── Constants ────────────────────────────────────────────────────────────
-BASE_URL_PROD    = "https://production.doku.com/fc-h2h-api"
+BASE_URL_PROD    = "https://api.doku.com/fc-h2h-api"
 BASE_URL_SANDBOX = "https://sandbox.doku.com/fc-h2h-api"
 
 
@@ -136,7 +144,6 @@ def _raise_doku_error(resp: httpx.Response, context: str) -> None:
     )
 
     if isinstance(body, dict):
-        # H2H error format: { error: { message, type } }
         if isinstance(body.get("error"), dict):
             detail = body["error"].get("message") or f"DOKU error HTTP {resp.status_code}"
         else:
@@ -193,7 +200,7 @@ def _apply_doku_response_to_record(rec: SettlementBankAccount, doku_data: dict) 
     ba = doku_data.get("bank_account") or doku_data
     sba_id = ba.get("bank_account_settlement_id")
     if sba_id:
-        rec.doku_sba_id = sba_id
+        rec.doku_sba_id = str(sba_id)
     raw_status = ba.get("status")
     if raw_status:
         rec.doku_status = raw_status.upper()
@@ -231,7 +238,7 @@ async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dic
     {
       bank_account: {
         code    : "002",
-        number  : 2001148037507,   # integer
+        number  : "2001148037507",   # STRING sesuai docs
         name    : "JOHN DOE",
         currency: "IDR",
         country : "Indonesia"
@@ -269,7 +276,6 @@ async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dic
     account_number = str(ba.get("number") or doku_payload.get("bank_account", {}).get("number", ""))
     bank_code      = str(ba.get("code")   or doku_payload.get("bank_account", {}).get("code", ""))
 
-    # Idempotent — cek apakah sudah ada di DB
     existing = (
         db.query(SettlementBankAccount)
         .filter(
@@ -311,7 +317,6 @@ async def _fetch_from_doku(db: Session, doku_sba_id: str) -> dict:
     base_url = BASE_URL_PROD if is_production else BASE_URL_SANDBOX
     endpoint = f"/v2/settlement-bank-account/{doku_sba_id}"
 
-    # GET — tidak ada body, signature tanpa hash
     headers = _make_h2h_headers(client_id, secret_key, body=None)
 
     async with httpx.AsyncClient(timeout=30) as client:
@@ -383,7 +388,7 @@ async def update_settlement_bank_account(db: Session, sba_id: str, doku_payload:
     secret_key = creds.get("secret_key", "") or creds.get("client_secret", "")
 
     base_url = BASE_URL_PROD if is_production else BASE_URL_SANDBOX
-    endpoint = "/v2/settlement-bank-account"  # PUT tanpa {id} di path, sesuai docs DOKU
+    endpoint = "/v2/settlement-bank-account"
 
     headers = _make_h2h_headers(client_id, secret_key, body=doku_payload)
 
