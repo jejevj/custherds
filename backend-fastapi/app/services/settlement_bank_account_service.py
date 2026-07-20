@@ -1,7 +1,7 @@
 """
 DOKU Bulk Registration Bank — Settlement Bank Account Service
 
-API yang digunakan adalah H2H (fc-h2h-api), BUKAN SNAP.
+API: H2H (fc-h2h-api) — BUKAN SNAP.
 Ref: https://developers.doku.com/accept-payments/finance-and-settlement/bulk-registration-bank
 
 Base URL:
@@ -15,15 +15,16 @@ Auth Headers (setiap request):
   Signature         : HMACSHA256=<base64(HMAC-SHA256(stringToSign, secret_key))>
 
 String to sign:
-  Client-Id + ":" + Request-Id + ":" + Request-Timestamp + ":" + SHA256(minifiedBody)
-  (untuk GET/tanpa body, bagian SHA256 dikosongkan)
+  Client-Id:Request-Id:Request-Timestamp:SHA256Hex(minifiedBody)  ← kalau ada body
+  Client-Id:Request-Id:Request-Timestamp                          ← GET (tanpa body)
 
-Payload (snake_case, di dalam key bank_account):
+Payload (sesuai docs resmi):
   POST /v2/settlement-bank-account
-    { bank_account: { code, number, name, currency, country } }
-  PUT  /v2/settlement-bank-account/{sba_id}
-    { bank_account: { code, number, name, currency, country } }
-  GET  /v2/settlement-bank-account/{sba_id}
+  PUT  /v2/settlement-bank-account
+  { bank_account: { code, number(int), name, currency, country } }
+
+Response:
+  { bank_account: { code, number, name, currency, country, status, bank_account_settlement_id } }
 """
 
 import base64
@@ -85,12 +86,12 @@ def _make_h2h_signature(
     Signature = HMACSHA256=<base64(HMAC-SHA256(stringToSign, secret_key))>
 
     stringToSign:
-      - Dengan body : Client-Id:Request-Id:Request-Timestamp:SHA256Hex(minifiedBody)
-      - Tanpa body  : Client-Id:Request-Id:Request-Timestamp
+      Dengan body : Client-Id:Request-Id:Request-Timestamp:SHA256Hex(minifiedBody)
+      Tanpa body  : Client-Id:Request-Id:Request-Timestamp
     """
     if body is not None:
-        body_str  = json.dumps(body, separators=(",", ":"))
-        body_hash = hashlib.sha256(body_str.encode()).hexdigest()
+        body_str   = json.dumps(body, separators=(",", ":"))
+        body_hash  = hashlib.sha256(body_str.encode()).hexdigest()
         string_to_sign = f"{client_id}:{request_id}:{timestamp}:{body_hash}"
     else:
         string_to_sign = f"{client_id}:{request_id}:{timestamp}"
@@ -187,16 +188,17 @@ def _serialize_record(rec: SettlementBankAccount) -> dict:
 def _apply_doku_response_to_record(rec: SettlementBankAccount, doku_data: dict) -> None:
     """
     Update field DB lokal dari response body DOKU H2H.
-    Response H2H membungkus data di dalam key bank_account.
+    Response: { bank_account: { code, number, name, currency, country, status, bank_account_settlement_id } }
     """
-    ba = doku_data.get("bank_account") or doku_data  # fallback ke root
-    rec.doku_sba_id           = ba.get("bank_account_settlement_id") or rec.doku_sba_id
-    rec.doku_reference_no     = ba.get("referenceNo")                or rec.doku_reference_no
-    raw_status                = ba.get("status") or ba.get("bankAccountStatus")
+    ba = doku_data.get("bank_account") or doku_data
+    sba_id = ba.get("bank_account_settlement_id")
+    if sba_id:
+        rec.doku_sba_id = sba_id
+    raw_status = ba.get("status")
     if raw_status:
         rec.doku_status = raw_status.upper()
         rec.status      = _doku_status_to_internal(raw_status)
-    rec.doku_rejection_reason = ba.get("rejectionReason") or rec.doku_rejection_reason
+    rec.doku_rejection_reason = ba.get("rejection_reason") or rec.doku_rejection_reason
     rec.doku_raw_response     = json.dumps(doku_data)
     if rec.status == "verified" and not rec.verified_at:
         rec.verified_at = datetime.now(timezone.utc)
@@ -225,16 +227,16 @@ def list_settlement_bank_accounts(
 
 async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dict:
     """
-    doku_payload (dari router/endpoint layer):
-      {
-        bank_account: {
-          code     : "002",
-          number   : "1234567890",   # string
-          name     : "JOHN DOE",
-          currency : "IDR",
-          country  : "ID"
-        }
+    doku_payload (sudah dalam format H2H dari endpoint layer):
+    {
+      bank_account: {
+        code    : "002",
+        number  : 2001148037507,   # integer
+        name    : "JOHN DOE",
+        currency: "IDR",
+        country : "Indonesia"
       }
+    }
     """
     creds, is_production = _get_doku_creds(db)
     client_id  = creds.get("client_id", "")
@@ -263,11 +265,11 @@ async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dic
     doku_data = resp.json()
     logger.info("[DOKU CREATE SBA] response: %s", json.dumps(doku_data))
 
-    ba = doku_data.get("bank_account") or doku_data
-    account_number = str(ba.get("number") or "")
+    ba             = doku_data.get("bank_account") or doku_data
+    account_number = str(ba.get("number") or doku_payload.get("bank_account", {}).get("number", ""))
     bank_code      = str(ba.get("code")   or doku_payload.get("bank_account", {}).get("code", ""))
 
-    # Idempotent
+    # Idempotent — cek apakah sudah ada di DB
     existing = (
         db.query(SettlementBankAccount)
         .filter(
@@ -309,6 +311,7 @@ async def _fetch_from_doku(db: Session, doku_sba_id: str) -> dict:
     base_url = BASE_URL_PROD if is_production else BASE_URL_SANDBOX
     endpoint = f"/v2/settlement-bank-account/{doku_sba_id}"
 
+    # GET — tidak ada body, signature tanpa hash
     headers = _make_h2h_headers(client_id, secret_key, body=None)
 
     async with httpx.AsyncClient(timeout=30) as client:
@@ -362,12 +365,6 @@ async def get_and_sync_settlement_bank_account(db: Session, record_id: str) -> d
 
 
 async def update_settlement_bank_account(db: Session, sba_id: str, doku_payload: dict) -> dict:
-    """
-    doku_payload:
-      {
-        bank_account: { code, number, name, currency, country }
-      }
-    """
     try:
         uid = uuid.UUID(sba_id)
     except ValueError:
@@ -386,7 +383,7 @@ async def update_settlement_bank_account(db: Session, sba_id: str, doku_payload:
     secret_key = creds.get("secret_key", "") or creds.get("client_secret", "")
 
     base_url = BASE_URL_PROD if is_production else BASE_URL_SANDBOX
-    endpoint = f"/v2/settlement-bank-account/{rec.doku_sba_id}"
+    endpoint = "/v2/settlement-bank-account"  # PUT tanpa {id} di path, sesuai docs DOKU
 
     headers = _make_h2h_headers(client_id, secret_key, body=doku_payload)
 
@@ -403,6 +400,6 @@ async def update_settlement_bank_account(db: Session, sba_id: str, doku_payload:
     return _serialize_record(rec)
 
 
-# Kept for backward compat
+# Backward compat
 async def get_settlement_bank_account(db: Session, sba_id: str) -> dict:
     return await _fetch_from_doku(db, sba_id)

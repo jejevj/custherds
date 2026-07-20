@@ -8,17 +8,18 @@ Route:
   PUT    /settlement-bank-account/{id}       → update via DOKU H2H
   POST   /settlement-bank-account/{id}/sync  → force sync status dari DOKU ke DB lokal
 
-Payload ke DOKU H2H (bukan SNAP):
-  POST/PUT body:
-    {
-      "bank_account": {
-        "code"    : "002",           # bank code
-        "number"  : "1234567890",   # nomor rekening (string)
-        "name"    : "JOHN DOE",     # nama pemilik rekening (UPPER)
-        "currency": "IDR",
-        "country" : "ID"
-      }
+Payload ke DOKU H2H (sesuai docs resmi):
+  POST /v2/settlement-bank-account
+  PUT  /v2/settlement-bank-account
+  {
+    "bank_account": {
+      "code"    : "008",          # string
+      "number"  : 1081214141456,  # INTEGER (bukan string)
+      "name"    : "JOHN DOE",
+      "currency": "IDR",
+      "country" : "Indonesia"     # bukan "ID"
     }
+  }
 Ref: https://developers.doku.com/accept-payments/finance-and-settlement/bulk-registration-bank
 """
 
@@ -53,14 +54,21 @@ async def create_settlement_bank_account(
     db: Session = Depends(get_db),
 ):
     """Daftarkan settlement bank account baru ke DOKU H2H API dan simpan ke DB lokal."""
-    # DOKU H2H format — snake_case, dibungkus key bank_account
+    # Sesuai docs resmi DOKU:
+    # - number  : INTEGER (bukan string)
+    # - country : "Indonesia" (bukan "ID")
+    try:
+        account_number_int = int(payload.account_number)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="account_number harus berupa angka.")
+
     doku_body = {
         "bank_account": {
             "code"    : payload.bank_code,
-            "number"  : payload.account_number,
-            "name"    : payload.account_name.upper(),  # DOKU requires UPPERCASE
+            "number"  : account_number_int,
+            "name"    : payload.account_name.upper(),
             "currency": "IDR",
-            "country" : "ID",
+            "country" : "Indonesia",
         }
     }
     return await sba_service.create_settlement_bank_account(db, doku_body)
@@ -88,7 +96,10 @@ async def update_settlement_bank_account(
     if getattr(payload, "bank_code", None):
         ba_update["code"] = payload.bank_code
     if getattr(payload, "account_number", None):
-        ba_update["number"] = payload.account_number
+        try:
+            ba_update["number"] = int(payload.account_number)
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="account_number harus berupa angka.")
 
     if not ba_update:
         raise HTTPException(status_code=400, detail="Tidak ada field yang diupdate.")
@@ -96,11 +107,10 @@ async def update_settlement_bank_account(
     doku_body = {
         "bank_account": {
             "currency": "IDR",
-            "country" : "ID",
+            "country" : "Indonesia",
             **ba_update,
         }
     }
-
     return await sba_service.update_settlement_bank_account(db, sba_id, doku_body)
 
 
