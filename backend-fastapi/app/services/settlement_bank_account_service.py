@@ -8,34 +8,19 @@ Ref Signature: https://dashboard.doku.com/docs/docs/technical-references/generat
 Base URL:
   https://api.doku.com/fc-h2h-api
 
-Auth Headers (setiap request):
-  Client-Id         : client_id dari credentials
-  Request-Id        : UUID unik per request
-  Request-Timestamp : ISO8601 UTC+0  (e.g. 2020-08-11T08:45:42Z)
-  Signature         : HMACSHA256=<base64(HMAC-SHA256(stringToSign, secret_key))>
+Format string_to_sign (DOKU Non-SNAP standard):
+  POST/PUT:
+    Client-Id:{client_id}\n
+    Request-Id:{request_id}\n
+    Request-Timestamp:{timestamp}\n
+    Request-Target:{path}\n
+    Digest:{base64(SHA256(body))}
 
-Format string_to_sign (DOKU standard):
-  Client-Id:{client_id}\n
-  Request-Id:{request_id}\n
-  Request-Timestamp:{timestamp}\n
-  Request-Target:{path}\n
-  Digest:{base64(SHA256(body))}      <- POST/PUT saja
-
-  Untuk GET (tanpa body), baris Digest tidak ada:
-  Client-Id:{client_id}\n
-  Request-Id:{request_id}\n
-  Request-Timestamp:{timestamp}\n
-  Request-Target:{path}
-
-KRITIS:
-  1. Body yang dikirim ke DOKU harus byte-per-byte IDENTIK dengan body yang di-hash.
-     Gunakan content=body_bytes (bukan json=payload) agar byte-identical.
-
-  2. Digest = base64(SHA256(body)) — BUKAN hex.
-
-  3. Request-Target = path endpoint, e.g. /v2/settlement-bank-account
-
-  4. bank_account.number HARUS STRING (min 10, max 25), leading zero dipertahankan.
+  GET:
+    Client-Id:{client_id}\n
+    Request-Id:{request_id}\n
+    Request-Timestamp:{timestamp}\n
+    Request-Target:{path}
 """
 
 import base64
@@ -65,12 +50,6 @@ BASE_URL = "https://api.doku.com/fc-h2h-api"
 # ─── Helpers ────────────────────────────────────────────────────────────
 
 def _safe_str_credential(v) -> str:
-    """
-    Konversi nilai credential dari JSONB ke string tanpa scientific notation.
-    PostgreSQL JSONB mengembalikan angka sebagai Python float.
-    float(1782809889702) → str() → "1.782809889702e+12"  <- SALAH
-    Dengan cast float→int→str: → "1782809889702"  <- BENAR
-    """
     if v is None:
         return ""
     if isinstance(v, float) and math.isfinite(v) and v == math.floor(v):
@@ -98,34 +77,18 @@ def _get_doku_creds(db: Session) -> dict:
 
 
 def _utc_now_str() -> str:
-    """ISO8601 UTC+0 tanpa microseconds, e.g. 2020-08-11T08:45:42Z"""
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _serialize_body(body: dict) -> bytes:
-    """
-    Serialize body ke bytes.
-    Bytes ini HARUS dikirim apa adanya (content=) dan di-hash — harus byte-identical.
-    """
     return json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
 def _make_digest(body_bytes: bytes) -> str:
-    """
-    Digest = base64(SHA256(body_bytes)).
-    DOKU menggunakan base64, BUKAN hex.
-    """
     return base64.b64encode(hashlib.sha256(body_bytes).digest()).decode()
 
 
 def _sanitize_doku_payload(body: dict) -> dict:
-    """
-    Pastikan payload sesuai DOKU H2H spec:
-    - bank_account.number HARUS STRING (min 10, max 25) — leading zero dipertahankan.
-      Contoh: "002001148037507"
-    - bank_account.country default 'Indonesia'
-    - bank_account.currency default 'IDR'
-    """
     if "bank_account" in body:
         ba = dict(body["bank_account"])
         if "number" in ba:
@@ -145,28 +108,19 @@ def _make_h2h_headers_and_body(
     request_target: str,
     body: Optional[dict] = None,
 ) -> tuple[dict, Optional[bytes]]:
-    """
-    Return (headers, body_bytes).
-
-    Format string_to_sign (DOKU standard dengan newline separator):
-      POST/PUT (dengan body):
-        Client-Id:{client_id}\n
-        Request-Id:{request_id}\n
-        Request-Timestamp:{timestamp}\n
-        Request-Target:{request_target}\n
-        Digest:{base64(SHA256(body))}
-
-      GET (tanpa body):
-        Client-Id:{client_id}\n
-        Request-Id:{request_id}\n
-        Request-Timestamp:{timestamp}\n
-        Request-Target:{request_target}
-    """
     client_id  = _safe_str_credential(client_id).strip()
     secret_key = _safe_str_credential(secret_key).strip()
 
     request_id = str(uuid.uuid4())
     timestamp  = _utc_now_str()
+
+    logger.warning("[DOKU DEBUG] === STEP 1: CREDENTIALS ===")
+    logger.warning("[DOKU DEBUG] client_id      = %r", client_id)
+    logger.warning("[DOKU DEBUG] secret_key     = %r", secret_key)
+    logger.warning("[DOKU DEBUG] secret_key len = %d", len(secret_key))
+    logger.warning("[DOKU DEBUG] request_id     = %r", request_id)
+    logger.warning("[DOKU DEBUG] timestamp      = %r", timestamp)
+    logger.warning("[DOKU DEBUG] request_target = %r", request_target)
 
     if body is not None:
         body_bytes = _serialize_body(body)
@@ -178,6 +132,9 @@ def _make_h2h_headers_and_body(
             f"Request-Target:{request_target}\n"
             f"Digest:{digest}"
         )
+        logger.warning("[DOKU DEBUG] === STEP 2: BODY ===")
+        logger.warning("[DOKU DEBUG] body_bytes = %r", body_bytes)
+        logger.warning("[DOKU DEBUG] digest     = %r", digest)
     else:
         body_bytes = None
         digest     = None
@@ -187,6 +144,10 @@ def _make_h2h_headers_and_body(
             f"Request-Timestamp:{timestamp}\n"
             f"Request-Target:{request_target}"
         )
+        logger.warning("[DOKU DEBUG] === STEP 2: BODY === (no body / GET request)")
+
+    logger.warning("[DOKU DEBUG] === STEP 3: STRING TO SIGN ===")
+    logger.warning("[DOKU DEBUG] string_to_sign = %r", string_to_sign)
 
     sig_bytes = hmac_lib.new(
         secret_key.encode("utf-8"),
@@ -194,6 +155,9 @@ def _make_h2h_headers_and_body(
         hashlib.sha256,
     ).digest()
     signature = "HMACSHA256=" + base64.b64encode(sig_bytes).decode()
+
+    logger.warning("[DOKU DEBUG] === STEP 4: SIGNATURE ===")
+    logger.warning("[DOKU DEBUG] signature = %r", signature)
 
     headers = {
         "Content-Type":      "application/json",
@@ -203,20 +167,9 @@ def _make_h2h_headers_and_body(
         "Signature":         signature,
     }
 
-    logger.info(
-        "[DOKU SIGN] client_id=%s request_id=%s timestamp=%s target=%s digest=%s signature=%s",
-        client_id,
-        request_id,
-        timestamp,
-        request_target,
-        digest or "(no body)",
-        signature,
-    )
-    logger.debug(
-        "[DOKU SIGN] string_to_sign=%r  body_bytes=%r",
-        string_to_sign,
-        body_bytes,
-    )
+    logger.warning("[DOKU DEBUG] === STEP 5: HEADERS ===")
+    for k, v in headers.items():
+        logger.warning("[DOKU DEBUG] header %s = %r", k, v)
 
     return headers, body_bytes
 
@@ -233,6 +186,10 @@ def _raise_doku_error(resp: httpx.Response, context: str) -> None:
         resp.status_code,
         json.dumps(body) if isinstance(body, dict) else body,
     )
+
+    logger.warning("[DOKU DEBUG] === STEP 6: RESPONSE HEADERS ===")
+    for k, v in resp.headers.items():
+        logger.warning("[DOKU DEBUG] resp_header %s = %r", k, v)
 
     if isinstance(body, dict):
         if isinstance(body.get("error"), dict):
@@ -331,15 +288,18 @@ async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dic
     request_target = endpoint
     doku_payload   = _sanitize_doku_payload(doku_payload)
 
-    logger.info(
-        "[DOKU CREATE SBA] base_url=%s payload=%s",
-        BASE_URL,
-        json.dumps(doku_payload),
-    )
+    logger.warning("[DOKU DEBUG] === CREATE SBA START ===")
+    logger.warning("[DOKU DEBUG] full_url = %r", f"{BASE_URL}{endpoint}")
+    logger.warning("[DOKU DEBUG] doku_payload = %s", json.dumps(doku_payload))
 
     headers, body_bytes = _make_h2h_headers_and_body(
         client_id, secret_key, request_target=request_target, body=doku_payload
     )
+
+    logger.warning("[DOKU DEBUG] === STEP 7: FULL REQUEST ===")
+    logger.warning("[DOKU DEBUG] method  = POST")
+    logger.warning("[DOKU DEBUG] url     = %r", f"{BASE_URL}{endpoint}")
+    logger.warning("[DOKU DEBUG] body    = %r", body_bytes)
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
@@ -347,6 +307,10 @@ async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dic
             content=body_bytes,
             headers=headers,
         )
+
+    logger.warning("[DOKU DEBUG] === STEP 8: RESPONSE ===")
+    logger.warning("[DOKU DEBUG] status_code = %d", resp.status_code)
+    logger.warning("[DOKU DEBUG] resp_body   = %r", resp.text)
 
     if resp.status_code not in (200, 201):
         _raise_doku_error(resp, "CREATE SBA")
