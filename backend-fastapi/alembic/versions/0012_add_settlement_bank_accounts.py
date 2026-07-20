@@ -1,7 +1,7 @@
 """add settlement_bank_accounts table
 
 Revision ID: 0012_add_settlement_bank_accounts
-Revises: (set to your latest revision id)
+Revises: 7d9f4e2c1b83
 Create Date: 2026-07-20
 """
 from alembic import op
@@ -10,7 +10,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers
 revision = '0012_add_settlement_bank_accounts'
-down_revision = None  # ← ganti dengan revision ID migration terakhir Anda
+down_revision = '7d9f4e2c1b83'
 branch_labels = None
 depends_on = None
 
@@ -39,10 +39,10 @@ def upgrade() -> None:
     )
 
     # Index untuk query cepat
-    op.create_index('ix_sba_guide_id',   'settlement_bank_accounts', ['guide_id'])
-    op.create_index('ix_sba_vendor_id',  'settlement_bank_accounts', ['vendor_id'])
-    op.create_index('ix_sba_status',     'settlement_bank_accounts', ['status'])
-    op.create_index('ix_sba_doku_sba_id','settlement_bank_accounts', ['doku_sba_id'])
+    op.create_index('ix_sba_guide_id',    'settlement_bank_accounts', ['guide_id'])
+    op.create_index('ix_sba_vendor_id',   'settlement_bank_accounts', ['vendor_id'])
+    op.create_index('ix_sba_status',      'settlement_bank_accounts', ['status'])
+    op.create_index('ix_sba_doku_sba_id', 'settlement_bank_accounts', ['doku_sba_id'])
 
 
 def downgrade() -> None:
