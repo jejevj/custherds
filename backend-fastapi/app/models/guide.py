@@ -55,3 +55,4 @@ class Guide(Base):
     transactions                = relationship("Transaction", back_populates="guide")
     disbursements               = relationship("CommissionDisbursement", back_populates="guide")
     withdrawals                 = relationship("GuideWithdrawal", back_populates="guide")
+    settlement_bank_accounts    = relationship("SettlementBankAccount", back_populates="guide", cascade="all, delete-orphan")

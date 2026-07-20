@@ -74,3 +74,4 @@ class Vendor(Base):
     transactions                = relationship("Transaction", back_populates="vendor")
     destinations                = relationship("Destination", back_populates="vendor")
     deposit_topups              = relationship("VendorDepositTopup", back_populates="vendor")
+    settlement_bank_accounts    = relationship("SettlementBankAccount", back_populates="vendor", cascade="all, delete-orphan")
