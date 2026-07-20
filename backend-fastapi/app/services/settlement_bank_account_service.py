@@ -13,6 +13,7 @@ Ref: https://developers.doku.com
 import base64
 import hashlib
 import json
+import logging
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -25,6 +26,8 @@ from fastapi import HTTPException, status
 
 from app.models.payment_gateway_config import PaymentGatewayConfig
 from app.models.settlement_bank_account import SettlementBankAccount
+
+logger = logging.getLogger(__name__)
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -112,6 +115,38 @@ def _make_snap_headers(
     }
 
 
+def _raise_doku_error(resp: httpx.Response, context: str) -> None:
+    """Log full DOKU response body dan raise HTTPException dengan detail lengkap."""
+    try:
+        body = resp.json()
+    except Exception:
+        body = resp.text
+
+    logger.error(
+        "[DOKU %s] HTTP %s | body: %s",
+        context,
+        resp.status_code,
+        json.dumps(body) if isinstance(body, dict) else body,
+    )
+
+    if isinstance(body, dict):
+        detail = (
+            body.get("responseMessage")
+            or body.get("message")
+            or body.get("detail")
+            or body.get("error")
+            or f"DOKU error: HTTP {resp.status_code}"
+        )
+        # Sertakan responseCode jika ada untuk diagnosis
+        code = body.get("responseCode") or body.get("code")
+        if code:
+            detail = f"[{code}] {detail}"
+    else:
+        detail = body or f"DOKU error: HTTP {resp.status_code}"
+
+    raise HTTPException(status_code=resp.status_code, detail=detail)
+
+
 def _doku_status_to_internal(doku_status: Optional[str]) -> str:
     return {"PENDING": "pending", "VERIFIED": "verified", "REJECTED": "rejected"}.get(
         (doku_status or "").upper(), "pending"
@@ -120,23 +155,23 @@ def _doku_status_to_internal(doku_status: Optional[str]) -> str:
 
 def _serialize_record(rec: SettlementBankAccount) -> dict:
     return {
-        "id":                   str(rec.id),
-        "guide_id":             str(rec.guide_id)  if rec.guide_id  else None,
-        "vendor_id":            str(rec.vendor_id) if rec.vendor_id else None,
-        "bank_code":            rec.bank_code,
-        "account_number":       rec.account_number,
-        "account_name":         rec.account_name,
-        "account_email":        rec.account_email,
-        "doku_sba_id":          rec.doku_sba_id,
-        "doku_reference_no":    rec.doku_reference_no,
-        "doku_status":          rec.doku_status,
+        "id":                    str(rec.id),
+        "guide_id":              str(rec.guide_id)  if rec.guide_id  else None,
+        "vendor_id":             str(rec.vendor_id) if rec.vendor_id else None,
+        "bank_code":             rec.bank_code,
+        "account_number":        rec.account_number,
+        "account_name":          rec.account_name,
+        "account_email":         rec.account_email,
+        "doku_sba_id":           rec.doku_sba_id,
+        "doku_reference_no":     rec.doku_reference_no,
+        "doku_status":           rec.doku_status,
         "doku_rejection_reason": rec.doku_rejection_reason,
-        "status":               rec.status,
-        "is_primary":           rec.is_primary,
-        "registered_at":        rec.registered_at.isoformat() if rec.registered_at else None,
-        "verified_at":          rec.verified_at.isoformat()   if rec.verified_at   else None,
-        "created_at":           rec.created_at.isoformat()    if rec.created_at    else None,
-        "updated_at":           rec.updated_at.isoformat()    if rec.updated_at    else None,
+        "status":                rec.status,
+        "is_primary":            rec.is_primary,
+        "registered_at":         rec.registered_at.isoformat() if rec.registered_at else None,
+        "verified_at":           rec.verified_at.isoformat()   if rec.verified_at   else None,
+        "created_at":            rec.created_at.isoformat()    if rec.created_at    else None,
+        "updated_at":            rec.updated_at.isoformat()    if rec.updated_at    else None,
     }
 
 
@@ -155,9 +190,9 @@ def list_settlement_bank_accounts(
 
 def _apply_doku_response_to_record(rec: SettlementBankAccount, doku_data: dict) -> None:
     """Update field DB lokal dari response DOKU (camelCase)."""
-    rec.doku_sba_id          = doku_data.get("bankAccountSettlementId") or rec.doku_sba_id
-    rec.doku_reference_no    = doku_data.get("referenceNo")             or rec.doku_reference_no
-    raw_status               = doku_data.get("status") or doku_data.get("bankAccountStatus")
+    rec.doku_sba_id           = doku_data.get("bankAccountSettlementId") or rec.doku_sba_id
+    rec.doku_reference_no     = doku_data.get("referenceNo")             or rec.doku_reference_no
+    raw_status                = doku_data.get("status") or doku_data.get("bankAccountStatus")
     if raw_status:
         rec.doku_status = raw_status.upper()
         rec.status      = _doku_status_to_internal(raw_status)
@@ -170,19 +205,17 @@ def _apply_doku_response_to_record(rec: SettlementBankAccount, doku_data: dict) 
 # ─── DOKU API Calls ──────────────────────────────────────────────────────────
 
 async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dict:
-    """
-    doku_payload sudah dalam camelCase dari endpoint layer:
-    { bankCode, accountNo, accountName, merchantReference? }
-    """
     creds, is_production = _get_doku_creds(db)
-    client_id        = creds.get("client_id", "")
-    private_key_pem  = creds.get("private_key", "")
+    client_id       = creds.get("client_id", "")
+    private_key_pem = creds.get("private_key", "")
 
     if not client_id or not private_key_pem:
         raise HTTPException(400, detail="Credentials DOKU tidak lengkap (client_id, private_key).")
 
     base_url = "https://api.doku.com" if is_production else "https://api-sandbox.doku.com"
     endpoint = "/v2/settlement-bank-account"
+
+    logger.info("[DOKU CREATE SBA] base_url=%s payload=%s", base_url, json.dumps(doku_payload))
 
     access_token = await _get_access_token(client_id, private_key_pem, base_url)
     headers      = _make_snap_headers(access_token, client_id, private_key_pem, "POST", endpoint, doku_payload)
@@ -191,15 +224,12 @@ async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dic
         resp = await client.post(f"{base_url}{endpoint}", json=doku_payload, headers=headers)
 
     if resp.status_code not in (200, 201):
-        err = resp.json() if resp.content else {}
-        raise HTTPException(
-            status_code=resp.status_code,
-            detail=err.get("responseMessage") or err.get("detail") or f"DOKU error: HTTP {resp.status_code}",
-        )
+        _raise_doku_error(resp, "CREATE SBA")
 
     doku_data = resp.json()
+    logger.info("[DOKU CREATE SBA] response: %s", json.dumps(doku_data))
 
-    # ── Idempotent: cek berdasarkan accountNo + bankCode ──────────────────────────
+    # Idempotent: cek berdasarkan accountNo + bankCode
     existing = (
         db.query(SettlementBankAccount)
         .filter(
@@ -287,21 +317,13 @@ async def _fetch_from_doku(db: Session, doku_sba_id: str) -> dict:
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.get(f"{base_url}{endpoint}", headers=headers)
 
-    if resp.status_code == 404:
-        raise HTTPException(404, detail=f"SBA '{doku_sba_id}' tidak ditemukan di DOKU.")
     if not resp.is_success:
-        err = resp.json() if resp.content else {}
-        raise HTTPException(resp.status_code, detail=err.get("responseMessage") or f"DOKU error: HTTP {resp.status_code}")
+        _raise_doku_error(resp, f"GET SBA {doku_sba_id}")
+
     return resp.json()
 
 
 async def update_settlement_bank_account(db: Session, sba_id: str, doku_payload: dict) -> dict:
-    """
-    doku_payload sudah camelCase dari endpoint layer:
-    { accountName?, merchantReference? }
-    sba_id adalah internal UUID (bukan doku_sba_id).
-    """
-    # Resolve ke doku_sba_id
     try:
         uid = uuid.UUID(sba_id)
     except ValueError:
@@ -329,11 +351,8 @@ async def update_settlement_bank_account(db: Session, sba_id: str, doku_payload:
         resp = await client.put(f"{base_url}{endpoint}", json=doku_payload, headers=headers)
 
     if resp.status_code not in (200, 201):
-        err = resp.json() if resp.content else {}
-        raise HTTPException(
-            status_code=resp.status_code,
-            detail=err.get("responseMessage") or err.get("detail") or f"DOKU error: HTTP {resp.status_code}",
-        )
+        _raise_doku_error(resp, f"UPDATE SBA {rec.doku_sba_id}")
+
     return resp.json()
 
 
