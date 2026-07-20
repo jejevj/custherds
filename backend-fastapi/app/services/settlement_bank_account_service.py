@@ -3,8 +3,9 @@ DOKU Bulk Registration Bank — Settlement Bank Account Service
 
 API: H2H (fc-h2h-api) — BUKAN SNAP.
 Ref: https://developers.doku.com/accept-payments/finance-and-settlement/bulk-registration-bank
+Ref Signature: https://dashboard.doku.com/docs/docs/technical-references/generate-signature
 
-Base URL (hardcoded production):
+Base URL:
   https://api.doku.com/fc-h2h-api
 
 Auth Headers (setiap request):
@@ -13,21 +14,28 @@ Auth Headers (setiap request):
   Request-Timestamp : ISO8601 UTC+0  (e.g. 2020-08-11T08:45:42Z)
   Signature         : HMACSHA256=<base64(HMAC-SHA256(stringToSign, secret_key))>
 
-String to sign:
-  Client-Id:Request-Id:Request-Timestamp:SHA256Hex(minifiedBody)  <- ada body
-  Client-Id:Request-Id:Request-Timestamp                          <- GET (tanpa body)
+Format string_to_sign (DOKU standard):
+  Client-Id:{client_id}\n
+  Request-Id:{request_id}\n
+  Request-Timestamp:{timestamp}\n
+  Request-Target:{path}\n
+  Digest:{base64(SHA256(body))}      <- POST/PUT saja
+
+  Untuk GET (tanpa body), baris Digest tidak ada:
+  Client-Id:{client_id}\n
+  Request-Id:{request_id}\n
+  Request-Timestamp:{timestamp}\n
+  Request-Target:{path}
 
 KRITIS:
   1. Body yang dikirim ke DOKU harus byte-per-byte IDENTIK dengan body yang di-hash.
      Gunakan content=body_bytes (bukan json=payload) agar byte-identical.
 
-  2. number field HARUS STRING sesuai docs DOKU H2H (min 10, max 25 chars).
-     Leading zero harus dipertahankan: "002001148037507" bukan 2001148037507.
-     Endpoint handler sudah melakukan str(payload.account_number).
+  2. Digest = base64(SHA256(body)) — BUKAN hex.
 
-  3. MASALAH SCIENTIFIC NOTATION:
-     PostgreSQL JSONB mengembalikan angka besar sebagai Python float.
-     Kredensial (client_id, secret_key) harus di-cast via _safe_str_credential.
+  3. Request-Target = path endpoint, e.g. /v2/settlement-bank-account
+
+  4. bank_account.number HARUS STRING (min 10, max 25), leading zero dipertahankan.
 """
 
 import base64
@@ -60,7 +68,7 @@ def _safe_str_credential(v) -> str:
     """
     Konversi nilai credential dari JSONB ke string tanpa scientific notation.
     PostgreSQL JSONB mengembalikan angka sebagai Python float.
-    float(1782809889702) → 1782809889702.0 → str() → "1.782809889702e+12"  <- SALAH
+    float(1782809889702) → str() → "1.782809889702e+12"  <- SALAH
     Dengan cast float→int→str: → "1782809889702"  <- BENAR
     """
     if v is None:
@@ -102,18 +110,25 @@ def _serialize_body(body: dict) -> bytes:
     return json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
+def _make_digest(body_bytes: bytes) -> str:
+    """
+    Digest = base64(SHA256(body_bytes)).
+    DOKU menggunakan base64, BUKAN hex.
+    """
+    return base64.b64encode(hashlib.sha256(body_bytes).digest()).decode()
+
+
 def _sanitize_doku_payload(body: dict) -> dict:
     """
     Pastikan payload sesuai DOKU H2H spec:
     - bank_account.number HARUS STRING (min 10, max 25) — leading zero dipertahankan.
-      Contoh: "002001148037507", bukan integer 2001148037507.
+      Contoh: "002001148037507"
     - bank_account.country default 'Indonesia'
     - bank_account.currency default 'IDR'
     """
     if "bank_account" in body:
         ba = dict(body["bank_account"])
         if "number" in ba:
-            # Pastikan string, strip whitespace, buang .0 jika float
             num_str = str(ba["number"]).strip()
             if num_str.endswith(".0"):
                 num_str = num_str[:-2]
@@ -127,12 +142,25 @@ def _sanitize_doku_payload(body: dict) -> dict:
 def _make_h2h_headers_and_body(
     client_id: str,
     secret_key: str,
+    request_target: str,
     body: Optional[dict] = None,
 ) -> tuple[dict, Optional[bytes]]:
     """
     Return (headers, body_bytes).
-    body_bytes adalah serialized body yang SAMA persis dengan yang di-hash untuk signature.
-    Gunakan content=body_bytes pada httpx (bukan json=payload) agar byte-identical.
+
+    Format string_to_sign (DOKU standard dengan newline separator):
+      POST/PUT (dengan body):
+        Client-Id:{client_id}\n
+        Request-Id:{request_id}\n
+        Request-Timestamp:{timestamp}\n
+        Request-Target:{request_target}\n
+        Digest:{base64(SHA256(body))}
+
+      GET (tanpa body):
+        Client-Id:{client_id}\n
+        Request-Id:{request_id}\n
+        Request-Timestamp:{timestamp}\n
+        Request-Target:{request_target}
     """
     client_id  = _safe_str_credential(client_id).strip()
     secret_key = _safe_str_credential(secret_key).strip()
@@ -142,11 +170,23 @@ def _make_h2h_headers_and_body(
 
     if body is not None:
         body_bytes = _serialize_body(body)
-        body_hash  = hashlib.sha256(body_bytes).hexdigest()
-        string_to_sign = f"{client_id}:{request_id}:{timestamp}:{body_hash}"
+        digest     = _make_digest(body_bytes)
+        string_to_sign = (
+            f"Client-Id:{client_id}\n"
+            f"Request-Id:{request_id}\n"
+            f"Request-Timestamp:{timestamp}\n"
+            f"Request-Target:{request_target}\n"
+            f"Digest:{digest}"
+        )
     else:
-        body_bytes     = None
-        string_to_sign = f"{client_id}:{request_id}:{timestamp}"
+        body_bytes = None
+        digest     = None
+        string_to_sign = (
+            f"Client-Id:{client_id}\n"
+            f"Request-Id:{request_id}\n"
+            f"Request-Timestamp:{timestamp}\n"
+            f"Request-Target:{request_target}"
+        )
 
     sig_bytes = hmac_lib.new(
         secret_key.encode("utf-8"),
@@ -164,11 +204,12 @@ def _make_h2h_headers_and_body(
     }
 
     logger.info(
-        "[DOKU SIGN] client_id=%s request_id=%s timestamp=%s body_hash=%s signature=%s",
+        "[DOKU SIGN] client_id=%s request_id=%s timestamp=%s target=%s digest=%s signature=%s",
         client_id,
         request_id,
         timestamp,
-        hashlib.sha256(body_bytes).hexdigest() if body_bytes else "(no body)",
+        request_target,
+        digest or "(no body)",
         signature,
     )
     logger.debug(
@@ -286,8 +327,9 @@ async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dic
     if not client_id or not secret_key:
         raise HTTPException(400, detail="Credentials DOKU tidak lengkap (client_id, secret_key).")
 
-    endpoint     = "/v2/settlement-bank-account"
-    doku_payload = _sanitize_doku_payload(doku_payload)
+    endpoint       = "/v2/settlement-bank-account"
+    request_target = endpoint
+    doku_payload   = _sanitize_doku_payload(doku_payload)
 
     logger.info(
         "[DOKU CREATE SBA] base_url=%s payload=%s",
@@ -295,7 +337,9 @@ async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dic
         json.dumps(doku_payload),
     )
 
-    headers, body_bytes = _make_h2h_headers_and_body(client_id, secret_key, body=doku_payload)
+    headers, body_bytes = _make_h2h_headers_and_body(
+        client_id, secret_key, request_target=request_target, body=doku_payload
+    )
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
@@ -352,8 +396,11 @@ async def _fetch_from_doku(db: Session, doku_sba_id: str) -> dict:
     if not client_id or not secret_key:
         raise HTTPException(400, detail="Credentials DOKU tidak lengkap.")
 
-    endpoint   = f"/v2/settlement-bank-account/{doku_sba_id}"
-    headers, _ = _make_h2h_headers_and_body(client_id, secret_key, body=None)
+    endpoint       = f"/v2/settlement-bank-account/{doku_sba_id}"
+    request_target = endpoint
+    headers, _     = _make_h2h_headers_and_body(
+        client_id, secret_key, request_target=request_target, body=None
+    )
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.get(f"{BASE_URL}{endpoint}", headers=headers)
@@ -423,9 +470,12 @@ async def update_settlement_bank_account(db: Session, sba_id: str, doku_payload:
     client_id  = creds.get("client_id", "")
     secret_key = creds.get("secret_key", "") or creds.get("client_secret", "")
 
-    endpoint     = "/v2/settlement-bank-account"
-    doku_payload = _sanitize_doku_payload(doku_payload)
-    headers, body_bytes = _make_h2h_headers_and_body(client_id, secret_key, body=doku_payload)
+    endpoint       = "/v2/settlement-bank-account"
+    request_target = endpoint
+    doku_payload   = _sanitize_doku_payload(doku_payload)
+    headers, body_bytes = _make_h2h_headers_and_body(
+        client_id, secret_key, request_target=request_target, body=doku_payload
+    )
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.put(
