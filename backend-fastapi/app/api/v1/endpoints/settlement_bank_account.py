@@ -2,14 +2,15 @@
 Settlement Bank Account endpoints — proxy ke DOKU Bulk Registration Bank API.
 
 Route:
-  GET    /settlement-bank-account          → list (stored/cached, bukan dari DOKU langsung)
-  POST   /settlement-bank-account          → create via DOKU
-  GET    /settlement-bank-account/{id}     → get by ID via DOKU
-  PUT    /settlement-bank-account/{id}     → update via DOKU (hanya verified)
+  GET    /settlement-bank-account/           → list dari DB lokal
+  POST   /settlement-bank-account/           → create via DOKU + simpan ke DB lokal
+  GET    /settlement-bank-account/{id}       → get dari DB lokal, sync dari DOKU jika perlu
+  PUT    /settlement-bank-account/{id}       → update via DOKU
+  POST   /settlement-bank-account/{id}/sync  → force sync status dari DOKU ke DB lokal
 """
 
 from typing import Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -30,22 +31,10 @@ async def list_settlement_bank_accounts(
     db: Session = Depends(get_db),
 ):
     """
-    List semua settlement bank account.
-    Karena DOKU tidak menyediakan endpoint list, data dikembalikan dari DB lokal
-    (yang di-sync saat create/get). Untuk sementara query langsung ke DOKU GET by ID
-    tidak applicable untuk list — ini placeholder yang mengembalikan struktur kosong
-    sampai ada mekanisme sync.
-
-    TODO: Implementasi local DB model untuk cache data SBA dari DOKU.
+    List semua settlement bank account dari DB lokal.
+    Data tersimpan otomatis saat create, dan di-sync saat GET /{id} atau POST /{id}/sync.
     """
-    # Placeholder response — akan diisi setelah model DB dibuat
-    return {
-        "items": [],
-        "total": 0,
-        "page": page,
-        "size": size,
-        "info": "List endpoint membutuhkan local DB sync. Gunakan GET /{id} untuk data spesifik."
-    }
+    return sba_service.list_settlement_bank_accounts(db, page=page, size=size, status=status)
 
 
 @router.post("/", status_code=201)
@@ -53,7 +42,7 @@ async def create_settlement_bank_account(
     payload: SettlementBankAccountCreate,
     db: Session = Depends(get_db),
 ):
-    """Daftarkan settlement bank account baru ke DOKU."""
+    """Daftarkan settlement bank account baru ke DOKU dan simpan ke DB lokal."""
     body = payload.model_dump(exclude_none=True)
     return await sba_service.create_settlement_bank_account(db, body)
 
@@ -63,8 +52,11 @@ async def get_settlement_bank_account(
     sba_id: str,
     db: Session = Depends(get_db),
 ):
-    """Get detail settlement bank account dari DOKU berdasarkan ID."""
-    return await sba_service.get_settlement_bank_account(db, sba_id)
+    """
+    Get settlement bank account dari DB lokal.
+    Jika ada doku_sba_id, otomatis sync status terbaru dari DOKU.
+    """
+    return await sba_service.get_and_sync_settlement_bank_account(db, sba_id)
 
 
 @router.put("/{sba_id}")
@@ -76,6 +68,17 @@ async def update_settlement_bank_account(
     """Update settlement bank account di DOKU. Hanya bisa untuk status verified."""
     body = payload.model_dump(exclude_none=True)
     if not body:
-        from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Tidak ada field yang diupdate.")
     return await sba_service.update_settlement_bank_account(db, sba_id, body)
+
+
+@router.post("/{sba_id}/sync")
+async def sync_settlement_bank_account(
+    sba_id: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Force sync status settlement bank account dari DOKU ke DB lokal.
+    Gunakan ini jika status di DB lokal tidak up-to-date.
+    """
+    return await sba_service.sync_from_doku(db, sba_id)

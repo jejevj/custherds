@@ -20,4 +20,8 @@ export const settlementBankAccountService = {
 
   update: (id: string, body: SettlementBankAccountUpdate) =>
     api.put<SettlementBankAccount>(`${BASE}${id}`, body),
+
+  /** Force sync status dari DOKU ke DB lokal */
+  sync: (id: string) =>
+    api.post<{ message: string; data: SettlementBankAccount }>(`${BASE}${id}/sync`, {}),
 }
