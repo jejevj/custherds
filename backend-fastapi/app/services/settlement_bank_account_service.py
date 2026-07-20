@@ -1,4 +1,3 @@
-
 """
 DOKU Bulk Registration Bank — Settlement Bank Account Service
 
@@ -20,18 +19,18 @@ String to sign:
   Client-Id:Request-Id:Request-Timestamp                          <- GET (tanpa body)
 
 KRITIS:
-  Body yang dikirim ke DOKU harus byte-per-byte IDENTIK dengan body yang di-hash.
-  Oleh karena itu kita serialize sekali ke bytes, lalu kirim raw bytes tersebut
-  (bukan json=payload, melainkan content=body_bytes dengan Content-Type=application/json).
+  1. Body yang dikirim ke DOKU harus byte-per-byte IDENTIK dengan body yang di-hash.
+     Gunakan content=body_bytes (bukan json=payload) agar byte-identical.
 
-  MASALAH SCIENTIFIC NOTATION:
-  PostgreSQL JSONB mengembalikan angka besar (e.g. 1782809889702) sebagai Python float.
-  float.__str__() → "1.782809889702e+12", bukan "1782809889702".
-  Ini menyebabkan:
-    1. Client-Id header = "BRN-0272-1782809889702"   (benar, karena diambil sebelum diformat)
-    2. string_to_sign   = "BRN-0272-1.782809889702e+12:..."  (salah → signature invalid)
-  Solusi: gunakan _safe_str_credential() yang cast float → int → str untuk angka bulat.
-  Dan gunakan _serialize_body() dengan custom encoder yang mencegah scientific notation.
+  2. number field HARUS integer (bukan string) sesuai docs DOKU H2H.
+     Contoh docs: "number": 1081214141456
+
+  3. MASALAH SCIENTIFIC NOTATION:
+     PostgreSQL JSONB mengembalikan angka besar sebagai Python float.
+     json.dumps({"n": 1782809889702.0}) → '{"n": 1.782809889702e+12}'  <- SALAH
+     Solusi: pre-process dict dengan _fix_floats() sebelum json.dumps,
+     mengubah float bulat → int agar tidak ada scientific notation.
+     Dan credentials harus di-cast via _safe_str_credential (float→int→str).
 """
 
 import base64
@@ -64,10 +63,9 @@ BASE_URL_SANDBOX = "https://sandbox.doku.com/fc-h2h-api"
 def _safe_str_credential(v) -> str:
     """
     Konversi nilai credential dari JSONB ke string tanpa scientific notation.
-    PostgreSQL JSONB bisa mengembalikan angka sebagai float Python.
-    float("1782809889702") → 1782809889702.0 → str() → "1.782809889702e+12"  ← SALAH
-    Solusi: jika float dan bernilai bulat, cast ke int dulu.
-    Contoh: 1782809889702.0 → int → "1782809889702"  ← BENAR
+    PostgreSQL JSONB mengembalikan angka sebagai Python float.
+    float(1782809889702) → 1782809889702.0 → str() → "1.782809889702e+12"  <- SALAH
+    Dengan cast float→int→str: → "1782809889702"  <- BENAR
     """
     if v is None:
         return ""
@@ -76,23 +74,20 @@ def _safe_str_credential(v) -> str:
     return str(v)
 
 
-class _NoSciNotationEncoder(json.JSONEncoder):
+def _fix_floats(obj):
     """
-    Custom JSON encoder yang mencegah scientific notation untuk float bulat besar.
-    Python json.dumps default: 2001148037507.0 → 2.001148037507e+12  ← SALAH untuk DOKU
-    Dengan encoder ini: 2001148037507.0 → 2001148037507               ← BENAR
+    Pre-process dict/list secara rekursif: ubah float bulat → int
+    sebelum json.dumps agar tidak ada scientific notation.
+    json.dumps({"n": 2001148037507.0}) → 2.001148037507e+12  <- SALAH
+    json.dumps({"n": 2001148037507})   → 2001148037507        <- BENAR
     """
-    def iterencode(self, o, _one_shot=False):
-        return super().iterencode(self._fix(o), _one_shot)
-
-    def _fix(self, o):
-        if isinstance(o, float) and math.isfinite(o) and o == math.floor(o):
-            return int(o)
-        if isinstance(o, dict):
-            return {k: self._fix(v) for k, v in o.items()}
-        if isinstance(o, (list, tuple)):
-            return [self._fix(i) for i in o]
-        return o
+    if isinstance(obj, float) and math.isfinite(obj) and obj == math.floor(obj):
+        return int(obj)
+    if isinstance(obj, dict):
+        return {k: _fix_floats(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_fix_floats(i) for i in obj]
+    return obj
 
 
 def _get_doku_creds(db: Session) -> tuple[dict, bool]:
@@ -110,7 +105,7 @@ def _get_doku_creds(db: Session) -> tuple[dict, bool]:
             detail="Gateway DOKU belum dikonfigurasi atau belum aktif.",
         )
     raw = config.credentials or {}
-    # Gunakan _safe_str_credential agar float besar tidak jadi scientific notation
+    # Cast semua value ke str dengan aman (float besar → int → str)
     sanitized = {k: _safe_str_credential(v) for k, v in raw.items()}
     return sanitized, config.is_production
 
@@ -122,23 +117,30 @@ def _utc_now_str() -> str:
 
 def _serialize_body(body: dict) -> bytes:
     """
-    Serialize body ke bytes dengan custom encoder yang mencegah scientific notation.
+    Serialize body ke bytes tanpa scientific notation.
+    Pre-process dulu dengan _fix_floats() sebelum json.dumps.
     Bytes ini HARUS dikirim apa adanya (content=) dan di-hash — harus byte-identical.
     """
-    return json.dumps(body, separators=(",", ":"), ensure_ascii=False, cls=_NoSciNotationEncoder).encode("utf-8")
+    return json.dumps(_fix_floats(body), separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
 def _sanitize_doku_payload(body: dict) -> dict:
     """
     Pastikan payload sesuai DOKU H2H spec:
-    - bank_account.number HARUS string murni tanpa scientific notation
+    - bank_account.number HARUS integer (sesuai docs DOKU H2H)
+      Contoh docs: "number": 1081214141456
+      Leading zero dihapus otomatis karena int("002001148037507") = 2001148037507
     - bank_account.country default 'Indonesia'
     - bank_account.currency default 'IDR'
     """
     if "bank_account" in body:
         ba = dict(body["bank_account"])
         if "number" in ba:
-            ba["number"] = _safe_str_credential(ba["number"])
+            try:
+                # Konversi ke integer: strip leading zeros, buang float
+                ba["number"] = int(str(ba["number"]).replace(".0", "").strip())
+            except (ValueError, TypeError):
+                pass  # biarkan apa adanya jika tidak bisa dikonversi
         ba.setdefault("currency", "IDR")
         ba.setdefault("country", "Indonesia")
         return {**body, "bank_account": ba}
@@ -155,7 +157,7 @@ def _make_h2h_headers_and_body(
     body_bytes adalah serialized body yang SAMA persis dengan yang di-hash untuk signature.
     Gunakan content=body_bytes pada httpx (bukan json=payload) agar byte-identical.
     """
-    # Double-guard: pastikan tidak ada scientific notation yang lolos
+    # Pastikan tidak ada scientific notation dari float credential
     client_id  = _safe_str_credential(client_id).strip()
     secret_key = _safe_str_credential(secret_key).strip()
 
@@ -298,7 +300,7 @@ def list_settlement_bank_accounts(
     return {"items": [_serialize_record(r) for r in records], "total": total, "page": page, "size": size}
 
 
-# ─── DOKU H2H API Calls ──────────────────────────────────────────────────────
+# ─── DOKU H2H API Calls ─────────────────────────────────────────────────────
 
 async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dict:
     creds, is_production = _get_doku_creds(db)
@@ -316,7 +318,7 @@ async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dic
     logger.info(
         "[DOKU CREATE SBA] base_url=%s payload=%s",
         base_url,
-        json.dumps(doku_payload, cls=_NoSciNotationEncoder),
+        json.dumps(_fix_floats(doku_payload)),
     )
 
     headers, body_bytes = _make_h2h_headers_and_body(client_id, secret_key, body=doku_payload)
