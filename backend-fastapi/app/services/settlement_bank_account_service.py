@@ -25,9 +25,10 @@ Format string_to_sign (DOKU Non-SNAP standard):
 PENTING:
   - Digest di string_to_sign adalah plain base64(SHA256(body)) tanpa prefix apapun
   - Header Digest TIDAK dikirim sebagai request header terpisah
-  - bank_account.number HARUS string agar leading zeros tidak hilang
-  - credentials (client_id, secret_key) harus diambil as-is sebagai string
-    JANGAN konversi float karena akan merusak nilai seperti BRN-0272-1782809889702
+  - bank_account.number dikirim sebagai INTEGER (sesuai contoh di docs DOKU)
+    contoh docs: "number": 1081214141456  <-- integer, bukan string
+  - credentials (client_id, secret_key) HARUS str as-is, JANGAN konversi float
+    karena akan merusak BRN-0272-1782809889702 menjadi scientific notation
 """
 
 import base64
@@ -56,7 +57,11 @@ BASE_URL = "https://api.doku.com/fc-h2h-api"
 # ─── Helpers ────────────────────────────────────────────────────────────
 
 def _get_doku_creds(db: Session) -> dict:
-    """Ambil credentials DOKU dari DB. Semua nilai dikembalikan sebagai str as-is."""
+    """Ambil credentials DOKU dari DB. Semua nilai dikembalikan sebagai str as-is.
+    
+    PENTING: Jangan konversi float karena merusak nilai seperti
+    BRN-0272-1782809889702 menjadi BRN-0272-1.782809889702e+12
+    """
     config = (
         db.query(PaymentGatewayConfig)
         .filter(
@@ -71,8 +76,6 @@ def _get_doku_creds(db: Session) -> dict:
             detail="Gateway DOKU belum dikonfigurasi atau belum aktif.",
         )
     raw = config.credentials or {}
-    # Konversi ke str murni — JANGAN konversi float karena merusak
-    # nilai seperti BRN-0272-1782809889702 menjadi scientific notation
     sanitized = {k: str(v) if v is not None else "" for k, v in raw.items()}
     return sanitized
 
@@ -91,15 +94,20 @@ def _make_digest(body_bytes: bytes) -> str:
 
 
 def _sanitize_doku_payload(body: dict) -> dict:
+    """Sanitize payload sesuai docs DOKU:
+    - bank_account.number dikirim sebagai INTEGER (bukan string)
+      Contoh di docs: "number": 1081214141456
+      Leading zeros otomatis hilang — ini memang yang DOKU harapkan.
+    """
     if "bank_account" in body:
         ba = dict(body["bank_account"])
         if "number" in ba:
             num_str = str(ba["number"]).strip()
-            # Hapus trailing .0 jika ada (dari float), tapi TETAP string
-            # agar leading zeros seperti "002001148037507" tidak hilang
+            # Hapus trailing .0 jika ada (dari float)
             if num_str.endswith(".0"):
                 num_str = num_str[:-2]
-            ba["number"] = num_str
+            # Kirim sebagai integer — sesuai contoh docs DOKU
+            ba["number"] = int(num_str)
         ba.setdefault("currency", "IDR")
         ba.setdefault("country", "Indonesia")
         return {**body, "bank_account": ba}
