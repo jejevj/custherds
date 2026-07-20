@@ -1,12 +1,12 @@
+
 """
 DOKU Bulk Registration Bank — Settlement Bank Account Service
 
 API: H2H (fc-h2h-api) — BUKAN SNAP.
 Ref: https://developers.doku.com/accept-payments/finance-and-settlement/bulk-registration-bank
 
-Base URL:
-  Production : https://api.doku.com/fc-h2h-api
-  Sandbox    : https://sandbox.doku.com/fc-h2h-api
+Base URL (hardcoded production):
+  https://production.doku.com/fc-h2h-api
 
 Auth Headers (setiap request):
   Client-Id         : client_id dari credentials
@@ -54,8 +54,8 @@ logger = logging.getLogger(__name__)
 
 
 # ─── Constants ────────────────────────────────────────────────────────────
-BASE_URL_PROD    = "https://api.doku.com/fc-h2h-api"
-BASE_URL_SANDBOX = "https://sandbox.doku.com/fc-h2h-api"
+# Hardcoded production sesuai DOKU H2H docs
+BASE_URL = "https://production.doku.com/fc-h2h-api"
 
 
 # ─── Helpers ────────────────────────────────────────────────────────────
@@ -90,7 +90,7 @@ def _fix_floats(obj):
     return obj
 
 
-def _get_doku_creds(db: Session) -> tuple[dict, bool]:
+def _get_doku_creds(db: Session) -> dict:
     config = (
         db.query(PaymentGatewayConfig)
         .filter(
@@ -107,7 +107,7 @@ def _get_doku_creds(db: Session) -> tuple[dict, bool]:
     raw = config.credentials or {}
     # Cast semua value ke str dengan aman (float besar → int → str)
     sanitized = {k: _safe_str_credential(v) for k, v in raw.items()}
-    return sanitized, config.is_production
+    return sanitized
 
 
 def _utc_now_str() -> str:
@@ -137,10 +137,9 @@ def _sanitize_doku_payload(body: dict) -> dict:
         ba = dict(body["bank_account"])
         if "number" in ba:
             try:
-                # Konversi ke integer: strip leading zeros, buang float
                 ba["number"] = int(str(ba["number"]).replace(".0", "").strip())
             except (ValueError, TypeError):
-                pass  # biarkan apa adanya jika tidak bisa dikonversi
+                pass
         ba.setdefault("currency", "IDR")
         ba.setdefault("country", "Indonesia")
         return {**body, "bank_account": ba}
@@ -157,7 +156,6 @@ def _make_h2h_headers_and_body(
     body_bytes adalah serialized body yang SAMA persis dengan yang di-hash untuk signature.
     Gunakan content=body_bytes pada httpx (bukan json=payload) agar byte-identical.
     """
-    # Pastikan tidak ada scientific notation dari float credential
     client_id  = _safe_str_credential(client_id).strip()
     secret_key = _safe_str_credential(secret_key).strip()
 
@@ -300,24 +298,22 @@ def list_settlement_bank_accounts(
     return {"items": [_serialize_record(r) for r in records], "total": total, "page": page, "size": size}
 
 
-# ─── DOKU H2H API Calls ─────────────────────────────────────────────────────
+# ─── DOKU H2H API Calls ──────────────────────────────────────────────────────
 
 async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dict:
-    creds, is_production = _get_doku_creds(db)
+    creds     = _get_doku_creds(db)
     client_id  = creds.get("client_id", "")
     secret_key = creds.get("secret_key", "") or creds.get("client_secret", "")
 
     if not client_id or not secret_key:
         raise HTTPException(400, detail="Credentials DOKU tidak lengkap (client_id, secret_key).")
 
-    base_url = BASE_URL_PROD if is_production else BASE_URL_SANDBOX
     endpoint = "/v2/settlement-bank-account"
-
     doku_payload = _sanitize_doku_payload(doku_payload)
 
     logger.info(
         "[DOKU CREATE SBA] base_url=%s payload=%s",
-        base_url,
+        BASE_URL,
         json.dumps(_fix_floats(doku_payload)),
     )
 
@@ -325,7 +321,7 @@ async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dic
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
-            f"{base_url}{endpoint}",
+            f"{BASE_URL}{endpoint}",
             content=body_bytes,
             headers=headers,
         )
@@ -371,20 +367,18 @@ async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dic
 
 
 async def _fetch_from_doku(db: Session, doku_sba_id: str) -> dict:
-    creds, is_production = _get_doku_creds(db)
+    creds     = _get_doku_creds(db)
     client_id  = creds.get("client_id", "")
     secret_key = creds.get("secret_key", "") or creds.get("client_secret", "")
 
     if not client_id or not secret_key:
         raise HTTPException(400, detail="Credentials DOKU tidak lengkap.")
 
-    base_url = BASE_URL_PROD if is_production else BASE_URL_SANDBOX
     endpoint = f"/v2/settlement-bank-account/{doku_sba_id}"
-
     headers, _ = _make_h2h_headers_and_body(client_id, secret_key, body=None)
 
     async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(f"{base_url}{endpoint}", headers=headers)
+        resp = await client.get(f"{BASE_URL}{endpoint}", headers=headers)
 
     if not resp.is_success:
         _raise_doku_error(resp, f"GET SBA {doku_sba_id}")
@@ -447,20 +441,17 @@ async def update_settlement_bank_account(db: Session, sba_id: str, doku_payload:
     if rec.status != "verified":
         raise HTTPException(400, detail="Hanya rekening berstatus verified yang bisa diupdate.")
 
-    creds, is_production = _get_doku_creds(db)
+    creds     = _get_doku_creds(db)
     client_id  = creds.get("client_id", "")
     secret_key = creds.get("secret_key", "") or creds.get("client_secret", "")
 
-    base_url = BASE_URL_PROD if is_production else BASE_URL_SANDBOX
     endpoint = "/v2/settlement-bank-account"
-
     doku_payload = _sanitize_doku_payload(doku_payload)
-
     headers, body_bytes = _make_h2h_headers_and_body(client_id, secret_key, body=doku_payload)
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.put(
-            f"{base_url}{endpoint}",
+            f"{BASE_URL}{endpoint}",
             content=body_bytes,
             headers=headers,
         )
