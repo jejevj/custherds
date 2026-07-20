@@ -6,7 +6,7 @@ import type {
   SBAListResponse,
 } from '@/types/settlementBankAccount.types'
 
-const BASE = '/v2/settlement-bank-account'
+const BASE = '/settlement-bank-account'
 
 export const settlementBankAccountService = {
   list: (params?: { page?: number; size?: number; status?: string }) =>
