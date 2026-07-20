@@ -1,3 +1,4 @@
+
 """
 DOKU Bulk Registration Bank — Settlement Bank Account Service
 
@@ -24,6 +25,11 @@ KRITIS:
   (bukan json=payload, melainkan content=body_bytes dengan Content-Type=application/json).
 
   number field: HARUS string (min 10, max 25 karakter) sesuai docs DOKU H2H.
+
+  client_id dan secret_key HARUS di-cast ke str() setelah dibaca dari DB,
+  karena PostgreSQL JSONB bisa mengembalikan nilai numerik sebagai float/int Python,
+  yang menyebabkan scientific notation (e.g. 1.782809889702e+12) saat dimasukkan
+  ke string_to_sign — menghasilkan signature yang tidak cocok dengan Client-Id header.
 """
 
 import base64
@@ -66,7 +72,10 @@ def _get_doku_creds(db: Session) -> tuple[dict, bool]:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Gateway DOKU belum dikonfigurasi atau belum aktif.",
         )
-    return config.credentials or {}, config.is_production
+    raw = config.credentials or {}
+    # KRITIS: selalu cast ke str untuk mencegah scientific notation dari JSONB float
+    sanitized = {k: str(v) if v is not None else "" for k, v in raw.items()}
+    return sanitized, config.is_production
 
 
 def _utc_now_str() -> str:
@@ -91,7 +100,6 @@ def _sanitize_doku_payload(body: dict) -> dict:
         # number HARUS string sesuai docs DOKU H2H
         if "number" in ba:
             ba["number"] = str(ba["number"])
-        # pastikan country dan currency benar
         ba.setdefault("currency", "IDR")
         ba.setdefault("country", "Indonesia")
         return {**body, "bank_account": ba}
@@ -107,7 +115,13 @@ def _make_h2h_headers_and_body(
     Return (headers, body_bytes).
     body_bytes adalah serialized body yang SAMA persis dengan yang di-hash untuk signature.
     Gunakan content=body_bytes pada httpx (bukan json=payload) agar byte-identical.
+
+    client_id dan secret_key HARUS sudah berupa str murni (tanpa float/scientific notation).
     """
+    # Pastikan tidak ada scientific notation yang lolos
+    client_id  = str(client_id).strip()
+    secret_key = str(secret_key).strip()
+
     request_id = str(uuid.uuid4())
     timestamp  = _utc_now_str()
 
@@ -134,7 +148,6 @@ def _make_h2h_headers_and_body(
         "Signature":         signature,
     }
 
-    # Log INFO untuk memudahkan debugging signature
     logger.info(
         "[DOKU SIGN] client_id=%s request_id=%s timestamp=%s body_hash=%s signature=%s",
         client_id,
@@ -261,7 +274,6 @@ async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dic
     base_url = BASE_URL_PROD if is_production else BASE_URL_SANDBOX
     endpoint = "/v2/settlement-bank-account"
 
-    # Sanitize payload: pastikan number=string, currency/country default
     doku_payload = _sanitize_doku_payload(doku_payload)
 
     logger.info(
@@ -270,13 +282,12 @@ async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dic
         json.dumps(doku_payload),
     )
 
-    # Serialize sekali — body_bytes di-hash DAN dikirim apa adanya
     headers, body_bytes = _make_h2h_headers_and_body(client_id, secret_key, body=doku_payload)
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
             f"{base_url}{endpoint}",
-            content=body_bytes,   # <— raw bytes, bukan json=
+            content=body_bytes,
             headers=headers,
         )
 
@@ -331,7 +342,6 @@ async def _fetch_from_doku(db: Session, doku_sba_id: str) -> dict:
     base_url = BASE_URL_PROD if is_production else BASE_URL_SANDBOX
     endpoint = f"/v2/settlement-bank-account/{doku_sba_id}"
 
-    # GET — tanpa body
     headers, _ = _make_h2h_headers_and_body(client_id, secret_key, body=None)
 
     async with httpx.AsyncClient(timeout=30) as client:
@@ -405,7 +415,6 @@ async def update_settlement_bank_account(db: Session, sba_id: str, doku_payload:
     base_url = BASE_URL_PROD if is_production else BASE_URL_SANDBOX
     endpoint = "/v2/settlement-bank-account"
 
-    # Sanitize payload sebelum dikirim
     doku_payload = _sanitize_doku_payload(doku_payload)
 
     headers, body_bytes = _make_h2h_headers_and_body(client_id, secret_key, body=doku_payload)
