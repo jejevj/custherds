@@ -81,12 +81,14 @@ const BANK_CODES = [
 ]
 
 export default function SettlementBankAccountPage() {
-  const [items, setItems]           = useState<SettlementBankAccount[]>([])
-  const [total, setTotal]           = useState(0)
-  const [page, setPage]             = useState(1)
+  const [items, setItems]               = useState<SettlementBankAccount[]>([])
+  const [total, setTotal]               = useState(0)
+  const [page, setPage]                 = useState(1)
   const [filterStatus, setFilterStatus] = useState('')
   const [pageLoading, setPageLoading]   = useState(true)
   const [loading, setLoading]           = useState(false)
+  const [syncingId, setSyncingId]       = useState<string | null>(null)
+  const [syncingAll, setSyncingAll]     = useState(false)
   const [feedback, setFeedback]         = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
 
   // Detail panel
@@ -99,8 +101,8 @@ export default function SettlementBankAccountPage() {
   })
 
   // Edit form (only for verified)
-  const [editItem, setEditItem]   = useState<SettlementBankAccount | null>(null)
-  const [editForm, setEditForm]   = useState<SettlementBankAccountUpdate>({})
+  const [editItem, setEditItem] = useState<SettlementBankAccount | null>(null)
+  const [editForm, setEditForm] = useState<SettlementBankAccountUpdate>({})
 
   const SIZE = 20
 
@@ -122,6 +124,49 @@ export default function SettlementBankAccountPage() {
   }, [page, filterStatus])
 
   useEffect(() => { fetchList() }, [fetchList])
+
+  // ── Sync single record dari DOKU ────────────────────────────────────────
+  const handleSync = async (item: SettlementBankAccount) => {
+    setSyncingId(item.id)
+    setFeedback(null)
+    try {
+      await settlementBankAccountService.sync(item.id)
+      setFeedback({ type: 'success', msg: `Sync berhasil untuk rekening ${item.account_number}.` })
+      fetchList()
+    } catch (err: unknown) {
+      const msg = (err as { detail?: string })?.detail ?? 'Gagal sync status dari DOKU.'
+      setFeedback({ type: 'error', msg })
+    } finally {
+      setSyncingId(null)
+    }
+  }
+
+  // ── Sync semua yang masih pending ───────────────────────────────────────
+  const handleSyncAll = async () => {
+    const pendingItems = items.filter(i => i.status === 'pending_verification')
+    if (pendingItems.length === 0) {
+      setFeedback({ type: 'error', msg: 'Tidak ada rekening berstatus Pending Verifikasi.' })
+      return
+    }
+    setSyncingAll(true)
+    setFeedback(null)
+    let successCount = 0
+    let failCount = 0
+    for (const item of pendingItems) {
+      try {
+        await settlementBankAccountService.sync(item.id)
+        successCount++
+      } catch {
+        failCount++
+      }
+    }
+    setSyncingAll(false)
+    setFeedback({
+      type: failCount === 0 ? 'success' : 'error',
+      msg: `Sync selesai: ${successCount} berhasil${failCount > 0 ? `, ${failCount} gagal` : ''}.`,
+    })
+    fetchList()
+  }
 
   const handleCreate = async () => {
     setLoading(true)
@@ -158,7 +203,7 @@ export default function SettlementBankAccountPage() {
     }
   }
 
-  const openEdit = async (item: SettlementBankAccount) => {
+  const openEdit = (item: SettlementBankAccount) => {
     setEditItem(item)
     setEditForm({ account_name: item.account_name, merchant_reference: item.merchant_reference })
   }
@@ -173,7 +218,8 @@ export default function SettlementBankAccountPage() {
     }
   }
 
-  const totalPages = Math.ceil(total / SIZE)
+  const pendingCount = items.filter(i => i.status === 'pending_verification').length
+  const totalPages   = Math.ceil(total / SIZE)
 
   return (
     <div className="space-y-6">
@@ -183,9 +229,22 @@ export default function SettlementBankAccountPage() {
           <h1 className="text-2xl font-bold tracking-tight">Settlement Bank Account</h1>
           <p className="text-muted-foreground text-sm">Kelola rekening bank settlement merchant via DOKU Bulk Registration Bank API.</p>
         </div>
-        <Button onClick={() => { setShowCreateForm(true); setFeedback(null) }}>
-          + Tambah Rekening
-        </Button>
+        <div className="flex gap-2 flex-wrap">
+          {/* Sync All Pending */}
+          <Button
+            variant="outline"
+            onClick={handleSyncAll}
+            disabled={syncingAll || pageLoading}
+            title="Sync semua rekening berstatus Pending Verifikasi dari DOKU"
+          >
+            {syncingAll
+              ? '⏳ Syncing...'
+              : `🔄 Sync Pending${pendingCount > 0 ? ` (${pendingCount})` : ''}`}
+          </Button>
+          <Button onClick={() => { setShowCreateForm(true); setFeedback(null) }}>
+            + Tambah Rekening
+          </Button>
+        </div>
       </div>
 
       {/* Feedback */}
@@ -257,6 +316,18 @@ export default function SettlementBankAccountPage() {
                     <Button size="sm" variant="outline" onClick={() => openDetail(item)}>
                       {detailItem?.id === item.id ? 'Tutup' : 'Detail'}
                     </Button>
+                    {/* Tombol Sync — tampil untuk pending & rejected */}
+                    {(item.status === 'pending_verification' || item.status === 'rejected') && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleSync(item)}
+                        disabled={syncingId === item.id}
+                        title="Perbarui status dari DOKU"
+                      >
+                        {syncingId === item.id ? '⏳' : '🔄'} Sync
+                      </Button>
+                    )}
                     {item.status === 'verified' && (
                       <Button size="sm" variant="outline" onClick={() => openEdit(item)}>
                         Edit
@@ -286,7 +357,19 @@ export default function SettlementBankAccountPage() {
         <div className="rounded-xl border bg-card shadow-sm p-5 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold tracking-tight">Detail: {detailItem.account_name}</h2>
-            <Button variant="ghost" size="sm" onClick={() => setDetailItem(null)}>Tutup</Button>
+            <div className="flex gap-2">
+              {(detailItem.status === 'pending_verification' || detailItem.status === 'rejected') && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleSync(detailItem)}
+                  disabled={syncingId === detailItem.id}
+                >
+                  {syncingId === detailItem.id ? '⏳ Syncing...' : '🔄 Sync dari DOKU'}
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={() => setDetailItem(null)}>Tutup</Button>
+            </div>
           </div>
           <div className="rounded-lg border bg-muted/40 divide-y text-sm">
             {([
