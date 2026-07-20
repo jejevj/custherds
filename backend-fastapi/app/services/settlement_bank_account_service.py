@@ -21,6 +21,9 @@ Format string_to_sign (DOKU Non-SNAP standard):
     Request-Id:{request_id}\n
     Request-Timestamp:{timestamp}\n
     Request-Target:{path}
+
+PENTING: Header Digest HARUS dikirim sebagai request header tersendiri
+         (sesuai docs DOKU), tidak hanya dimasukkan ke string_to_sign.
 """
 
 import base64
@@ -166,6 +169,10 @@ def _make_h2h_headers_and_body(
         "Request-Timestamp": timestamp,
         "Signature":         signature,
     }
+
+    # Tambahkan header Digest untuk POST/PUT — WAJIB sesuai DOKU docs
+    if digest is not None:
+        headers["Digest"] = digest
 
     logger.warning("[DOKU DEBUG] === STEP 5: HEADERS ===")
     for k, v in headers.items():
