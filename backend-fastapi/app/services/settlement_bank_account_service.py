@@ -24,12 +24,14 @@ KRITIS:
   Oleh karena itu kita serialize sekali ke bytes, lalu kirim raw bytes tersebut
   (bukan json=payload, melainkan content=body_bytes dengan Content-Type=application/json).
 
-  number field: HARUS string (min 10, max 25 karakter) sesuai docs DOKU H2H.
-
-  client_id dan secret_key HARUS di-cast ke str() setelah dibaca dari DB,
-  karena PostgreSQL JSONB bisa mengembalikan nilai numerik sebagai float/int Python,
-  yang menyebabkan scientific notation (e.g. 1.782809889702e+12) saat dimasukkan
-  ke string_to_sign — menghasilkan signature yang tidak cocok dengan Client-Id header.
+  MASALAH SCIENTIFIC NOTATION:
+  PostgreSQL JSONB mengembalikan angka besar (e.g. 1782809889702) sebagai Python float.
+  float.__str__() → "1.782809889702e+12", bukan "1782809889702".
+  Ini menyebabkan:
+    1. Client-Id header = "BRN-0272-1782809889702"   (benar, karena diambil sebelum diformat)
+    2. string_to_sign   = "BRN-0272-1.782809889702e+12:..."  (salah → signature invalid)
+  Solusi: gunakan _safe_str_credential() yang cast float → int → str untuk angka bulat.
+  Dan gunakan _serialize_body() dengan custom encoder yang mencegah scientific notation.
 """
 
 import base64
@@ -37,6 +39,7 @@ import hashlib
 import hmac as hmac_lib
 import json
 import logging
+import math
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -58,6 +61,40 @@ BASE_URL_SANDBOX = "https://sandbox.doku.com/fc-h2h-api"
 
 # ─── Helpers ────────────────────────────────────────────────────────────
 
+def _safe_str_credential(v) -> str:
+    """
+    Konversi nilai credential dari JSONB ke string tanpa scientific notation.
+    PostgreSQL JSONB bisa mengembalikan angka sebagai float Python.
+    float("1782809889702") → 1782809889702.0 → str() → "1.782809889702e+12"  ← SALAH
+    Solusi: jika float dan bernilai bulat, cast ke int dulu.
+    Contoh: 1782809889702.0 → int → "1782809889702"  ← BENAR
+    """
+    if v is None:
+        return ""
+    if isinstance(v, float) and math.isfinite(v) and v == math.floor(v):
+        return str(int(v))
+    return str(v)
+
+
+class _NoSciNotationEncoder(json.JSONEncoder):
+    """
+    Custom JSON encoder yang mencegah scientific notation untuk float bulat besar.
+    Python json.dumps default: 2001148037507.0 → 2.001148037507e+12  ← SALAH untuk DOKU
+    Dengan encoder ini: 2001148037507.0 → 2001148037507               ← BENAR
+    """
+    def iterencode(self, o, _one_shot=False):
+        return super().iterencode(self._fix(o), _one_shot)
+
+    def _fix(self, o):
+        if isinstance(o, float) and math.isfinite(o) and o == math.floor(o):
+            return int(o)
+        if isinstance(o, dict):
+            return {k: self._fix(v) for k, v in o.items()}
+        if isinstance(o, (list, tuple)):
+            return [self._fix(i) for i in o]
+        return o
+
+
 def _get_doku_creds(db: Session) -> tuple[dict, bool]:
     config = (
         db.query(PaymentGatewayConfig)
@@ -73,8 +110,8 @@ def _get_doku_creds(db: Session) -> tuple[dict, bool]:
             detail="Gateway DOKU belum dikonfigurasi atau belum aktif.",
         )
     raw = config.credentials or {}
-    # KRITIS: selalu cast ke str untuk mencegah scientific notation dari JSONB float
-    sanitized = {k: str(v) if v is not None else "" for k, v in raw.items()}
+    # Gunakan _safe_str_credential agar float besar tidak jadi scientific notation
+    sanitized = {k: _safe_str_credential(v) for k, v in raw.items()}
     return sanitized, config.is_production
 
 
@@ -84,22 +121,24 @@ def _utc_now_str() -> str:
 
 
 def _serialize_body(body: dict) -> bytes:
-    """Serialize body sekali ke bytes. Bytes ini HARUS dikirim apa adanya (content=) dan di-hash."""
-    return json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    """
+    Serialize body ke bytes dengan custom encoder yang mencegah scientific notation.
+    Bytes ini HARUS dikirim apa adanya (content=) dan di-hash — harus byte-identical.
+    """
+    return json.dumps(body, separators=(",", ":"), ensure_ascii=False, cls=_NoSciNotationEncoder).encode("utf-8")
 
 
 def _sanitize_doku_payload(body: dict) -> dict:
     """
     Pastikan payload sesuai DOKU H2H spec:
-    - bank_account.number HARUS string (bukan int)
-    - bank_account.country HARUS 'Indonesia'
-    - bank_account.currency HARUS 'IDR'
+    - bank_account.number HARUS string murni tanpa scientific notation
+    - bank_account.country default 'Indonesia'
+    - bank_account.currency default 'IDR'
     """
     if "bank_account" in body:
         ba = dict(body["bank_account"])
-        # number HARUS string sesuai docs DOKU H2H
         if "number" in ba:
-            ba["number"] = str(ba["number"])
+            ba["number"] = _safe_str_credential(ba["number"])
         ba.setdefault("currency", "IDR")
         ba.setdefault("country", "Indonesia")
         return {**body, "bank_account": ba}
@@ -115,12 +154,10 @@ def _make_h2h_headers_and_body(
     Return (headers, body_bytes).
     body_bytes adalah serialized body yang SAMA persis dengan yang di-hash untuk signature.
     Gunakan content=body_bytes pada httpx (bukan json=payload) agar byte-identical.
-
-    client_id dan secret_key HARUS sudah berupa str murni (tanpa float/scientific notation).
     """
-    # Pastikan tidak ada scientific notation yang lolos
-    client_id  = str(client_id).strip()
-    secret_key = str(secret_key).strip()
+    # Double-guard: pastikan tidak ada scientific notation yang lolos
+    client_id  = _safe_str_credential(client_id).strip()
+    secret_key = _safe_str_credential(secret_key).strip()
 
     request_id = str(uuid.uuid4())
     timestamp  = _utc_now_str()
@@ -261,7 +298,7 @@ def list_settlement_bank_accounts(
     return {"items": [_serialize_record(r) for r in records], "total": total, "page": page, "size": size}
 
 
-# ─── DOKU H2H API Calls ─────────────────────────────────────────────────────
+# ─── DOKU H2H API Calls ──────────────────────────────────────────────────────
 
 async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dict:
     creds, is_production = _get_doku_creds(db)
@@ -279,7 +316,7 @@ async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dic
     logger.info(
         "[DOKU CREATE SBA] base_url=%s payload=%s",
         base_url,
-        json.dumps(doku_payload),
+        json.dumps(doku_payload, cls=_NoSciNotationEncoder),
     )
 
     headers, body_bytes = _make_h2h_headers_and_body(client_id, secret_key, body=doku_payload)
