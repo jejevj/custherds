@@ -14,7 +14,7 @@ Format string_to_sign (DOKU Non-SNAP standard):
     Request-Id:{request_id}\n
     Request-Timestamp:{timestamp}\n
     Request-Target:{path}\n
-    Digest:{base64_sha256_of_body}        <-- plain base64, NO "SHA-256=" prefix
+    Digest:{base64(SHA256(body))}   <-- plain base64, NO prefix
 
   GET:
     Client-Id:{client_id}\n
@@ -23,9 +23,9 @@ Format string_to_sign (DOKU Non-SNAP standard):
     Request-Target:{path}
 
 PENTING:
-  - Digest di string_to_sign adalah plain base64(SHA256(body)) — TANPA prefix "SHA-256="
+  - Digest di string_to_sign adalah plain base64(SHA256(body)) tanpa prefix apapun
   - Header Digest TIDAK dikirim sebagai request header terpisah
-  - bank_account.number dikirim sebagai integer (sesuai docs DOKU)
+  - bank_account.number HARUS string agar leading zeros (misal: 002001148037507) tidak hilang
 """
 
 import base64
@@ -90,7 +90,7 @@ def _serialize_body(body: dict) -> bytes:
 
 
 def _make_digest(body_bytes: bytes) -> str:
-    """Return plain base64(SHA256(body)) — NO 'SHA-256=' prefix, per DOKU Non-SNAP docs."""
+    """Return plain base64(SHA256(body)) — no prefix — per DOKU Non-SNAP docs."""
     return base64.b64encode(hashlib.sha256(body_bytes).digest()).decode()
 
 
@@ -99,10 +99,11 @@ def _sanitize_doku_payload(body: dict) -> dict:
         ba = dict(body["bank_account"])
         if "number" in ba:
             num_str = str(ba["number"]).strip()
+            # Hapus trailing .0 jika ada (dari float), tapi JANGAN konversi ke int
+            # karena leading zeros seperti "002001148037507" harus tetap utuh
             if num_str.endswith(".0"):
                 num_str = num_str[:-2]
-            # DOKU H2H docs: bank_account.number must be integer
-            ba["number"] = int(num_str)
+            ba["number"] = num_str  # tetap string, leading zeros aman
         ba.setdefault("currency", "IDR")
         ba.setdefault("country", "Indonesia")
         return {**body, "bank_account": ba}
@@ -131,7 +132,6 @@ def _make_h2h_headers_and_body(
 
     if body is not None:
         body_bytes = _serialize_body(body)
-        # plain base64 SHA256 — no prefix — per DOKU Non-SNAP signature docs
         digest     = _make_digest(body_bytes)
         string_to_sign = (
             f"Client-Id:{client_id}\n"
@@ -167,7 +167,7 @@ def _make_h2h_headers_and_body(
     logger.warning("[DOKU DEBUG] === STEP 4: SIGNATURE ===")
     logger.warning("[DOKU DEBUG] signature = %r", signature)
 
-    # DOKU H2H SBA spec: only these 5 headers — no separate Digest header
+    # DOKU H2H SBA: hanya 5 header ini, tidak ada Digest header terpisah
     headers = {
         "Content-Type":      "application/json",
         "Client-Id":         client_id,
