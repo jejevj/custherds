@@ -4,8 +4,8 @@ from datetime import datetime
 
 
 class PaymentGatewayConfigBase(BaseModel):
-    provider: str = Field(..., description="Nama provider: 'doku' atau 'xendit'")
-    label: str = Field(..., description="Label tampilan, contoh: 'DOKU SNAP' atau 'Xendit Invoice'")
+    provider: str = Field(..., description="Nama provider: 'doku', 'doku_sandbox', atau 'xendit'")
+    label: str = Field(..., description="Label tampilan, contoh: 'DOKU SNAP', 'DOKU Sandbox', atau 'Xendit Invoice'")
     is_production: bool = Field(False, description="True untuk environment production")
     credentials: Dict[str, Any] = Field(default_factory=dict, description="Kredensial gateway dalam bentuk JSON")
     notes: Optional[str] = Field(None, description="Catatan tambahan")
@@ -23,7 +23,7 @@ class PaymentGatewayConfigUpdate(BaseModel):
 
 
 class PaymentGatewayActivateRequest(BaseModel):
-    provider: str = Field(..., description="Provider yang ingin diaktifkan: 'doku' atau 'xendit'")
+    provider: str = Field(..., description="Provider yang ingin diaktifkan: 'doku', 'doku_sandbox', atau 'xendit'")
 
 
 class PaymentGatewayConfigResponse(PaymentGatewayConfigBase):

@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 
 TX_MAX_ATTEMPT = 3
 
+# Provider DOKU (production + sandbox)
+DOKU_PROVIDERS = {"doku", "doku_sandbox"}
+
 
 def _fmt_rp(amount: Decimal) -> str:
     return f"Rp {int(amount):,}".replace(",", ".")
@@ -48,6 +51,18 @@ def _get_active_split(db: Session) -> RevenueSplitConfig:
 
 def _get_active_gateway(db: Session) -> Optional[PaymentGatewayConfig]:
     return db.query(PaymentGatewayConfig).filter(PaymentGatewayConfig.is_active == True).first()  # noqa
+
+
+def _get_doku_base_url(gateway: PaymentGatewayConfig) -> str:
+    """
+    Tentukan base URL DOKU berdasarkan provider dan is_production.
+    - doku_sandbox  → selalu sandbox, abaikan is_production
+    - doku          → ikuti is_production flag
+    """
+    if gateway.provider == "doku_sandbox":
+        return "https://api-sandbox.doku.com"
+    # provider == "doku" (production)
+    return "https://api.doku.com" if gateway.is_production else "https://api-sandbox.doku.com"
 
 
 async def _disburse_guide_commission(tx: Transaction, db: Session) -> None:
@@ -80,13 +95,18 @@ async def _create_doku_qris(tx: Transaction, tagihan: Decimal, db: Session) -> d
     if not gateway:
         raise HTTPException(503, "Tidak ada payment gateway aktif. Hubungi admin.")
 
+    if gateway.provider not in DOKU_PROVIDERS:
+        raise HTTPException(503, f"Gateway aktif ({gateway.provider}) bukan DOKU. Fitur QRIS hanya tersedia untuk DOKU.")
+
     creds: dict   = gateway.credentials or {}
-    base_url      = "https://api.doku.com" if gateway.is_production else "https://api-sandbox.doku.com"
+    base_url      = _get_doku_base_url(gateway)
     client_id     = creds.get("client_id", "")
     private_key   = creds.get("private_key", "")
     client_secret = creds.get("secret_key") or creds.get("client_secret", "")
     merchant_id   = creds.get("qris_merchant_id") or creds.get("merchant_id")
     terminal_id   = creds.get("qris_terminal_id") or creds.get("terminal_id") or "A01"
+
+    logger.info(f"[DOKU QRIS] provider={gateway.provider} base_url={base_url}")
 
     if not client_id or not private_key:
         raise HTTPException(503, "Konfigurasi DOKU belum lengkap (client_id / private_key).")
