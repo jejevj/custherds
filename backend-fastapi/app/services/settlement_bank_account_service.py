@@ -6,7 +6,8 @@ Ref: https://developers.doku.com/accept-payments/finance-and-settlement/bulk-reg
 Ref Signature: https://developers.doku.com/get-started-with-doku-api/signature-component/non-snap/signature-component-from-request-header
 
 Base URL:
-  https://api.doku.com/fc-h2h-api
+  Production : https://api.doku.com/fc-h2h-api
+  Sandbox    : https://api-sandbox.doku.com/fc-h2h-api
 
 Format string_to_sign (DOKU Non-SNAP standard):
   POST/PUT:
@@ -52,15 +53,21 @@ logger = logging.getLogger(__name__)
 
 
 # ─── Constants ───────────────────────────────────────────────────────────────
-BASE_URL        = "https://api.doku.com"
-API_PREFIX      = "/fc-h2h-api"
-SBA_ENDPOINT    = "/v2/settlement-bank-account"
+DOKU_PROVIDERS      = {"doku", "doku_sandbox"}
+API_PREFIX          = "/fc-h2h-api"
+SBA_ENDPOINT        = "/v2/settlement-bank-account"
+
+DOKU_BASE_URL_PROD    = "https://api.doku.com"
+DOKU_BASE_URL_SANDBOX = "https://api-sandbox.doku.com"
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 def _get_doku_creds(db: Session) -> dict:
-    """Ambil credentials DOKU dari DB. Semua nilai dikembalikan sebagai str as-is.
+    """Ambil credentials dari gateway DOKU aktif (doku atau doku_sandbox).
+
+    - doku_sandbox → selalu pakai BASE_URL sandbox
+    - doku         → ikuti is_production flag
 
     PENTING: Jangan konversi float karena merusak nilai seperti
     BRN-0272-1782809889702 menjadi BRN-0272-1.782809889702e+12
@@ -68,7 +75,7 @@ def _get_doku_creds(db: Session) -> dict:
     config = (
         db.query(PaymentGatewayConfig)
         .filter(
-            PaymentGatewayConfig.provider == "doku",
+            PaymentGatewayConfig.provider.in_(DOKU_PROVIDERS),
             PaymentGatewayConfig.is_active == True,
         )
         .first()
@@ -78,8 +85,20 @@ def _get_doku_creds(db: Session) -> dict:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Gateway DOKU belum dikonfigurasi atau belum aktif.",
         )
+
     raw = config.credentials or {}
     sanitized = {k: str(v) if v is not None else "" for k, v in raw.items()}
+
+    # Tentukan base_url berdasarkan provider
+    if config.provider == "doku_sandbox":
+        sanitized["__base_url__"] = DOKU_BASE_URL_SANDBOX
+    else:
+        sanitized["__base_url__"] = DOKU_BASE_URL_PROD if config.is_production else DOKU_BASE_URL_SANDBOX
+
+    logger.info(
+        "[DOKU CREDS] provider=%s is_production=%s base_url=%s",
+        config.provider, config.is_production, sanitized["__base_url__"],
+    )
     return sanitized
 
 
@@ -293,6 +312,7 @@ async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dic
     creds      = _get_doku_creds(db)
     client_id  = creds.get("client_id", "")
     secret_key = creds.get("secret_key", "") or creds.get("client_secret", "")
+    base_url   = creds.get("__base_url__", DOKU_BASE_URL_PROD)
 
     if not client_id or not secret_key:
         raise HTTPException(400, detail="Credentials DOKU tidak lengkap (client_id, secret_key).")
@@ -300,7 +320,7 @@ async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dic
     doku_payload = _sanitize_doku_payload(doku_payload)
 
     logger.warning("[DOKU DEBUG] === CREATE SBA START ===")
-    logger.warning("[DOKU DEBUG] full_url = %r", f"{BASE_URL}{API_PREFIX}{SBA_ENDPOINT}")
+    logger.warning("[DOKU DEBUG] full_url = %r", f"{base_url}{API_PREFIX}{SBA_ENDPOINT}")
     logger.warning("[DOKU DEBUG] doku_payload = %s", json.dumps(doku_payload))
 
     headers, body_bytes = _make_h2h_headers_and_body(
@@ -309,12 +329,12 @@ async def create_settlement_bank_account(db: Session, doku_payload: dict) -> dic
 
     logger.warning("[DOKU DEBUG] === STEP 7: FULL REQUEST ===")
     logger.warning("[DOKU DEBUG] method  = POST")
-    logger.warning("[DOKU DEBUG] url     = %r", f"{BASE_URL}{API_PREFIX}{SBA_ENDPOINT}")
+    logger.warning("[DOKU DEBUG] url     = %r", f"{base_url}{API_PREFIX}{SBA_ENDPOINT}")
     logger.warning("[DOKU DEBUG] body    = %r", body_bytes)
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
-            f"{BASE_URL}{API_PREFIX}{SBA_ENDPOINT}",
+            f"{base_url}{API_PREFIX}{SBA_ENDPOINT}",
             content=body_bytes,
             headers=headers,
         )
@@ -367,6 +387,7 @@ async def _fetch_from_doku(db: Session, doku_sba_id: str) -> dict:
     creds      = _get_doku_creds(db)
     client_id  = creds.get("client_id", "")
     secret_key = creds.get("secret_key", "") or creds.get("client_secret", "")
+    base_url   = creds.get("__base_url__", DOKU_BASE_URL_PROD)
 
     if not client_id or not secret_key:
         raise HTTPException(400, detail="Credentials DOKU tidak lengkap.")
@@ -377,7 +398,7 @@ async def _fetch_from_doku(db: Session, doku_sba_id: str) -> dict:
     )
 
     async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(f"{BASE_URL}{API_PREFIX}{endpoint}", headers=headers)
+        resp = await client.get(f"{base_url}{API_PREFIX}{endpoint}", headers=headers)
 
     if not resp.is_success:
         _raise_doku_error(resp, f"GET SBA {doku_sba_id}")
@@ -443,6 +464,7 @@ async def update_settlement_bank_account(db: Session, sba_id: str, doku_payload:
     creds      = _get_doku_creds(db)
     client_id  = creds.get("client_id", "")
     secret_key = creds.get("secret_key", "") or creds.get("client_secret", "")
+    base_url   = creds.get("__base_url__", DOKU_BASE_URL_PROD)
 
     doku_payload = _sanitize_doku_payload(doku_payload)
     headers, body_bytes = _make_h2h_headers_and_body(
@@ -451,7 +473,7 @@ async def update_settlement_bank_account(db: Session, sba_id: str, doku_payload:
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.put(
-            f"{BASE_URL}{API_PREFIX}{SBA_ENDPOINT}",
+            f"{base_url}{API_PREFIX}{SBA_ENDPOINT}",
             content=body_bytes,
             headers=headers,
         )
