@@ -16,7 +16,10 @@ from app.schemas.payment_gateway_config import (
 
 router = APIRouter()
 
-SUPPORTED_PROVIDERS = ["doku", "xendit"]
+SUPPORTED_PROVIDERS = ["doku", "doku_sandbox", "xendit"]
+
+# Provider yang termasuk keluarga DOKU SNAP
+DOKU_PROVIDERS = {"doku", "doku_sandbox"}
 
 
 @router.get("/", response_model=List[PaymentGatewayConfigSafeResponse])
@@ -77,7 +80,7 @@ async def test_gateway_connection(provider: str, db: Session = Depends(get_db)):
     """
     Test koneksi ke payment gateway menggunakan endpoint autentikasi resmi.
 
-    DOKU SNAP :
+    DOKU SNAP (doku / doku_sandbox) :
       POST /authorization/v1/access-token/b2b
       Header: X-CLIENT-KEY, X-TIMESTAMP, X-SIGNATURE (SHA256withRSA private_key)
       Body  : { "grantType": "client_credentials" }
@@ -97,15 +100,15 @@ async def test_gateway_connection(provider: str, db: Session = Depends(get_db)):
     creds: dict = config.credentials or {}
 
     try:
-        # ── DOKU SNAP ─────────────────────────────────────────────────────────
-        if provider == "doku":
+        # ── DOKU SNAP (production & sandbox) ─────────────────────────────────
+        if provider in DOKU_PROVIDERS:
             import base64
             import hashlib
             from datetime import datetime, timezone, timedelta
             from cryptography.hazmat.primitives import hashes, serialization
             from cryptography.hazmat.primitives.asymmetric import padding
 
-            client_id   = creds.get("client_id", "")
+            client_id       = creds.get("client_id", "")
             private_key_pem = creds.get("private_key", "")
 
             if not client_id or not private_key_pem:
