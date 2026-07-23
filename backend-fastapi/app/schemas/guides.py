@@ -18,7 +18,9 @@ class GuideProfile(BaseModel):
     bio: Optional[str] = None
     languages: Optional[str] = None
     rating: Optional[float] = None
+    bank_code: Optional[str] = None             # Kode bank, e.g. '014' = BCA
     bank_name: Optional[str] = None
+    bank_branch: Optional[str] = None           # Kantor cabang pembuatan bank
     bank_account_number: Optional[str] = None
     bank_account_name: Optional[str] = None
     created_at: datetime
@@ -44,7 +46,9 @@ class GuideUpdateRequest(BaseModel):
     guide_certificate: Optional[str] = None
     bio: Optional[str] = None
     languages: Optional[str] = None
+    bank_code: Optional[str] = None             # Kode bank, e.g. '014' = BCA
     bank_name: Optional[str] = None
+    bank_branch: Optional[str] = None           # Kantor cabang pembuatan bank
     bank_account_number: Optional[str] = None
     bank_account_name: Optional[str] = None
 
@@ -52,14 +56,17 @@ class GuideUpdateRequest(BaseModel):
 class GuideSubmitRequest(BaseModel):
     """
     Field wajib untuk submit ke review admin.
-    KTP & sertifikat harus sudah diupload terlebih dahulu via /uploads.
+    KTP harus sudah diupload terlebih dahulu via /uploads.
+    Sertifikat guide bersifat opsional.
     """
     guide_nationality: str
     guide_phone: str
     guide_id_card_url: str          # URL KTP / Paspor
-    guide_certificate: str          # URL sertifikat guide
+    guide_certificate: Optional[str] = None     # URL sertifikat guide (opsional)
     bio: str
     languages: Optional[str] = None
+    bank_code: Optional[str] = None             # Kode bank, e.g. '014' = BCA
     bank_name: Optional[str] = None
+    bank_branch: Optional[str] = None           # Kantor cabang pembuatan bank
     bank_account_number: Optional[str] = None
     bank_account_name: Optional[str] = None

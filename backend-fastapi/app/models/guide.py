@@ -31,7 +31,7 @@ class Guide(Base):
     guide_nationality           = Column(String(100), nullable=True)
     guide_phone                 = Column(String(30), nullable=True)
     guide_id_card_url           = Column(String(500), nullable=True)   # URL KTP / Paspor
-    guide_certificate           = Column(String(500), nullable=True)   # URL sertifikat guide
+    guide_certificate           = Column(String(500), nullable=True)   # URL sertifikat guide (opsional)
     guide_certificate_status    = Column(String(20), default="incomplete", nullable=False)  # kept for backward compat
 
     # --- Profil publik ---
@@ -43,7 +43,9 @@ class Guide(Base):
     total_earnings              = Column(Numeric(15, 2), default=0, nullable=False)
     pending_earnings            = Column(Numeric(15, 2), default=0, nullable=False)
     wallet_balance              = Column(Numeric(15, 2), default=0, nullable=False)
+    bank_code                   = Column(String(20), nullable=True)    # Kode bank, e.g. '014' = BCA
     bank_name                   = Column(String(100), nullable=True)
+    bank_branch                 = Column(String(255), nullable=True)   # Kantor cabang pembuatan bank
     bank_account_number         = Column(String(50), nullable=True)
     bank_account_name           = Column(String(255), nullable=True)
 

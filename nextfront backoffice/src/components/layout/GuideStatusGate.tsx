@@ -9,6 +9,62 @@ import { Separator } from "@/components/ui/separator"
 
 interface Props { children: React.ReactNode }
 
+// Daftar bank diambil dari konfigurasi admin settlement-bank-account
+const BANK_CODES = [
+  { code: '002', name: 'Bank BRI' },
+  { code: '008', name: 'Bank Mandiri' },
+  { code: '009', name: 'Bank BNI' },
+  { code: '011', name: 'Bank Danamon' },
+  { code: '013', name: 'Bank Permata' },
+  { code: '014', name: 'Bank BCA' },
+  { code: '016', name: 'Bank Maybank' },
+  { code: '019', name: 'Bank Panin' },
+  { code: '022', name: 'Bank CIMB Niaga' },
+  { code: '023', name: 'Bank UOB Indonesia' },
+  { code: '028', name: 'Bank OCBC NISP' },
+  { code: '031', name: 'Citibank' },
+  { code: '036', name: 'Bank Multicor / Windu' },
+  { code: '046', name: 'Bank DKI' },
+  { code: '054', name: 'Bank Capital Indonesia' },
+  { code: '055', name: 'Bank BTPN' },
+  { code: '061', name: 'Bank Bukopin' },
+  { code: '069', name: 'Bank BRI Syariah' },
+  { code: '076', name: 'Bank Bumi Arta' },
+  { code: '110', name: 'Bank BJB' },
+  { code: '111', name: 'Bank DKI Syariah' },
+  { code: '200', name: 'Bank BTN' },
+  { code: '212', name: 'Bank Woori Saudara' },
+  { code: '422', name: 'Bank Syariah Indonesia (BSI)' },
+  { code: '451', name: 'Bank Syariah Bukopin' },
+  { code: '484', name: 'Bank KEB Hana Indonesia' },
+  { code: '503', name: 'Bank Nobu' },
+  { code: '513', name: 'Bank Ina Perdana' },
+  { code: '517', name: 'Bank Panin Dubai Syariah' },
+  { code: '520', name: 'Bank Prima Master' },
+  { code: '521', name: 'Bank Jasa Jakarta' },
+  { code: '523', name: 'Bank Harda Internasional' },
+  { code: '526', name: 'Bank Bisnis Internasional' },
+  { code: '531', name: 'Bank Sinarmas' },
+  { code: '536', name: 'Bank OKE Indonesia' },
+  { code: '542', name: 'Bank Artha Graha' },
+  { code: '553', name: 'Bank Mayora' },
+  { code: '555', name: 'Bank Index Selindo' },
+  { code: '558', name: 'Bank Ganesha' },
+  { code: '564', name: 'Bank Royal Indonesia' },
+  { code: '566', name: 'Bank BNP Paribas Indonesia' },
+  { code: '567', name: 'Bank SBI Indonesia' },
+  { code: '668', name: 'Bank Mega' },
+  { code: '688', name: 'Bank Bumiputera' },
+  { code: '702', name: 'Bank BTPN Syariah' },
+  { code: '706', name: 'Bank Syariah Mandiri' },
+  { code: '777', name: 'Bank Sahabat Sampoerna' },
+  { code: '787', name: 'Bank JAGO' },
+  { code: '788', name: 'Bank Allo' },
+  { code: '812', name: 'Bank Seabank Indonesia' },
+  { code: '818', name: 'Bank Superbank' },
+  { code: '868', name: 'Bank Neo Commerce (BNC)' },
+]
+
 function FileUploadField({
   label, required, currentUrl, fieldKey, onUploaded,
 }: {
@@ -82,12 +138,12 @@ export default function GuideStatusGate({ children }: Props) {
   const set = (k: keyof GuideProfile, v: string) =>
     setForm(f => ({ ...f, [k]: v }))
 
+  // guide_certificate tidak lagi required — opsional
   const isComplete =
     !!form.bio &&
     !!form.guide_phone &&
     !!form.guide_nationality &&
-    !!form.guide_id_card_url &&
-    !!form.guide_certificate
+    !!form.guide_id_card_url
 
   useEffect(() => {
     guidesService.getProfile()
@@ -100,9 +156,11 @@ export default function GuideStatusGate({ children }: Props) {
           languages: p.languages ?? "",
           guide_id_card_url: p.guide_id_card_url ?? "",
           guide_certificate: p.guide_certificate ?? "",
+          bank_code: p.bank_code ?? "",
           bank_name: p.bank_name ?? "",
           bank_account_number: p.bank_account_number ?? "",
           bank_account_name: p.bank_account_name ?? "",
+          bank_branch: p.bank_branch ?? "",
         })
       })
       .catch(() => {})
@@ -192,7 +250,7 @@ export default function GuideStatusGate({ children }: Props) {
           {status === "pending" ? (
             <div className="px-8 py-8">
               <div className="space-y-2">
-                {["Bio / Deskripsi Diri", "Nomor HP", "Kewarganegaraan", "KTP / Paspor", "Sertifikat Guide", "Bahasa", "Rekening Bank"].map(item => (
+                {["Bio / Deskripsi Diri", "Nomor HP", "Kewarganegaraan", "KTP / Paspor", "Sertifikat Guide (opsional)", "Bahasa", "Rekening Bank"].map(item => (
                   <div key={item} className="flex items-center gap-3 text-sm">
                     <div className="w-4 h-4 rounded-full flex items-center justify-center text-xs" style={{ background: "oklch(1 0 0 / 0.15)" }}>✓</div>
                     <span className="text-muted-foreground">{item}</span>
@@ -250,9 +308,9 @@ export default function GuideStatusGate({ children }: Props) {
                     fieldKey="guide_id_card_url"
                     onUploaded={url => set("guide_id_card_url", url)}
                   />
+                  {/* Sertifikat Guide — opsional, tidak perlu required */}
                   <FileUploadField
-                    label="Sertifikat Guide"
-                    required
+                    label="Sertifikat Guide (opsional)"
                     currentUrl={form.guide_certificate ?? ""}
                     fieldKey="guide_certificate"
                     onUploaded={url => set("guide_certificate", url)}
@@ -266,10 +324,47 @@ export default function GuideStatusGate({ children }: Props) {
               <div>
                 <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Informasi Rekening Bank</p>
                 <div className="space-y-3">
+                  {/* Nama Bank — dropdown dari konfigurasi BANK_CODES admin */}
                   <div className="grid gap-1.5">
                     <Label className="text-sm">Nama Bank</Label>
-                    <Input value={form.bank_name ?? ""} onChange={e => set("bank_name", e.target.value)} placeholder="BCA / Mandiri / BRI" className="bg-white/[0.06] border-white/[0.15]" />
+                    <select
+                      value={form.bank_code ?? ""}
+                      onChange={e => {
+                        const selected = BANK_CODES.find(b => b.code === e.target.value)
+                        setForm(f => ({
+                          ...f,
+                          bank_code: e.target.value,
+                          bank_name: selected ? selected.name : "",
+                        }))
+                      }}
+                      className="w-full h-9 rounded-lg px-3 text-sm"
+                      style={{
+                        background: "oklch(1 0 0 / 0.06)",
+                        border: "1px solid oklch(1 0 0 / 0.15)",
+                        color: form.bank_code ? "inherit" : "oklch(0.556 0 0)",
+                        outline: "none",
+                      }}
+                    >
+                      <option value="">-- Pilih Bank --</option>
+                      {BANK_CODES.map(b => (
+                        <option key={b.code} value={b.code}>
+                          {b.name} ({b.code})
+                        </option>
+                      ))}
+                    </select>
                   </div>
+
+                  {/* Kantor Cabang Pembuatan Bank */}
+                  <div className="grid gap-1.5">
+                    <Label className="text-sm">Kantor Cabang Pembuatan Bank</Label>
+                    <Input
+                      value={form.bank_branch ?? ""}
+                      onChange={e => set("bank_branch", e.target.value)}
+                      placeholder="Contoh: KCP Palembang Ilir Barat"
+                      className="bg-white/[0.06] border-white/[0.15]"
+                    />
+                  </div>
+
                   <div className="grid grid-cols-2 gap-3">
                     <div className="grid gap-1.5">
                       <Label className="text-sm">Nomor Rekening</Label>
