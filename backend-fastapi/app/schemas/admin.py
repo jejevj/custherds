@@ -2,7 +2,7 @@ import uuid
 from typing import Optional
 from datetime import datetime
 from decimal import Decimal
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 
 class AdminUserList(BaseModel):
@@ -12,10 +12,18 @@ class AdminUserList(BaseModel):
     user_type: int
     is_active: bool
     is_verified: bool
+    is_create_user: bool
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class AdminUserCreate(BaseModel):
+    user_name: str
+    user_email: EmailStr
+    user_password: str
+    is_create_user: bool = False
 
 
 class AdminTransactionList(BaseModel):

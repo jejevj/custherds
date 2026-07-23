@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 from app.db.session import get_db
 from app.core.deps import require_user_type
+from app.core.security import get_password_hash
 from app.models.user import User
 from app.models.guide import Guide
 from app.models.vendor import Vendor
@@ -11,8 +12,8 @@ from app.models.transaction import Transaction
 from app.models.guide_withdrawal import GuideWithdrawal
 from app.models.revenue_split_config import RevenueSplitConfig
 from app.schemas.admin import (
-    AdminUserList, AdminTransactionList, AdminWithdrawalProcess,
-    AdminSplitConfigCreate, AdminSplitConfigResponse,
+    AdminUserList, AdminUserCreate, AdminTransactionList,
+    AdminWithdrawalProcess, AdminSplitConfigCreate, AdminSplitConfigResponse,
     AdminWithdrawalResponse,
 )
 from app.services.xendit_disbursement import create_disbursement
@@ -35,6 +36,35 @@ def admin_list_users(
     return q.order_by(User.created_at.desc()).all()
 
 
+@router.post("/users", response_model=AdminUserList, status_code=201, summary="[Admin] Create internal user")
+def admin_create_user(
+    payload: AdminUserCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_user_type(99)),
+) -> Any:
+    # Pastikan hanya user dengan is_create_user=True yang boleh membuat user baru
+    if not current_user.is_create_user:
+        raise HTTPException(403, "You don't have permission to create users")
+
+    existing = db.query(User).filter(User.user_email == payload.user_email).first()
+    if existing:
+        raise HTTPException(400, "Email already registered")
+
+    new_user = User(
+        user_name=payload.user_name,
+        user_email=payload.user_email,
+        user_password=get_password_hash(payload.user_password),
+        user_type=99,  # internal admin
+        is_active=True,
+        is_verified=True,
+        is_create_user=payload.is_create_user,
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
+
 @router.put("/users/{user_id}/activate", summary="[Admin] Activate / deactivate user")
 def admin_toggle_user(
     user_id: uuid.UUID,
@@ -48,6 +78,25 @@ def admin_toggle_user(
     user.is_active = is_active
     db.commit()
     return {"message": f"User {'activated' if is_active else 'deactivated'}"}
+
+
+@router.put("/users/{user_id}/create-permission", summary="[Admin] Toggle is_create_user permission")
+def admin_toggle_create_permission(
+    user_id: uuid.UUID,
+    is_create_user: bool = Query(..., description="true = boleh buat user, false = tidak"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_user_type(99)),
+) -> Any:
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    user.is_create_user = is_create_user
+    db.commit()
+    return {
+        "message": f"Permission updated",
+        "user_id": str(user.id),
+        "is_create_user": user.is_create_user,
+    }
 
 
 # ─────────────────────────── GUIDES ───────────────────────────
