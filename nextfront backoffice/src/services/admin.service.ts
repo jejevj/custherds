@@ -1,12 +1,20 @@
 import { api } from './api'
 
 export interface AdminUser {
-  id: string
-  user_name: string
-  user_email: string
-  user_type: number
-  is_active: boolean
-  created_at: string
+  id:             string
+  user_name:      string
+  user_email:     string
+  user_type:      number
+  is_active:      boolean
+  is_create_user: boolean
+  created_at:     string
+}
+
+export interface CreateAdminUserPayload {
+  user_name:      string
+  user_email:     string
+  user_password:  string
+  is_create_user: boolean
 }
 
 export interface AdminGuide {
@@ -99,6 +107,12 @@ export const adminService = {
 
   toggleUser: (user_id: string, is_active: boolean) =>
     api.put<{ message: string }>(`/admin/users/${user_id}/activate`, null, { params: { is_active } }),
+
+  createUser: (payload: CreateAdminUserPayload) =>
+    api.post<AdminUser>('/admin/users', payload),
+
+  updateUserCreatePermission: (user_id: string, is_create_user: boolean) =>
+    api.put<{ message: string }>(`/admin/users/${user_id}/create-permission`, null, { params: { is_create_user } }),
 
   listGuides: (guide_status?: string) =>
     api.get<AdminGuide[]>('/admin/guides', { params: guide_status ? { guide_status } : {} }),
