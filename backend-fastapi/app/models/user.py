@@ -10,6 +10,7 @@ class User(Base):
     """
     Entitas utama semua pengguna.
     user_type: 1=Guide/Partner, 2=Vendor, 99=Superadmin
+    is_create_user: jika True, user admin ini bisa membuat user internal lainnya
     """
     __tablename__ = "users"
 
@@ -25,6 +26,7 @@ class User(Base):
     tiktok_link       = Column(String(255), nullable=True)
     is_active         = Column(Boolean, default=False, nullable=False)
     is_verified       = Column(Boolean, default=False, nullable=False)
+    is_create_user    = Column(Boolean, default=False, nullable=False)
     tnc_accepted      = Column(Boolean, default=False, nullable=False)
     tnc_accepted_at   = Column(DateTime(timezone=True), nullable=True)
     last_login_at     = Column(DateTime(timezone=True), nullable=True)
