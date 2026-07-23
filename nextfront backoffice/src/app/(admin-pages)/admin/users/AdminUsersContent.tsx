@@ -23,7 +23,6 @@ import { ShieldCheck, UserPlus } from "lucide-react"
 import { useTableSearch } from "@/hooks/useTableSearch"
 import { TableSearchInput } from "@/components/ui/TableSearchInput"
 import { getTokens } from "@/services/api"
-import { jwtDecode } from "jwt-decode"
 
 interface JwtPayload {
   sub: string
@@ -31,12 +30,27 @@ interface JwtPayload {
   is_create_user?: boolean
 }
 
+/** Decode JWT payload tanpa library eksternal — gunakan atob bawaan browser */
+function decodeJwt(token: string): JwtPayload | null {
+  try {
+    const base64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")
+    const json = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    )
+    return JSON.parse(json) as JwtPayload
+  } catch {
+    return null
+  }
+}
+
 function getCurrentUserId(): string | null {
   try {
     const { access } = getTokens()
     if (!access) return null
-    const decoded = jwtDecode<JwtPayload>(access)
-    return decoded.sub
+    return decodeJwt(access)?.sub ?? null
   } catch {
     return null
   }
@@ -48,7 +62,6 @@ export default function AdminUsersContent() {
   const [error,   setError]   = useState("")
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
-  // dialog state
   const [open,        setOpen]        = useState(false)
   const [submitting,  setSubmitting]  = useState(false)
   const [formError,   setFormError]   = useState("")
@@ -74,23 +87,11 @@ export default function AdminUsersContent() {
     fetchUsers()
   }, [])
 
-  // Cari data current user dari list
   const currentUserData = users.find(u => u.id === currentUserId)
 
-  /**
-   * Aturan: user dengan is_create_user=true HANYA bisa MENGAKTIFKAN (set true)
-   * flag is_create_user user lain.
-   * TIDAK bisa menonaktifkan (set false) user yang sudah punya is_create_user=true.
-   * Switch akan di-disable jika:
-   * - target sudah is_create_user=true DAN current user bukan dirinya sendiri
-   *   (karena mencabut hak sesama = tidak boleh)
-   * - current user sendiri tidak punya is_create_user=true (tidak berhak sama sekali)
-   */
   const canTogglePermission = (target: AdminUser): boolean => {
     if (!currentUserData?.is_create_user) return false
-    // Kalau target sudah punya is_create_user=true, tidak bisa di-toggle (cabut)
     if (target.is_create_user) return false
-    // Kalau target belum punya, bisa di-aktifkan
     return true
   }
 
@@ -224,7 +225,6 @@ export default function AdminUsersContent() {
           </table>
         </div>
 
-        {/* Dialog Tambah User */}
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
