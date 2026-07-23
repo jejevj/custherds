@@ -42,7 +42,6 @@ def admin_create_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user_type(99)),
 ) -> Any:
-    # Pastikan hanya user dengan is_create_user=True yang boleh membuat user baru
     if not current_user.is_create_user:
         raise HTTPException(403, "You don't have permission to create users")
 
@@ -54,7 +53,7 @@ def admin_create_user(
         user_name=payload.user_name,
         user_email=payload.user_email,
         user_password=get_password_hash(payload.user_password),
-        user_type=99,  # internal admin
+        user_type=99,
         is_active=True,
         is_verified=True,
         is_create_user=payload.is_create_user,
@@ -87,15 +86,29 @@ def admin_toggle_create_permission(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user_type(99)),
 ) -> Any:
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
+    # Hanya user dengan is_create_user=True yang boleh mengakses endpoint ini
+    if not current_user.is_create_user:
+        raise HTTPException(403, "You don't have permission to manage user creation rights")
+
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
         raise HTTPException(404, "User not found")
-    user.is_create_user = is_create_user
+
+    # Tidak boleh menonaktifkan (set false) user yang sudah punya is_create_user=True
+    # Hanya bisa MENAMBAHKAN (set true), tidak bisa MENCABUT dari sesama pemegang hak
+    if not is_create_user and target.is_create_user:
+        raise HTTPException(
+            403,
+            "You cannot revoke create-user permission from a user who already has it. "
+            "Only a higher-level admin can do this."
+        )
+
+    target.is_create_user = is_create_user
     db.commit()
     return {
-        "message": f"Permission updated",
-        "user_id": str(user.id),
-        "is_create_user": user.is_create_user,
+        "message": "Permission updated",
+        "user_id": str(target.id),
+        "is_create_user": target.is_create_user,
     }
 
 
