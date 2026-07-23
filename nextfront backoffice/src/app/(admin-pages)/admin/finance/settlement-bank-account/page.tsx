@@ -12,22 +12,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 
 // ─── Error normalizer ─────────────────────────────────────────────────
-/**
- * Selalu kembalikan string dari error apapun:
- * - string               → langsung
- * - { detail: string }   → detail
- * - { detail: object }   → JSON.stringify
- * - { detail: array }    → gabung pesan validasi FastAPI
- * - object lain          → JSON.stringify
- * - unknown              → fallback
- */
 function parseErrMsg(err: unknown, fallback = 'Terjadi kesalahan.'): string {
   if (!err) return fallback
   if (typeof err === 'string') return err || fallback
 
   const e = err as Record<string, unknown>
 
-  // FastAPI validation error: { detail: [{loc, msg, type}, ...] }
   if (Array.isArray(e.detail)) {
     const msgs = (e.detail as Array<{ msg?: string; message?: string }>)
       .map(d => d.msg ?? d.message ?? JSON.stringify(d))
@@ -35,17 +25,14 @@ function parseErrMsg(err: unknown, fallback = 'Terjadi kesalahan.'): string {
     return msgs.length ? msgs.join('; ') : fallback
   }
 
-  // { detail: string }
   if (typeof e.detail === 'string') return e.detail || fallback
 
-  // { detail: { message, type } } ← penyebab React error #31
   if (e.detail && typeof e.detail === 'object') {
     const d = e.detail as Record<string, unknown>
     if (typeof d.message === 'string') return d.message
     return JSON.stringify(d)
   }
 
-  // { message: string }
   if (typeof e.message === 'string') return e.message || fallback
 
   return JSON.stringify(err)
@@ -130,7 +117,7 @@ export default function SettlementBankAccountPage() {
   const [loading, setLoading]           = useState(false)
   const [syncingId, setSyncingId]       = useState<string | null>(null)
   const [syncingAll, setSyncingAll]     = useState(false)
-  const [feedback, setFeedback]         = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
+  const [feedback, setFeedback]         = useState<{ type: 'success' | 'error' | 'info'; msg: string } | null>(null)
 
   const [detailItem, setDetailItem]     = useState<SettlementBankAccount | null>(null)
   const [showCreateForm, setShowCreateForm] = useState(false)
@@ -142,11 +129,9 @@ export default function SettlementBankAccountPage() {
 
   const SIZE = 20
 
-  // ─ helpers ───────────────────────────────────────────────────────────────
   const errFeedback = (err: unknown, fallback: string) =>
     setFeedback({ type: 'error', msg: parseErrMsg(err, fallback) })
 
-  // ─ fetch ───────────────────────────────────────────────────────────────
   const fetchList = useCallback(async () => {
     setPageLoading(true)
     try {
@@ -180,10 +165,29 @@ export default function SettlementBankAccountPage() {
   // ─ sync all pending ───────────────────────────────────────────────
   const handleSyncAll = async () => {
     const pendingItems = items.filter(i => i.status === 'pending_verification')
+
+    // ── DEBUG: tampilkan breakdown status items yang ada di state ──
+    const statusBreakdown = items.reduce<Record<string, number>>((acc, i) => {
+      acc[i.status] = (acc[i.status] ?? 0) + 1
+      return acc
+    }, {})
+    console.info('[Sync Pending] Total items di state:', items.length)
+    console.info('[Sync Pending] Breakdown status:', statusBreakdown)
+    console.info('[Sync Pending] Pending items ditemukan:', pendingItems.length)
+    console.table(items.map(i => ({ id: i.id, account_number: i.account_number, status: i.status })))
+
     if (pendingItems.length === 0) {
-      setFeedback({ type: 'error', msg: 'Tidak ada rekening berstatus Pending Verifikasi.' })
+      // Tampilkan info lengkap ke user: berapa total item dan breakdown statusnya
+      const breakdownText = Object.entries(statusBreakdown)
+        .map(([s, c]) => `${STATUS_LABELS[s as SBAStatus] ?? s}: ${c}`)
+        .join(', ')
+      const infoMsg = items.length === 0
+        ? 'Tidak ada rekening berstatus Pending Verifikasi. (Halaman ini kosong — coba cek filter status atau halaman lain)'
+        : `Tidak ada rekening berstatus Pending Verifikasi. Data di halaman ini (${items.length} item): ${breakdownText}.`
+      setFeedback({ type: 'error', msg: infoMsg })
       return
     }
+
     setSyncingAll(true)
     setFeedback(null)
     let ok = 0, fail = 0
@@ -265,7 +269,7 @@ export default function SettlementBankAccountPage() {
             variant="outline"
             onClick={handleSyncAll}
             disabled={syncingAll || pageLoading}
-            title="Sync semua rekening berstatus Pending Verifikasi dari DOKU"
+            title={`Sync semua rekening berstatus Pending Verifikasi dari DOKU. Saat ini ada ${pendingCount} pending di halaman ini.`}
           >
             {syncingAll ? '⏳ Syncing...' : `🔄 Sync Pending${pendingCount > 0 ? ` (${pendingCount})` : ''}`}
           </Button>
@@ -275,15 +279,34 @@ export default function SettlementBankAccountPage() {
         </div>
       </div>
 
-      {/* Feedback — msg dijamin string, tidak akan trigger React #31 */}
+      {/* Feedback */}
       {feedback && (
         <div className={`rounded-lg px-4 py-3 text-sm ${
           feedback.type === 'success'
             ? 'bg-green-50 text-green-800 border border-green-200'
+            : feedback.type === 'info'
+            ? 'bg-blue-50 text-blue-800 border border-blue-200'
             : 'bg-red-50 text-red-800 border border-red-200'
         }`}>
           {feedback.msg}
           <button onClick={() => setFeedback(null)} className="ml-3 underline text-xs">Tutup</button>
+        </div>
+      )}
+
+      {/* ── Debug info: status breakdown halaman ini ── */}
+      {!pageLoading && items.length > 0 && (
+        <div className="rounded-lg px-4 py-2 bg-muted/30 border text-xs text-muted-foreground flex flex-wrap gap-3">
+          <span className="font-medium">Status halaman ini ({items.length} item):</span>
+          {(Object.keys(STATUS_LABELS) as SBAStatus[]).map(s => {
+            const count = items.filter(i => i.status === s).length
+            if (count === 0) return null
+            return (
+              <span key={s}>
+                <Badge variant={STATUS_VARIANTS[s]} className="text-[10px] mr-1">{STATUS_LABELS[s]}</Badge>
+                {count}
+              </span>
+            )
+          })}
         </div>
       )}
 
