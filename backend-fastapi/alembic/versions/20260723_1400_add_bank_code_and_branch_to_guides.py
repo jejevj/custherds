@@ -1,7 +1,7 @@
 """add bank_code and bank_branch to guides
 
 Revision ID: 20260723_1400
-Revises: 
+Revises: 7d9f4e2c1b83
 Create Date: 2026-07-23 14:00:00
 
 Changes:
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = '20260723_1400'
-down_revision = None  # update this to the latest revision in your chain
+down_revision = '7d9f4e2c1b83'  # latest: 20260719_1641_add_direct_price_to_bookings
 branch_labels = None
 depends_on = None
 
