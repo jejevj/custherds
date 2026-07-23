@@ -28,7 +28,7 @@
                 <h4 class="lp-card__title">Herd Guide</h4>
                 <p class="lp-card__desc">Access your guide dashboard, manage bookings, and track your commissions.</p>
                 <a
-                  href="https://partners-custherds.ourtestcloud.my.id/guide/login"
+                  href="https://partners.custherds.com/guide/login"
                   class="thm-btn lp-card__btn"
                 >
                   Login as Guide <span class="icon-up-right-arrow"></span>
@@ -44,7 +44,7 @@
                 <h4 class="lp-card__title">Business Vendor</h4>
                 <p class="lp-card__desc">Manage your listings, view affiliate activity, and grow your customer base.</p>
                 <a
-                  href="https://partners-custherds.ourtestcloud.my.id/vendor/login"
+                  href="https://partners.custherds.com/vendor/login"
                   class="thm-btn lp-card__btn"
                 >
                   Login as Vendor <span class="icon-up-right-arrow"></span>

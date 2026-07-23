@@ -11,7 +11,7 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://partners-custherds.ourtestcloud.my.id"),
+  metadataBase: new URL("https://partners.custherds.com"),
 
   title: {
     default: "Custherds Partners",
@@ -39,7 +39,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://partners-custherds.ourtestcloud.my.id",
+    url: "https://partners.custherds.com",
     siteName: "Custherds Partners",
     title: "Custherds Partners Dashboard",
     description: "Manage your Custherds guide or vendor account.",

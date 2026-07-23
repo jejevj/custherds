@@ -4,7 +4,7 @@
  * POST /api/v1/payments/invoice
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api-custherds.ourtestcloud.my.id'
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.custherds.com'
 
 export interface CreateInvoicePayload {
   amount: number

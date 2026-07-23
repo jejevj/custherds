@@ -404,7 +404,7 @@ import HeaderTwo from '@/components/layout/header/HeaderTwo.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import Footer1 from '@/components/layout/footer/Footer1.vue';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'https://api-custherds.ourtestcloud.my.id/api/v1';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://api.custherds.com/api/v1';
 
 const router = useRouter();
 const mode = ref('partner');
@@ -588,8 +588,8 @@ async function submitLogin() {
     // Redirect based on user_type
     setTimeout(() => {
       const dest = data.user_type === 2
-        ? 'https://partners-custherds.ourtestcloud.my.id/vendor/dashboard'
-        : 'https://partners-custherds.ourtestcloud.my.id/guide/dashboard';
+        ? 'https://partners.custherds.com/vendor/dashboard'
+        : 'https://partners.custherds.com/guide/dashboard';
       window.location.href = dest;
     }, 1500);
   } catch (e) {

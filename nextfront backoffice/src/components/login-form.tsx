@@ -152,7 +152,7 @@ export function LoginForm({
       </Card>
       <div className="text-balance text-center text-xs text-muted-foreground [&_a]:underline [&_a]:underline-offset-4 [&_a]:hover:text-primary">
         By clicking continue, you agree to our{" "}
-        <a href="https://custherds.ourtestcloud.my.id/terms">Terms of Service</a>{" "}
+        <a href="https://partners.custherds.com/terms">Terms of Service</a>{" "}
         and <a href="#">Privacy Policy</a>.
       </div>
     </div>

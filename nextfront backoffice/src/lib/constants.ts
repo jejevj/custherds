@@ -1,5 +1,5 @@
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'https://api.custherds.ourtestcloud.my.id/api/v1'
+  process.env.NEXT_PUBLIC_API_URL || 'https://api.custherds.com/api/v1'
 
 export const STATUS_COLORS: Record<string, string> = {
   // Transaction
