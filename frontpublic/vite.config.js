@@ -10,7 +10,8 @@ export default defineConfig({
     port: 5173,
     allowedHosts: [
       'custherds.ourtestcloud.my.id',
-      'localhost'
+      'localhost',
+      'www.custherds.com'
     ]
   },
   plugins: [
