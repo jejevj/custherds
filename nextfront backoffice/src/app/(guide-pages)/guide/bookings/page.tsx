@@ -2,7 +2,6 @@
 import { useEffect, useState } from "react"
 import { bookingsService, Booking } from "@/services/bookings.service"
 import { Badge } from "@/components/ui/badge"
-import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Eye, Receipt } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -55,7 +54,6 @@ export default function GuideBookingsPage() {
           <h1 className="text-2xl font-bold tracking-tight">Bookings</h1>
           <p className="text-muted-foreground">Semua booking yang kamu buat.</p>
         </div>
-        <Button asChild><Link href="/guide/bookings/create">+ Buat Booking</Link></Button>
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">
