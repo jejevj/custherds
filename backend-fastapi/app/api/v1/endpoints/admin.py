@@ -16,6 +16,7 @@ from app.schemas.admin import (
     AdminWithdrawalProcess, AdminSplitConfigCreate, AdminSplitConfigResponse,
     AdminWithdrawalResponse,
 )
+from app.schemas.guides import GuideProfile, GuideAdminBankSettlementUpdate
 from app.services.xendit_disbursement import create_disbursement
 from datetime import datetime, timezone
 
@@ -145,6 +146,7 @@ def admin_list_guides(
         "bio":                      g.bio,
         "languages":                g.languages,
         "wallet_balance":           str(g.wallet_balance),
+        "bank_settlement_id":       g.bank_settlement_id,
         "created_at":               g.created_at.isoformat(),
     } for g in guides]
 
@@ -181,6 +183,33 @@ def admin_approve_guide(
         "guide_certificate_status": guide.guide_certificate_status,
         "notes":                    notes,
     }
+
+
+@router.put(
+    "/guides/{guide_id}/bank-settlement-id",
+    response_model=GuideProfile,
+    summary="[Admin] Set / update bank_settlement_id guide",
+)
+def admin_set_guide_bank_settlement_id(
+    guide_id: uuid.UUID,
+    payload: GuideAdminBankSettlementUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_user_type(99)),
+) -> Any:
+    """
+    Hanya admin (user_type=99) yang dapat mengisi atau mengubah bank_settlement_id guide.
+    Field ini tidak dapat diubah oleh guide sendiri.
+
+    Kirim `bank_settlement_id: null` untuk menghapus/kosongkan nilai yang ada.
+    """
+    guide = db.query(Guide).filter(Guide.id == guide_id).first()
+    if not guide:
+        raise HTTPException(404, "Guide not found")
+
+    guide.bank_settlement_id = payload.bank_settlement_id
+    db.commit()
+    db.refresh(guide)
+    return guide
 
 
 # ─────────────────────────── VENDORS ───────────────────────────
