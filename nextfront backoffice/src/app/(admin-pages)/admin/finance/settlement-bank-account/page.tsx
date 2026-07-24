@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { adminGuidesService, AdminGuideItem } from '@/services/admin.guides.service'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -29,7 +29,7 @@ function settlementStatus(guide: AdminGuideItem): SettlementStatus {
   return guide.bank_settlement_id ? 'settled' : 'unsettled'
 }
 
-const STATUS_BADGE: Record<SettlementStatus, JSX.Element> = {
+const STATUS_BADGE: Record<SettlementStatus, React.ReactElement> = {
   settled:   <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">Settled</Badge>,
   unsettled: <Badge variant="secondary" className="bg-amber-100 text-amber-800 border-amber-200">Unsettled</Badge>,
 }
@@ -95,7 +95,7 @@ export default function SettlementBankAccountPage() {
     try {
       await adminGuidesService.setBankSettlementId(
         editGuide.guide_id,
-        editValue.trim() || null,  // kirim null jika dikosongkan
+        editValue.trim() || null,
       )
       setFeedback({ type: 'success', msg: `Settlement ID berhasil diperbarui untuk ${editGuide.user_name}.` })
       setEditGuide(null)
