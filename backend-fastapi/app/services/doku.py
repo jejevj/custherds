@@ -8,7 +8,7 @@ import hashlib
 import json
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 import httpx
 from cryptography.hazmat.primitives import hashes, serialization
@@ -100,7 +100,20 @@ async def create_qris(
     callback_url: str = "",
     expired_time: int = 30,
     postal_code: str = "10110",
+    settlement_items: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
+    """
+    Generate DOKU SNAP QRIS MPM.
+
+    settlement_items (opsional): list of settlement split yang akan dimasukkan ke
+    additionalInfo.settlement. Setiap item:
+        {
+            "bank_account_settlement_id": str,
+            "value": str,   # exact IDR amount (FIX) atau percentage string (PERCENTAGE)
+            "type": "FIX" | "PERCENTAGE"
+        }
+    Jika disediakan, additionalInfo.hold_settlement akan di-set True secara otomatis.
+    """
     access_token = await get_token_b2b(base_url, client_id, private_key_pem)
 
     endpoint  = "/snap-adapter/b2b/v1.0/qr/qr-mpm-generate"
@@ -113,6 +126,15 @@ async def create_qris(
     import time as _time
     external_id = str(int(_time.time() * 1000))
 
+    additional_info: Dict[str, Any] = {
+        "postalCode": postal_code,
+        "feeType": "1",
+    }
+
+    if settlement_items:
+        additional_info["hold_settlement"] = True
+        additional_info["settlement"] = settlement_items
+
     body: Dict[str, Any] = {
         "partnerReferenceNo": order_id,
         "amount": {
@@ -122,10 +144,7 @@ async def create_qris(
         "merchantId": merchant_id,
         "terminalId": terminal_id,
         "validityPeriod": validity_period,
-        "additionalInfo": {
-            "postalCode": postal_code,
-            "feeType": "1",
-        },
+        "additionalInfo": additional_info,
     }
 
     body_minified = json.dumps(body, separators=(",", ":"), ensure_ascii=False)
@@ -146,6 +165,7 @@ async def create_qris(
         f"X-PARTNER-ID={client_id} merchantId={merchant_id} "
         f"terminalId={terminal_id} amount={amount_str} orderId={order_id} "
         f"X-EXTERNAL-ID={external_id} X-TIMESTAMP={timestamp} "
+        f"settlement_items={json.dumps(settlement_items, ensure_ascii=False) if settlement_items else 'none'} "
         f"body={body_minified}"
     )
 
@@ -161,7 +181,6 @@ async def create_qris(
     except Exception:
         raw = {"_raw_text": resp.text}
 
-    # Log full response agar referenceNo bisa dilihat
     logger.info(
         f"[DOKU:qris:RESPONSE] HTTP={resp.status_code} "
         f"responseCode={raw.get('responseCode')} "
@@ -179,17 +198,14 @@ async def create_qris(
 
     qris_string = raw.get("qrContent") or raw.get("additionalInfo", {}).get("qrContent")
 
-    # Kembalikan KEDUANYA:
-    # - reference_no     : referenceNo dari DOKU (yang dipakai untuk query status)
-    # - partner_reference_no : partnerReferenceNo = order_id kita (CST-TX...-ts)
-    doku_reference_no   = raw.get("referenceNo", "")
+    doku_reference_no    = raw.get("referenceNo", "")
     partner_reference_no = raw.get("partnerReferenceNo") or order_id
 
     return {
         "qris_string":          qris_string,
         "reference_no":         doku_reference_no or partner_reference_no,
-        "doku_reference_no":    doku_reference_no,       # referenceNo DOKU asli
-        "partner_reference_no": partner_reference_no,    # partnerReferenceNo = order_id kita
+        "doku_reference_no":    doku_reference_no,
+        "partner_reference_no": partner_reference_no,
         "expired_time":         expired_time,
         "raw":                  raw,
     }

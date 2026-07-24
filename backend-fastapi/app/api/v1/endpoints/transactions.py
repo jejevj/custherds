@@ -1,7 +1,7 @@
 import uuid
 from typing import Any, List, Optional
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -29,6 +29,12 @@ TX_MAX_ATTEMPT = 3
 # Provider DOKU (production + sandbox)
 DOKU_PROVIDERS = {"doku", "doku_sandbox"}
 
+# Developer/owner platform bank account settlement ID (hardcoded — 5% dari platform_fee)
+DEV_BANK_SETTLEMENT_ID = "BNK-0365-1783063541306"
+
+# Platform share: dari platform_fee, 5% untuk developer, sisanya 95% untuk operasional platform
+DEV_SHARE_PERCENT = Decimal("0.05")
+
 
 def _fmt_rp(amount: Decimal) -> str:
     return f"Rp {int(amount):,}".replace(",", ".")
@@ -54,14 +60,8 @@ def _get_active_gateway(db: Session) -> Optional[PaymentGatewayConfig]:
 
 
 def _get_doku_base_url(gateway: PaymentGatewayConfig) -> str:
-    """
-    Tentukan base URL DOKU berdasarkan provider dan is_production.
-    - doku_sandbox  → selalu sandbox, abaikan is_production
-    - doku          → ikuti is_production flag
-    """
     if gateway.provider == "doku_sandbox":
         return "https://api-sandbox.doku.com"
-    # provider == "doku" (production)
     return "https://api.doku.com" if gateway.is_production else "https://api-sandbox.doku.com"
 
 
@@ -87,6 +87,63 @@ async def _disburse_guide_commission(tx: Transaction, db: Session) -> None:
         logger.info(f"[Disbursement] Berhasil | guide={guide.id} | amount={tx.guide_commission}")
     except Exception as e:
         logger.error(f"[Disbursement] GAGAL | guide={guide.id} | tx={tx.transaction_code} | error={str(e)}")
+
+
+def _build_settlement_items(
+    tx: Transaction,
+    guide: Optional[Guide],
+) -> Optional[list]:
+    """
+    Susun 3 settlement items untuk DOKU QRIS:
+
+    Contoh dengan platform_fee = Rp 25.000 & guide_commission = Rp 50.000:
+      1. Developer (5% dari platform_fee) → Rp 1.250   → BNK-0365-1783063541306
+      2. Sisa platform_fee (95%)          → Rp 23.750   → BNK-0365-1783063541306 (sama, owner platform)
+      3. Guide commission                 → Rp 50.000   → guide.bank_settlement_id
+
+    Jika guide tidak punya bank_settlement_id, settlement items tidak disertakan
+    (DOKU akan settle ke akun default merchant).
+    """
+    if not guide or not guide.bank_settlement_id:
+        logger.warning(
+            f"[Settlement] Guide {getattr(guide, 'id', '?')} tidak memiliki bank_settlement_id "
+            "— settlement items tidak disertakan ke DOKU."
+        )
+        return None
+
+    platform_fee    = Decimal(str(tx.platform_fee))
+    guide_comm      = Decimal(str(tx.guide_commission))
+
+    # 5% dari platform_fee → developer
+    dev_share       = (platform_fee * DEV_SHARE_PERCENT).quantize(Decimal("1"), rounding=ROUND_DOWN)
+    # Sisa 95% → platform operasional (rekening sama dengan developer dalam skenario ini)
+    platform_share  = platform_fee - dev_share
+
+    items = [
+        {
+            "bank_account_settlement_id": DEV_BANK_SETTLEMENT_ID,
+            "value": str(int(dev_share)),
+            "type": "FIX",
+        },
+        {
+            "bank_account_settlement_id": DEV_BANK_SETTLEMENT_ID,
+            "value": str(int(platform_share)),
+            "type": "FIX",
+        },
+        {
+            "bank_account_settlement_id": guide.bank_settlement_id,
+            "value": str(int(guide_comm)),
+            "type": "FIX",
+        },
+    ]
+
+    logger.info(
+        f"[Settlement] TX={tx.transaction_code} "
+        f"platform_fee={platform_fee} dev_share={dev_share} platform_share={platform_share} "
+        f"guide_comm={guide_comm} guide_bank_settlement_id={guide.bank_settlement_id}"
+    )
+
+    return items
 
 
 async def _create_doku_qris(tx: Transaction, tagihan: Decimal, db: Session) -> dict:
@@ -118,6 +175,10 @@ async def _create_doku_qris(tx: Transaction, tagihan: Decimal, db: Session) -> d
     ts       = int(datetime.now(timezone.utc).timestamp())
     order_id = f"CST-{tx.transaction_code}-{ts}"
 
+    # Ambil guide untuk build settlement items
+    guide = db.query(Guide).filter(Guide.id == tx.guide_id).first()
+    settlement_items = _build_settlement_items(tx, guide)
+
     try:
         from app.services.doku import create_qris
         doku_result = await create_qris(
@@ -130,6 +191,7 @@ async def _create_doku_qris(tx: Transaction, tagihan: Decimal, db: Session) -> d
             merchant_id=merchant_id,
             terminal_id=terminal_id,
             expired_time=30,
+            settlement_items=settlement_items,
         )
     except Exception as e:
         logger.error(f"[DOKU QRIS] Gagal buat QRIS untuk TX {tx.transaction_code}: {e}")
