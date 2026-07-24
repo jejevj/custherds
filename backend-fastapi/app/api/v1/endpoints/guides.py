@@ -1,5 +1,6 @@
-from typing import Any
+from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.core.deps import require_user_type
@@ -8,6 +9,14 @@ from app.models.guide import Guide
 from app.schemas.guides import GuideProfile, GuideUpdateRequest, GuideWallet, GuideSubmitRequest
 
 router = APIRouter()
+
+
+class GuideBankUpdateRequest(BaseModel):
+    bank_code: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_branch: Optional[str] = None
+    bank_account_number: Optional[str] = None
+    bank_account_name: Optional[str] = None
 
 
 @router.get("/me", response_model=GuideProfile, summary="Profil guide yang sedang login")
@@ -36,6 +45,27 @@ def update_guide_profile(
             status_code=400,
             detail=f"Profil tidak dapat diedit saat status '{guide.guide_status}'"
         )
+    for field, value in payload.dict(exclude_unset=True).items():
+        setattr(guide, field, value)
+    db.commit()
+    db.refresh(guide)
+    return guide
+
+
+@router.put("/me/bank", response_model=GuideProfile, summary="Update informasi rekening bank guide (semua status)")
+def update_guide_bank(
+    payload: GuideBankUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_user_type(1)),
+) -> Any:
+    """
+    Update data rekening bank guide.
+    Endpoint ini dapat diakses di semua status guide (incomplete, pending, approved, rejected)
+    karena informasi bank diperlukan untuk proses disbursement komisi.
+    """
+    guide = db.query(Guide).filter(Guide.user_id == current_user.id).first()
+    if not guide:
+        raise HTTPException(status_code=404, detail="Profil guide tidak ditemukan")
     for field, value in payload.dict(exclude_unset=True).items():
         setattr(guide, field, value)
     db.commit()
