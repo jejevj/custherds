@@ -18,6 +18,7 @@ export interface GuideProfile {
   bank_branch: string | null      // Kantor cabang pembuatan bank
   bank_account_number: string | null
   bank_account_name: string | null
+  bank_settlement_id: string | null  // Settlement ID — diisi admin, read-only untuk guide
   wallet_balance: string
   created_at: string
 }
@@ -28,9 +29,18 @@ export interface GuideWallet {
   total_earnings: string
 }
 
+export interface GuideBankPayload {
+  bank_code?: string | null
+  bank_name?: string | null
+  bank_branch?: string | null
+  bank_account_number?: string | null
+  bank_account_name?: string | null
+}
+
 export const guidesService = {
-  getProfile:    ()                               => api.get<GuideProfile>('/guides/me'),
-  updateProfile: (payload: Partial<GuideProfile>) => api.put<GuideProfile>('/guides/me', payload),
-  submitReview:  (payload: Partial<GuideProfile>) => api.post<GuideProfile>('/guides/me/submit', payload),
-  getWallet:     ()                               => api.get<GuideWallet>('/guides/me/wallet'),
+  getProfile:    ()                                  => api.get<GuideProfile>('/guides/me'),
+  updateProfile: (payload: Partial<GuideProfile>)    => api.put<GuideProfile>('/guides/me', payload),
+  updateBank:    (payload: GuideBankPayload)          => api.put<GuideProfile>('/guides/me/bank', payload),
+  submitReview:  (payload: Partial<GuideProfile>)    => api.post<GuideProfile>('/guides/me/submit', payload),
+  getWallet:     ()                                  => api.get<GuideWallet>('/guides/me/wallet'),
 }

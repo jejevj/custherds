@@ -23,6 +23,7 @@ class GuideProfile(BaseModel):
     bank_branch: Optional[str] = None           # Kantor cabang pembuatan bank
     bank_account_number: Optional[str] = None
     bank_account_name: Optional[str] = None
+    bank_settlement_id: Optional[str] = None    # Settlement ID — diisi oleh admin
     created_at: datetime
 
     class Config:
@@ -40,17 +41,19 @@ class GuideWallet(BaseModel):
 
 
 class GuideUpdateRequest(BaseModel):
+    """Field yang bisa diupdate guide sendiri (hanya saat status incomplete/rejected)."""
     guide_nationality: Optional[str] = None
     guide_phone: Optional[str] = None
     guide_id_card_url: Optional[str] = None
     guide_certificate: Optional[str] = None
     bio: Optional[str] = None
     languages: Optional[str] = None
-    bank_code: Optional[str] = None             # Kode bank, e.g. '014' = BCA
+    bank_code: Optional[str] = None
     bank_name: Optional[str] = None
-    bank_branch: Optional[str] = None           # Kantor cabang pembuatan bank
+    bank_branch: Optional[str] = None
     bank_account_number: Optional[str] = None
     bank_account_name: Optional[str] = None
+    # bank_settlement_id TIDAK ada di sini — hanya admin yang bisa mengubah
 
 
 class GuideSubmitRequest(BaseModel):
@@ -65,8 +68,14 @@ class GuideSubmitRequest(BaseModel):
     guide_certificate: Optional[str] = None     # URL sertifikat guide (opsional)
     bio: str
     languages: Optional[str] = None
-    bank_code: Optional[str] = None             # Kode bank, e.g. '014' = BCA
+    bank_code: Optional[str] = None
     bank_name: Optional[str] = None
-    bank_branch: Optional[str] = None           # Kantor cabang pembuatan bank
+    bank_branch: Optional[str] = None
     bank_account_number: Optional[str] = None
     bank_account_name: Optional[str] = None
+    # bank_settlement_id TIDAK ada di sini — hanya admin yang bisa mengubah
+
+
+class GuideAdminBankSettlementUpdate(BaseModel):
+    """Hanya digunakan admin untuk set/update bank_settlement_id guide."""
+    bank_settlement_id: Optional[str] = None

@@ -13,6 +13,7 @@ export interface Guide {
   bank_name:                string | null
   bank_account_number:      string | null
   bank_account_name:        string | null
+  bank_settlement_id:       string | null  // Settlement ID — diisi admin, read-only untuk guide
   created_at:               string
   updated_at:               string
 }

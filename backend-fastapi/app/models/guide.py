@@ -17,6 +17,7 @@ class Guide(Base):
       rejected    -> admin tolak, user harus perbaiki data
 
     wallet_balance: saldo dompet digital guide (komisi masuk, belum di-withdraw).
+    bank_settlement_id: ID settlement/rekening yang di-set oleh admin (hanya admin yang bisa mengubah).
     """
     __tablename__ = "guides"
 
@@ -48,6 +49,7 @@ class Guide(Base):
     bank_branch                 = Column(String(255), nullable=True)   # Kantor cabang pembuatan bank
     bank_account_number         = Column(String(50), nullable=True)
     bank_account_name           = Column(String(255), nullable=True)
+    bank_settlement_id          = Column(String(255), nullable=True)   # Settlement ID — hanya admin yang boleh mengubah
 
     created_at                  = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at                  = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
