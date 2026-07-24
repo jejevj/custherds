@@ -37,10 +37,23 @@ export interface GuideBankPayload {
   bank_account_name?: string | null
 }
 
+/** Response dari GET /guides/{guide_id}/settlement-status */
+export interface GuideSettlementStatus {
+  guide_id: string
+  has_bank_settlement_id: boolean
+}
+
 export const guidesService = {
   getProfile:    ()                                  => api.get<GuideProfile>('/guides/me'),
   updateProfile: (payload: Partial<GuideProfile>)    => api.put<GuideProfile>('/guides/me', payload),
   updateBank:    (payload: GuideBankPayload)          => api.put<GuideProfile>('/guides/me/bank', payload),
   submitReview:  (payload: Partial<GuideProfile>)    => api.post<GuideProfile>('/guides/me/submit', payload),
   getWallet:     ()                                  => api.get<GuideWallet>('/guides/me/wallet'),
+
+  /**
+   * Vendor: cek apakah guide sudah memiliki bank_settlement_id sebelum generate QRIS.
+   * Hanya mengembalikan flag boolean — tidak expose data sensitif.
+   */
+  getSettlementStatus: (guideId: string) =>
+    api.get<GuideSettlementStatus>(`/guides/${guideId}/settlement-status`),
 }

@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { bookingsService, Booking } from "@/services/bookings.service"
 import { transactionsService, Transaction, resolveReceiptUrl } from "@/services/transactions.service"
+import { guidesService } from "@/services/guides.service"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -186,6 +187,25 @@ function PhotoGrid({ urls, label }: { urls: string[]; label: string }) {
   )
 }
 
+// ── Settlement Warning Banner ─────────────────────────────────────────────────────────
+function SettlementWarningBanner() {
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/8 px-4 py-3">
+      <AlertCircle size={15} className="text-amber-400 shrink-0 mt-0.5" />
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-amber-300">
+          Rekening settlement guide belum terdaftar
+        </p>
+        <p className="text-xs text-amber-400/80 leading-relaxed">
+          Transaksi QRIS tidak dapat diproses karena guide ini belum memiliki
+          Bank Settlement ID. Silakan hubungi Admin untuk mendaftarkan rekening
+          distribusi guide terlebih dahulu.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Component ───────────────────────────────────────────────────────────────────
 export default function BookingDetailContent() {
   const { id } = useParams<{ id: string }>()
@@ -209,6 +229,13 @@ export default function BookingDetailContent() {
   const [qrisString, setQrisString]       = useState<string | null>(null)
   const [dokuRefNo, setDokuRefNo]         = useState<string | null>(null)
   const [showQrisModal, setShowQrisModal] = useState(false)
+
+  // ── Settlement status guide ──────────────────────────────────────────────
+  // null  = belum di-fetch / tidak diketahui
+  // true  = siap (bank_settlement_id sudah ada)
+  // false = belum siap
+  const [guideSettlementReady, setGuideSettlementReady]     = useState<boolean | null>(null)
+  const [guideSettlementChecking, setGuideSettlementChecking] = useState(false)
 
   const pollTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pollAttemptsRef = useRef(0)
@@ -240,6 +267,20 @@ export default function BookingDetailContent() {
       if (!silent) setLoading(false)
     }
   }, [id])
+
+  // ── Fetch settlement status guide saat booking tersedia ─────────────────
+  const checkGuideSettlement = useCallback(async (guideId: string) => {
+    setGuideSettlementChecking(true)
+    try {
+      const result = await guidesService.getSettlementStatus(guideId)
+      setGuideSettlementReady(result.has_bank_settlement_id)
+    } catch {
+      // Jika gagal fetch, biarkan null — tombol tidak akan di-disable permanen
+      setGuideSettlementReady(null)
+    } finally {
+      setGuideSettlementChecking(false)
+    }
+  }, [])
 
   // ── Polling: hit /payment-status agar backend query DOKU ─────────────────────────
   const startPolling = useCallback((txId: string) => {
@@ -294,6 +335,13 @@ export default function BookingDetailContent() {
   }, [id, stopPolling]) // eslint-disable-line
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  // Jalankan pengecekan settlement saat booking sudah loaded & status pending_completion
+  useEffect(() => {
+    if (booking?.guide_id && booking.status === "pending_completion") {
+      checkGuideSettlement(booking.guide_id)
+    }
+  }, [booking?.guide_id, booking?.status, checkGuideSettlement])
 
   useEffect(() => {
     if (tx?.status === "payment_pending" && tx?.id) {
@@ -399,6 +447,10 @@ export default function BookingDetailContent() {
   const txPendingApproval = tx?.status === "pending_vendor_approval"
   const txPaymentPending  = tx?.status === "payment_pending"
   const txPaymentFailed   = tx?.status === "payment_failed"
+
+  // Tombol QRIS di-disable jika: settlement belum ready (false) atau sedang dicek
+  const qrisBlocked = guideSettlementReady === false
+  const qrisLoading = guideSettlementChecking
 
   const txPhotos: string[] = tx
     ? [
@@ -553,10 +605,24 @@ export default function BookingDetailContent() {
                 <Button variant="destructive" onClick={() => setShowTxReject(true)} disabled={submitting}>
                   <XCircle size={14} className="mr-1" /> Tolak Transaksi
                 </Button>
-                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => setShowPayConfirm(true)} disabled={submitting}>
-                  <CheckCircle2 size={14} className="mr-1" /> Approve Transaksi
+                <Button
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => setShowPayConfirm(true)}
+                  disabled={submitting || qrisBlocked || qrisLoading}
+                  title={qrisBlocked ? "Rekening settlement guide belum terdaftar" : undefined}
+                >
+                  {qrisLoading
+                    ? <><Loader2 size={14} className="mr-1 animate-spin" /> Memeriksa...</>
+                    : <><CheckCircle2 size={14} className="mr-1" /> Approve Transaksi</>}
                 </Button>
               </>
+            )}
+
+            {/* ─ Warning settlement sebelum form konfirmasi QRIS ─ */}
+            {isNeedTxReview && txPendingApproval && !showPayConfirm && !showTxReject && qrisBlocked && (
+              <div className="w-full">
+                <SettlementWarningBanner />
+              </div>
             )}
 
             {/* ─ Konfirmasi bayar via QRIS ─ */}
@@ -574,15 +640,20 @@ export default function BookingDetailContent() {
                     Batal
                   </Button>
                   <Button
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                     onClick={handleTxApproveQris}
-                    disabled={submitting}
+                    disabled={submitting || qrisBlocked}
+                    title={qrisBlocked ? "Rekening settlement guide belum terdaftar" : undefined}
                   >
                     {submitting
                       ? <><Loader2 size={14} className="mr-1 animate-spin" /> Membuat QRIS...</>
                       : <><QrCode size={14} className="mr-1" /> Generate & Bayar QRIS</>}
                   </Button>
                 </div>
+                {/* Warning di dalam panel konfirmasi jika settlement belum ada */}
+                {qrisBlocked && (
+                  <SettlementWarningBanner />
+                )}
               </div>
             )}
 

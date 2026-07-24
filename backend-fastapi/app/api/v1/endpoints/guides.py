@@ -7,6 +7,7 @@ from app.core.deps import require_user_type
 from app.models.user import User
 from app.models.guide import Guide
 from app.schemas.guides import GuideProfile, GuideUpdateRequest, GuideWallet, GuideSubmitRequest
+import uuid
 
 router = APIRouter()
 
@@ -39,7 +40,6 @@ def update_guide_profile(
     guide = db.query(Guide).filter(Guide.user_id == current_user.id).first()
     if not guide:
         raise HTTPException(status_code=404, detail="Profil guide tidak ditemukan")
-    # Hanya boleh update kalau status incomplete atau rejected
     if guide.guide_status not in ("incomplete", "rejected"):
         raise HTTPException(
             status_code=400,
@@ -92,13 +92,12 @@ def submit_guide_for_review(
     if guide.guide_status == "pending":
         raise HTTPException(status_code=400, detail="Sudah dalam proses review")
 
-    # Terapkan semua field dari payload
     for field, value in payload.dict().items():
         setattr(guide, field, value)
 
     guide.guide_status = "pending"
     guide.guide_certificate_status = "pending"
-    guide.rejection_notes = None  # Clear catatan penolakan sebelumnya
+    guide.rejection_notes = None
     db.commit()
     db.refresh(guide)
     return guide
@@ -113,3 +112,36 @@ def get_guide_wallet(
     if not guide:
         raise HTTPException(status_code=404, detail="Profil guide tidak ditemukan")
     return guide
+
+
+# ---------------------------------------------------------------------------
+# Endpoint untuk Vendor: cek apakah guide sudah memiliki bank_settlement_id
+# Tidak mengekspos data sensitif — hanya return boolean flag.
+# ---------------------------------------------------------------------------
+class GuideSettlementStatusResponse(BaseModel):
+    guide_id: str
+    has_bank_settlement_id: bool
+
+
+@router.get(
+    "/{guide_id}/settlement-status",
+    response_model=GuideSettlementStatusResponse,
+    summary="[Vendor] Cek apakah guide sudah memiliki bank settlement ID",
+)
+def get_guide_settlement_status(
+    guide_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(require_user_type(2)),  # vendor only
+) -> Any:
+    """
+    Digunakan vendor sebelum generate QRIS.
+    Hanya mengembalikan { guide_id, has_bank_settlement_id: bool }.
+    Tidak mengekspos nomor rekening atau data sensitif lainnya.
+    """
+    guide = db.query(Guide).filter(Guide.id == guide_id).first()
+    if not guide:
+        raise HTTPException(status_code=404, detail="Guide tidak ditemukan")
+    return {
+        "guide_id": str(guide.id),
+        "has_bank_settlement_id": bool(guide.bank_settlement_id),
+    }
