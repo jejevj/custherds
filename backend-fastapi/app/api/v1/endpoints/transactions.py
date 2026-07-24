@@ -30,7 +30,7 @@ TX_MAX_ATTEMPT = 3
 DOKU_PROVIDERS = {"doku", "doku_sandbox"}
 
 # Developer/owner platform bank account settlement ID (hardcoded — 5% dari platform_fee)
-DEV_BANK_SETTLEMENT_ID = "BNK-0365-1783063541306"
+DEV_BANK_SETTLEMENT_ID = "BNK-0368-1784799585862"
 
 # Platform share: dari platform_fee, 5% untuk developer, sisanya 95% untuk operasional platform
 DEV_SHARE_PERCENT = Decimal("0.05")
@@ -89,35 +89,45 @@ async def _disburse_guide_commission(tx: Transaction, db: Session) -> None:
         logger.error(f"[Disbursement] GAGAL | guide={guide.id} | tx={tx.transaction_code} | error={str(e)}")
 
 
-def _build_settlement_items(
-    tx: Transaction,
-    guide: Optional[Guide],
-) -> Optional[list]:
+def _build_settlement_items(tx: Transaction, guide: Optional[Guide]) -> list:
     """
-    Susun 3 settlement items untuk DOKU QRIS:
+    Susun 3 settlement items untuk DOKU QRIS.
 
     Contoh dengan platform_fee = Rp 25.000 & guide_commission = Rp 50.000:
-      1. Developer (5% dari platform_fee) → Rp 1.250   → BNK-0365-1783063541306
-      2. Sisa platform_fee (95%)          → Rp 23.750   → BNK-0365-1783063541306 (sama, owner platform)
+      1. Developer (5% dari platform_fee) → Rp 1.250   → DEV_BANK_SETTLEMENT_ID
+      2. Sisa platform_fee (95%)          → Rp 23.750   → DEV_BANK_SETTLEMENT_ID
       3. Guide commission                 → Rp 50.000   → guide.bank_settlement_id
 
-    Jika guide tidak punya bank_settlement_id, settlement items tidak disertakan
-    (DOKU akan settle ke akun default merchant).
+    Raises HTTPException 422 jika guide tidak memiliki bank_settlement_id.
+    bank_settlement_id bersifat REQUIRED — harus di-set admin sebelum transaksi QRIS bisa diproses.
     """
-    if not guide or not guide.bank_settlement_id:
-        logger.warning(
-            f"[Settlement] Guide {getattr(guide, 'id', '?')} tidak memiliki bank_settlement_id "
-            "— settlement items tidak disertakan ke DOKU."
+    if not guide:
+        logger.error("[Settlement] Guide tidak ditemukan untuk transaksi ini.")
+        raise HTTPException(
+            422,
+            "Guide tidak ditemukan. Tidak dapat memproses settlement QRIS."
         )
-        return None
 
-    platform_fee    = Decimal(str(tx.platform_fee))
-    guide_comm      = Decimal(str(tx.guide_commission))
+    if not guide.bank_settlement_id:
+        guide_id_str = str(guide.id)
+        logger.error(
+            f"[Settlement] Guide {guide_id_str} belum memiliki bank_settlement_id. "
+            "QRIS tidak dapat di-generate."
+        )
+        raise HTTPException(
+            422,
+            "Status bank guide belum terdaftar untuk settlement. "
+            "Pembayaran QRIS tidak dapat diproses. "
+            "Silakan konfirmasi ke Admin untuk pengecekan status distribusi rekening guide."
+        )
 
-    # 5% dari platform_fee → developer
-    dev_share       = (platform_fee * DEV_SHARE_PERCENT).quantize(Decimal("1"), rounding=ROUND_DOWN)
-    # Sisa 95% → platform operasional (rekening sama dengan developer dalam skenario ini)
-    platform_share  = platform_fee - dev_share
+    platform_fee = Decimal(str(tx.platform_fee))
+    guide_comm   = Decimal(str(tx.guide_commission))
+
+    # 5% dari platform_fee → developer (dibulatkan ke bawah ke satuan rupiah)
+    dev_share      = (platform_fee * DEV_SHARE_PERCENT).quantize(Decimal("1"), rounding=ROUND_DOWN)
+    # Sisa 95% → platform operasional
+    platform_share = platform_fee - dev_share
 
     items = [
         {
@@ -175,7 +185,7 @@ async def _create_doku_qris(tx: Transaction, tagihan: Decimal, db: Session) -> d
     ts       = int(datetime.now(timezone.utc).timestamp())
     order_id = f"CST-{tx.transaction_code}-{ts}"
 
-    # Ambil guide untuk build settlement items
+    # Ambil guide & validasi bank_settlement_id — akan raise 422 jika belum diset
     guide = db.query(Guide).filter(Guide.id == tx.guide_id).first()
     settlement_items = _build_settlement_items(tx, guide)
 
@@ -193,6 +203,8 @@ async def _create_doku_qris(tx: Transaction, tagihan: Decimal, db: Session) -> d
             expired_time=30,
             settlement_items=settlement_items,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"[DOKU QRIS] Gagal buat QRIS untuk TX {tx.transaction_code}: {e}")
         raise HTTPException(502, f"Gagal membuat QRIS DOKU: {str(e)}")
