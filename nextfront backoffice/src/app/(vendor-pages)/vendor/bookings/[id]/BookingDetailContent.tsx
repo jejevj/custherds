@@ -12,7 +12,7 @@ import QRCode from "qrcode.react"
 import {
   ArrowLeft, FileText, CalendarDays, Users, Package, MapPin,
   Upload, CheckCircle, XCircle, CheckCircle2, Receipt, AlertCircle,
-  CreditCard, Banknote, ZoomIn, ChevronLeft, ChevronRight, X, Loader2,
+  ZoomIn, ChevronLeft, ChevronRight, X, Loader2,
   QrCode, RefreshCw,
 } from "lucide-react"
 import { api } from "@/services/api"
@@ -66,7 +66,7 @@ function parseExtraPhotos(notes: string | null | undefined): string[] {
   catch { return [] }
 }
 
-// ── Lightbox ─────────────────────────────────────────────────────────────────
+// ── Lightbox ──────────────────────────────────────────────────────────────────────────
 function Lightbox({ images, initialIndex, onClose }: { images: string[]; initialIndex: number; onClose: () => void }) {
   const [idx, setIdx] = useState(initialIndex)
   const prev = () => setIdx(i => (i - 1 + images.length) % images.length)
@@ -111,7 +111,7 @@ function Lightbox({ images, initialIndex, onClose }: { images: string[]; initial
   )
 }
 
-// ── QR Modal ─────────────────────────────────────────────────────────────────
+// ── QR Modal ──────────────────────────────────────────────────────────────────────────
 function QrisModal({ qrisString, referenceNo, onClose }: { qrisString: string; referenceNo?: string | null; onClose: () => void }) {
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose() }
@@ -155,7 +155,7 @@ function QrisModal({ qrisString, referenceNo, onClose }: { qrisString: string; r
   )
 }
 
-// ── Photo Grid ───────────────────────────────────────────────────────────────
+// ── Photo Grid ───────────────────────────────────────────────────────────────────────
 function PhotoGrid({ urls, label }: { urls: string[]; label: string }) {
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null)
   if (!urls.length) return null
@@ -186,7 +186,7 @@ function PhotoGrid({ urls, label }: { urls: string[]; label: string }) {
   )
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
+// ── Main Component ───────────────────────────────────────────────────────────────────
 export default function BookingDetailContent() {
   const { id } = useParams<{ id: string }>()
   const router  = useRouter()
@@ -204,7 +204,7 @@ export default function BookingDetailContent() {
   const [rejectReason, setRejectReason]     = useState("")
   const [showTxReject, setShowTxReject]     = useState(false)
   const [txRejectReason, setTxRejectReason] = useState("")
-  const [showPayMethod, setShowPayMethod]   = useState(false)
+  const [showPayConfirm, setShowPayConfirm] = useState(false)
 
   const [qrisString, setQrisString]       = useState<string | null>(null)
   const [dokuRefNo, setDokuRefNo]         = useState<string | null>(null)
@@ -241,7 +241,7 @@ export default function BookingDetailContent() {
     }
   }, [id])
 
-  // ── Polling: hit /payment-status agar backend query DOKU ─────────────────
+  // ── Polling: hit /payment-status agar backend query DOKU ─────────────────────────
   const startPolling = useCallback((txId: string) => {
     if (pollTimerRef.current) return
     setPolling(true)
@@ -304,7 +304,7 @@ export default function BookingDetailContent() {
     return () => { stopPolling() }
   }, [tx?.status, tx?.id]) // eslint-disable-line
 
-  // ── Retry QRIS ─────────────────────────────────────────────────────────
+  // ── Retry QRIS ──────────────────────────────────────────────────────────────────
   const handleRetryPayment = async () => {
     if (!tx) return
     setRetrying(true)
@@ -355,11 +355,12 @@ export default function BookingDetailContent() {
     finally { setSubmitting(false) }
   }
 
-  const handleTxApprove = async (method: "deposit" | "pay_as_you_go") => {
+  // ── Approve transaksi — QRIS only ────────────────────────────────────────────
+  const handleTxApproveQris = async () => {
     if (!tx) return
     setSubmitting(true)
     try {
-      const result = await transactionsService.approve(tx.id, method)
+      const result = await transactionsService.approve(tx.id, "pay_as_you_go")
       setTx(result.transaction)
       if (result.qris_string) {
         setQrisString(result.qris_string)
@@ -368,32 +369,10 @@ export default function BookingDetailContent() {
       }
       const updated = await bookingsService.get(booking!.id)
       setBooking(updated)
-      setShowPayMethod(false)
+      setShowPayConfirm(false)
     } catch (err: unknown) {
-      const detail = (err as { detail?: string })?.detail ?? ""
-      if (detail.toLowerCase().includes("saldo deposit tidak cukup")) {
-        const amounts = detail.match(/Rp\s?[\d.]+/g) ?? []
-        toast.error("Saldo Deposit Tidak Cukup", {
-          description: (
-            <div className="mt-1 space-y-1.5 text-sm">
-              <div className="flex justify-between gap-6">
-                <span className="text-muted-foreground">Saldo kamu</span>
-                <span className="font-semibold text-red-400">{amounts[0] ?? "-"}</span>
-              </div>
-              <div className="flex justify-between gap-6">
-                <span className="text-muted-foreground">Tagihan</span>
-                <span className="font-semibold">{amounts[1] ?? "-"}</span>
-              </div>
-              <p className="pt-1 border-t border-white/10 text-xs text-muted-foreground">
-                Top-up deposit terlebih dahulu atau gunakan Pay As You Go.
-              </p>
-            </div>
-          ),
-          duration: 8000,
-        })
-      } else {
-        setActionError(detail || "Gagal approve transaksi.")
-      }
+      const detail = (err as { detail?: string })?.detail ?? "Gagal approve transaksi."
+      setActionError(detail)
     } finally { setSubmitting(false) }
   }
 
@@ -541,6 +520,7 @@ export default function BookingDetailContent() {
           {actionError && <p className="text-xs text-red-500">{actionError}</p>}
 
           <div className="flex flex-wrap gap-3">
+            {/* ─ Approve / Tolak booking ─ */}
             {isPending && !showReject && (
               <>
                 <Button variant="destructive" onClick={() => setShowReject(true)}><XCircle size={14} className="mr-1" /> Tolak</Button>
@@ -559,33 +539,54 @@ export default function BookingDetailContent() {
                 </div>
               </div>
             )}
+
+            {/* ─ Checkin ─ */}
             {isConfirmed && (
               <Button onClick={handleCheckin} disabled={submitting} className="bg-blue-600 hover:bg-blue-700 text-white">
                 <MapPin size={14} className="mr-1" />{submitting ? "Memproses..." : "Checkin Guide"}
               </Button>
             )}
-            {isNeedTxReview && txPendingApproval && !showPayMethod && !showTxReject && (
+
+            {/* ─ Approve transaksi: tombol awal ─ */}
+            {isNeedTxReview && txPendingApproval && !showPayConfirm && !showTxReject && (
               <>
-                <Button variant="destructive" onClick={() => setShowTxReject(true)} disabled={submitting}><XCircle size={14} className="mr-1" /> Tolak Transaksi</Button>
-                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => setShowPayMethod(true)} disabled={submitting}>
+                <Button variant="destructive" onClick={() => setShowTxReject(true)} disabled={submitting}>
+                  <XCircle size={14} className="mr-1" /> Tolak Transaksi
+                </Button>
+                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => setShowPayConfirm(true)} disabled={submitting}>
                   <CheckCircle2 size={14} className="mr-1" /> Approve Transaksi
                 </Button>
               </>
             )}
-            {isNeedTxReview && txPendingApproval && showPayMethod && (
-              <div className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 space-y-3">
-                <p className="text-sm font-medium">Pilih Metode Pembayaran</p>
-                <div className="flex gap-3 flex-wrap">
-                  <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleTxApprove("deposit")} disabled={submitting}>
-                    <Banknote size={14} className="mr-1" /> Potong Deposit
+
+            {/* ─ Konfirmasi bayar via QRIS ─ */}
+            {isNeedTxReview && txPendingApproval && showPayConfirm && (
+              <div className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <QrCode size={16} className="text-emerald-400" />
+                  <p className="text-sm font-medium">Bayar via QRIS</p>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Sistem akan generate QRIS DOKU. Scan QR untuk menyelesaikan pembayaran komisi guide + fee platform.
+                </p>
+                <div className="flex gap-3">
+                  <Button variant="outline" size="sm" onClick={() => setShowPayConfirm(false)} disabled={submitting}>
+                    Batal
                   </Button>
-                  <Button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleTxApprove("pay_as_you_go")} disabled={submitting}>
-                    <CreditCard size={14} className="mr-1" /> Pay As You Go (QRIS)
+                  <Button
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={handleTxApproveQris}
+                    disabled={submitting}
+                  >
+                    {submitting
+                      ? <><Loader2 size={14} className="mr-1 animate-spin" /> Membuat QRIS...</>
+                      : <><QrCode size={14} className="mr-1" /> Generate & Bayar QRIS</>}
                   </Button>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => setShowPayMethod(false)}>Batal</Button>
               </div>
             )}
+
+            {/* ─ Tolak transaksi form ─ */}
             {isNeedTxReview && txPendingApproval && showTxReject && (
               <div className="w-full space-y-2">
                 <Label>Alasan Penolakan Transaksi <span className="text-red-500">*</span></Label>
@@ -596,7 +597,8 @@ export default function BookingDetailContent() {
                 </div>
               </div>
             )}
-            {/* Tombol Bayar Ulang di area aksi (fallback jika banner tidak terlihat) */}
+
+            {/* ─ Bayar Ulang (QRIS failed) ─ */}
             {isNeedTxReview && txPaymentFailed && (
               <Button
                 onClick={handleRetryPayment}
