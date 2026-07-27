@@ -8,9 +8,13 @@ class VendorProfile(BaseModel):
     id: uuid.UUID
     vendor_status: str
     approval_notes: Optional[str] = None
+    rejection_notes: Optional[str] = None
     vendor_business_name: str
     vendor_category: int
-    vendor_area: int
+    vendor_area: Optional[int] = None
+    vendor_area_kabupaten: Optional[int] = None
+    vendor_area_kecamatan: Optional[int] = None
+    vendor_area_kelurahan: Optional[int] = None
     vendor_npwp: Optional[str] = None
     vendor_nib: Optional[str] = None
     vendor_owner_id_card_url: Optional[str] = None
@@ -31,6 +35,11 @@ class VendorProfile(BaseModel):
 
 class VendorUpdateRequest(BaseModel):
     vendor_business_name: Optional[str] = None
+    vendor_category: Optional[int] = None
+    vendor_area: Optional[int] = None
+    vendor_area_kabupaten: Optional[int] = None
+    vendor_area_kecamatan: Optional[int] = None
+    vendor_area_kelurahan: Optional[int] = None
     vendor_location: Optional[str] = None
     vendor_contact_person: Optional[str] = None
     vendor_website: Optional[str] = None

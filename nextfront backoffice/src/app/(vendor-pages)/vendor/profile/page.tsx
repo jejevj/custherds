@@ -300,9 +300,17 @@ export default function VendorProfilePage() {
         gallery_urls:             profile.gallery_urls,
       })
       setProfile(updated)
+      // Sync area state from updated profile
+      setSelKab(updated.vendor_area_kabupaten ?? null)
+      setSelKec(updated.vendor_area_kecamatan ?? null)
+      setSelKel(updated.vendor_area_kelurahan ?? null)
       setSuccess(true)
-    } catch { setError("Gagal menyimpan profil.") }
-    finally { setSaving(false) }
+    } catch (err) {
+      console.error("[VendorProfile] gagal menyimpan:", err)
+      setError("Gagal menyimpan profil. Silahkan coba lagi.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -312,8 +320,13 @@ export default function VendorProfilePage() {
     try {
       const urls = await uploadPhotos(files)
       setProfile(p => p ? { ...p, gallery_urls: [...(p.gallery_urls ?? []), ...urls] } : p)
-    } catch { setError("Gagal upload foto.") }
-    finally { setUploading(false); if (fileRef.current) fileRef.current.value = "" }
+    } catch (err) {
+      console.error("[VendorProfile] gagal upload foto:", err)
+      setError("Gagal upload foto.")
+    } finally {
+      setUploading(false)
+      if (fileRef.current) fileRef.current.value = ""
+    }
   }
 
   const removeGalleryPhoto = (idx: number) =>
