@@ -72,7 +72,7 @@ function SimpleSelect<T extends { id: number; name: string }>({
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1.5 w-full rounded-xl border border-white/10 bg-popover shadow-xl text-sm overflow-hidden">
+        <div className="absolute top-full left-0 z-[200] mt-1.5 w-full min-w-[200px] rounded-xl border border-white/10 bg-popover shadow-xl text-sm overflow-hidden">
           <ul className="max-h-60 overflow-y-auto py-1">
             <li>
               <button
@@ -173,7 +173,7 @@ function CategorySelect({
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1.5 w-full rounded-xl border border-white/10 bg-popover shadow-xl text-sm overflow-hidden">
+        <div className="absolute top-full left-0 z-[200] mt-1.5 w-full rounded-xl border border-white/10 bg-popover shadow-xl text-sm overflow-hidden">
           <ul className="max-h-64 overflow-y-auto py-1">
             {Array.from(grouped.entries()).map(([groupName, items]) => (
               <li key={groupName}>
@@ -228,7 +228,6 @@ export default function VendorProfilePage() {
   const [kecamatans,  setKecamatans]  = useState<VendorAreaKecamatan[]>([])
   const [kelurahans,  setKelurahans]  = useState<VendorAreaKelurahan[]>([])
 
-  // selected IDs (local state, sync'd to profile on save)
   const [selKab, setSelKab] = useState<number | null>(null)
   const [selKec, setSelKec] = useState<number | null>(null)
   const [selKel, setSelKel] = useState<number | null>(null)
@@ -249,7 +248,6 @@ export default function VendorProfilePage() {
         setKabupatens(kabs.filter((k) => k.is_active))
         setKecamatans(kecs.filter((k) => k.is_active))
         setKelurahans(kels.filter((k) => k.is_active))
-        // Init area selection from profile
         setSelKab(p.vendor_area_kabupaten ?? null)
         setSelKec(p.vendor_area_kecamatan ?? null)
         setSelKel(p.vendor_area_kelurahan ?? null)
@@ -257,7 +255,6 @@ export default function VendorProfilePage() {
       .finally(() => setLoading(false))
   }, [])
 
-  // ── Filtered lists based on parent selection ──
   const filteredKec = useMemo((): VendorAreaKecamatan[] => {
     if (!selKab) return []
     return kecamatans.filter((k) => k.kabupaten_id === selKab)
@@ -268,14 +265,12 @@ export default function VendorProfilePage() {
     return kelurahans.filter((k) => k.kecamatan_id === selKec)
   }, [kelurahans, selKec])
 
-  // When kabupaten changes, reset downstream
   const handleKabChange = (id: number | null) => {
     setSelKab(id)
     setSelKec(null)
     setSelKel(null)
   }
 
-  // When kecamatan changes, reset kelurahan
   const handleKecChange = (id: number | null) => {
     setSelKec(id)
     setSelKel(null)
@@ -288,6 +283,9 @@ export default function VendorProfilePage() {
       const updated = await vendorsService.updateProfile({
         vendor_business_name:     profile.vendor_business_name,
         vendor_category:          profile.vendor_category,
+        // vendor_area = id kelurahan (level paling spesifik)
+        // fallback ke kecamatan atau kabupaten jika belum dipilih sampai kelurahan
+        vendor_area:              selKel ?? selKec ?? selKab ?? null,
         vendor_area_kabupaten:    selKab,
         vendor_area_kecamatan:    selKec,
         vendor_area_kelurahan:    selKel,
@@ -300,7 +298,6 @@ export default function VendorProfilePage() {
         gallery_urls:             profile.gallery_urls,
       })
       setProfile(updated)
-      // Sync area state from updated profile
       setSelKab(updated.vendor_area_kabupaten ?? null)
       setSelKec(updated.vendor_area_kecamatan ?? null)
       setSelKel(updated.vendor_area_kelurahan ?? null)
@@ -359,7 +356,6 @@ export default function VendorProfilePage() {
       {error   && <p className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-4 py-2.5">{error}</p>}
       {success && <p className="text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-2.5">✓ Profil berhasil disimpan.</p>}
 
-      {/* Grid 12 */}
       <div className="grid grid-cols-12 gap-6">
 
         {/* KIRI col-8 */}
@@ -371,7 +367,6 @@ export default function VendorProfilePage() {
               <Store size={13} /> Info Dasar
             </div>
 
-            {/* Nama Toko */}
             <div className="grid gap-1.5">
               <Label className="text-xs text-muted-foreground">Nama Toko</Label>
               <Input
@@ -382,7 +377,6 @@ export default function VendorProfilePage() {
               />
             </div>
 
-            {/* Kategori */}
             <div className="grid gap-1.5">
               <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
                 <Tag size={11} /> Kategori Toko
@@ -397,7 +391,6 @@ export default function VendorProfilePage() {
               </p>
             </div>
 
-            {/* Deskripsi */}
             <div className="grid gap-1.5">
               <Label className="text-xs text-muted-foreground">Deskripsi Singkat</Label>
               <textarea
@@ -409,7 +402,6 @@ export default function VendorProfilePage() {
               />
             </div>
 
-            {/* Contact + Website */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="grid gap-1.5">
                 <Label className="text-xs text-muted-foreground">Contact Person</Label>
@@ -431,7 +423,6 @@ export default function VendorProfilePage() {
               </div>
             </div>
 
-            {/* Jam + Lokasi */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="grid gap-1.5">
                 <Label className="text-xs text-muted-foreground">Jam Operasional</Label>
@@ -454,8 +445,16 @@ export default function VendorProfilePage() {
             </div>
           </section>
 
-          {/* Card Area Vendor */}
-          <section className={`${glass} p-6 space-y-4`}>
+          {/*
+            Card Area Layanan
+            FIX z-index: style overflow:visible agar dropdown tidak ter-clip
+            oleh batas card. Setiap kolom punya z-index bertingkat (30/20/10)
+            sehingga dropdown Kabupaten selalu tampil di atas kolom lainnya.
+          */}
+          <section
+            className={`${glass} p-6 space-y-4`}
+            style={{ overflow: "visible" }}
+          >
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground/70">
               <MapPin size={13} /> Area Layanan
             </div>
@@ -464,8 +463,8 @@ export default function VendorProfilePage() {
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {/* Kabupaten */}
-              <div className="grid gap-1.5">
+              {/* Kabupaten — z-index 30 (tertinggi) */}
+              <div className="grid gap-1.5" style={{ position: "relative", zIndex: 30 }}>
                 <Label className="text-xs text-muted-foreground">Kabupaten / Kota</Label>
                 <SimpleSelect
                   items={kabupatens}
@@ -475,8 +474,8 @@ export default function VendorProfilePage() {
                 />
               </div>
 
-              {/* Kecamatan */}
-              <div className="grid gap-1.5">
+              {/* Kecamatan — z-index 20 */}
+              <div className="grid gap-1.5" style={{ position: "relative", zIndex: 20 }}>
                 <Label className="text-xs text-muted-foreground">Kecamatan</Label>
                 <SimpleSelect
                   items={filteredKec}
@@ -487,8 +486,8 @@ export default function VendorProfilePage() {
                 />
               </div>
 
-              {/* Kelurahan */}
-              <div className="grid gap-1.5">
+              {/* Kelurahan — z-index 10 */}
+              <div className="grid gap-1.5" style={{ position: "relative", zIndex: 10 }}>
                 <Label className="text-xs text-muted-foreground">Kelurahan / Desa</Label>
                 <SimpleSelect
                   items={filteredKel}
@@ -500,7 +499,7 @@ export default function VendorProfilePage() {
               </div>
             </div>
 
-            {/* Selected area summary badge */}
+            {/* Summary badge area terpilih */}
             {selKab && (
               <div className="flex items-center gap-2 flex-wrap pt-1">
                 <MapPin size={12} className="text-primary/60 shrink-0" />
@@ -509,6 +508,11 @@ export default function VendorProfilePage() {
                   {selKec && ` › ${kecamatans.find(k => k.id === selKec)?.name ?? ""}`}
                   {selKel && ` › ${kelurahans.find(k => k.id === selKel)?.name ?? ""}`}
                 </span>
+                {selKel && (
+                  <span className="text-[10px] bg-primary/15 text-primary px-2 py-0.5 rounded-full">
+                    area tersimpan
+                  </span>
+                )}
               </div>
             )}
           </section>
@@ -567,7 +571,6 @@ export default function VendorProfilePage() {
               Foto suasana &amp; fasilitas. Ditampilkan ke guide saat browse vendor.
             </p>
 
-            {/* Preview grid */}
             {(profile?.gallery_urls?.length ?? 0) > 0 && (
               <div className="grid grid-cols-3 gap-1.5">
                 {profile!.gallery_urls.map((url, i) => (
@@ -591,7 +594,6 @@ export default function VendorProfilePage() {
               </div>
             )}
 
-            {/* Upload zone */}
             <input
               ref={fileRef}
               type="file"
