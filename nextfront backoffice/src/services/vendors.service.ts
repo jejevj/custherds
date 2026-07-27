@@ -10,7 +10,10 @@ export interface VendorProfile {
   rejection_notes: string | null
   vendor_business_name: string
   vendor_category: number
-  vendor_area: number
+  vendor_area: number | null
+  vendor_area_kabupaten: number | null
+  vendor_area_kecamatan: number | null
+  vendor_area_kelurahan: number | null
   vendor_npwp: string | null
   vendor_nib: string | null
   vendor_owner_id_card_url: string | null
@@ -29,6 +32,10 @@ export interface VendorProfile {
 export interface VendorUpdatePayload {
   vendor_business_name?: string | null
   vendor_category?: number | null
+  vendor_area?: number | null
+  vendor_area_kabupaten?: number | null
+  vendor_area_kecamatan?: number | null
+  vendor_area_kelurahan?: number | null
   vendor_location?: string | null
   vendor_contact_person?: string | null
   vendor_website?: string | null

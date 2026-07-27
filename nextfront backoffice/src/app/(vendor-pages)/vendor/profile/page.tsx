@@ -3,6 +3,12 @@ import { useEffect, useRef, useState, useMemo } from "react"
 import Image from "next/image"
 import { vendorsService, VendorProfile, resolveCoverPhoto } from "@/services/vendors.service"
 import { vendorCategoriesService, VendorCategory } from "@/services/vendorCategories.service"
+import {
+  vendorAreasService,
+  VendorAreaKabupaten,
+  VendorAreaKecamatan,
+  VendorAreaKelurahan,
+} from "@/services/vendorAreas.service"
 import { uploadPhotos } from "@/services/uploads.service"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,14 +16,101 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import {
   ImagePlus, X, Loader2, Store, Images, Settings2,
-  Tag, ChevronDown, Check,
+  Tag, ChevronDown, Check, MapPin,
 } from "lucide-react"
 
 const glass    = "rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md"
 const inputCls = "w-full border border-white/10 rounded-xl px-3 py-2 text-sm bg-white/5 backdrop-blur-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-colors"
 
+// ─── Generic Select Dropdown ───────────────────────────────────────────────
+function SimpleSelect<T extends { id: number; name: string }>({
+  items,
+  value,
+  onChange,
+  placeholder,
+  disabled = false,
+}: {
+  items: T[]
+  value: number | null
+  onChange: (id: number | null) => void
+  placeholder: string
+  disabled?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const selected = items.find((i) => i.id === value)
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", h)
+    return () => document.removeEventListener("mousedown", h)
+  }, [])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => !disabled && setOpen((p) => !p)}
+        className={[
+          "w-full flex items-center justify-between gap-2",
+          "border border-white/10 rounded-xl px-3 py-2 text-sm",
+          "bg-white/5 backdrop-blur-sm transition-colors",
+          disabled
+            ? "opacity-40 cursor-not-allowed"
+            : "hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/40",
+          !selected ? "text-muted-foreground/50" : "",
+        ].join(" ")}
+      >
+        <span className="truncate">{selected ? selected.name : placeholder}</span>
+        <ChevronDown className={[
+          "h-4 w-4 shrink-0 text-muted-foreground/60 transition-transform duration-200",
+          open ? "rotate-180" : "",
+        ].join(" ")} />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-1.5 w-full rounded-xl border border-white/10 bg-popover shadow-xl text-sm overflow-hidden">
+          <ul className="max-h-60 overflow-y-auto py-1">
+            <li>
+              <button
+                type="button"
+                onClick={() => { onChange(null); setOpen(false) }}
+                className="w-full flex items-center gap-2 px-4 py-2 text-left hover:bg-white/5 text-muted-foreground/60 text-xs italic"
+              >
+                — Tidak dipilih
+              </button>
+            </li>
+            {items.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => { onChange(item.id); setOpen(false) }}
+                className={[
+                  "w-full flex items-center gap-2 px-4 py-2 text-left transition-colors hover:bg-white/5",
+                  item.id === value ? "text-primary" : "",
+                ].join(" ")}
+              >
+                <Check className={[
+                  "h-3.5 w-3.5 shrink-0",
+                  item.id === value ? "opacity-100" : "opacity-0",
+                ].join(" ")} />
+                {item.name}
+              </button>
+            ))}
+            {items.length === 0 && (
+              <li className="px-4 py-6 text-center text-xs text-muted-foreground/50">Tidak ada data.</li>
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── CategorySelect ────────────────────────────────────────────────────────
-// Grouped dropdown untuk pilih kategori vendor (hanya yang is_active=true)
 function CategorySelect({
   categories,
   value,
@@ -30,9 +123,8 @@ function CategorySelect({
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
-  // Grup berdasarkan group_name
-  const grouped = useMemo(() => {
-    const map = new Map<string, VendorCategory[]>()
+  const grouped = useMemo((): Map<string, VendorCategory[]> => {
+    const map: Map<string, VendorCategory[]> = new Map<string, VendorCategory[]>()
     categories.forEach((c) => {
       if (!map.has(c.group_name)) map.set(c.group_name, [])
       map.get(c.group_name)!.push(c)
@@ -42,7 +134,6 @@ function CategorySelect({
 
   const selected = categories.find((c) => c.id === value)
 
-  // Close on outside click
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
@@ -53,7 +144,6 @@ function CategorySelect({
 
   return (
     <div ref={ref} className="relative">
-      {/* Trigger */}
       <button
         type="button"
         onClick={() => setOpen((p) => !p)}
@@ -82,17 +172,14 @@ function CategorySelect({
         ].join(" ")} />
       </button>
 
-      {/* Dropdown */}
       {open && (
         <div className="absolute z-50 mt-1.5 w-full rounded-xl border border-white/10 bg-popover shadow-xl text-sm overflow-hidden">
           <ul className="max-h-64 overflow-y-auto py-1">
             {Array.from(grouped.entries()).map(([groupName, items]) => (
               <li key={groupName}>
-                {/* Group header */}
                 <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
                   {groupName}
                 </div>
-                {/* Items */}
                 {items.map((cat) => (
                   <button
                     key={cat.id}
@@ -113,7 +200,6 @@ function CategorySelect({
                 ))}
               </li>
             ))}
-
             {categories.length === 0 && (
               <li className="px-4 py-6 text-center text-xs text-muted-foreground/50">
                 Tidak ada kategori tersedia.
@@ -137,20 +223,63 @@ export default function VendorProfilePage() {
   const [uploading,   setUploading]   = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // ── Vendor Areas state ──
+  const [kabupatens,  setKabupatens]  = useState<VendorAreaKabupaten[]>([])
+  const [kecamatans,  setKecamatans]  = useState<VendorAreaKecamatan[]>([])
+  const [kelurahans,  setKelurahans]  = useState<VendorAreaKelurahan[]>([])
+
+  // selected IDs (local state, sync'd to profile on save)
+  const [selKab, setSelKab] = useState<number | null>(null)
+  const [selKec, setSelKec] = useState<number | null>(null)
+  const [selKel, setSelKel] = useState<number | null>(null)
+
   useEffect(() => {
     Promise.all([
       vendorsService.getProfile(),
       vendorCategoriesService.list({ is_active: true }),
+      vendorAreasService.listKabupaten(),
+      vendorAreasService.listKecamatan(),
+      vendorAreasService.listKelurahan(),
     ])
-      .then(([p, cats]) => {
+      .then(([p, cats, kabs, kecs, kels]) => {
         setProfile(p)
-        // sort by group then sort_order
         setCategories([...cats].sort((a, b) =>
           a.group_name.localeCompare(b.group_name) || a.sort_order - b.sort_order,
         ))
+        setKabupatens(kabs.filter((k) => k.is_active))
+        setKecamatans(kecs.filter((k) => k.is_active))
+        setKelurahans(kels.filter((k) => k.is_active))
+        // Init area selection from profile
+        setSelKab(p.vendor_area_kabupaten ?? null)
+        setSelKec(p.vendor_area_kecamatan ?? null)
+        setSelKel(p.vendor_area_kelurahan ?? null)
       })
       .finally(() => setLoading(false))
   }, [])
+
+  // ── Filtered lists based on parent selection ──
+  const filteredKec = useMemo((): VendorAreaKecamatan[] => {
+    if (!selKab) return []
+    return kecamatans.filter((k) => k.kabupaten_id === selKab)
+  }, [kecamatans, selKab])
+
+  const filteredKel = useMemo((): VendorAreaKelurahan[] => {
+    if (!selKec) return []
+    return kelurahans.filter((k) => k.kecamatan_id === selKec)
+  }, [kelurahans, selKec])
+
+  // When kabupaten changes, reset downstream
+  const handleKabChange = (id: number | null) => {
+    setSelKab(id)
+    setSelKec(null)
+    setSelKel(null)
+  }
+
+  // When kecamatan changes, reset kelurahan
+  const handleKecChange = (id: number | null) => {
+    setSelKec(id)
+    setSelKel(null)
+  }
 
   const handleSave = async () => {
     if (!profile) return
@@ -159,6 +288,9 @@ export default function VendorProfilePage() {
       const updated = await vendorsService.updateProfile({
         vendor_business_name:     profile.vendor_business_name,
         vendor_category:          profile.vendor_category,
+        vendor_area_kabupaten:    selKab,
+        vendor_area_kecamatan:    selKec,
+        vendor_area_kelurahan:    selKel,
         vendor_short_description: profile.vendor_short_description,
         vendor_contact_person:    profile.vendor_contact_person,
         vendor_location:          profile.vendor_location,
@@ -307,6 +439,65 @@ export default function VendorProfilePage() {
                 />
               </div>
             </div>
+          </section>
+
+          {/* Card Area Vendor */}
+          <section className={`${glass} p-6 space-y-4`}>
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground/70">
+              <MapPin size={13} /> Area Layanan
+            </div>
+            <p className="text-xs text-muted-foreground/60 -mt-2">
+              Pilih area operasional toko kamu. Digunakan guide untuk mencari vendor berdasarkan lokasi.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Kabupaten */}
+              <div className="grid gap-1.5">
+                <Label className="text-xs text-muted-foreground">Kabupaten / Kota</Label>
+                <SimpleSelect
+                  items={kabupatens}
+                  value={selKab}
+                  onChange={handleKabChange}
+                  placeholder="Pilih kabupaten…"
+                />
+              </div>
+
+              {/* Kecamatan */}
+              <div className="grid gap-1.5">
+                <Label className="text-xs text-muted-foreground">Kecamatan</Label>
+                <SimpleSelect
+                  items={filteredKec}
+                  value={selKec}
+                  onChange={handleKecChange}
+                  placeholder={selKab ? "Pilih kecamatan…" : "Pilih kabupaten dulu"}
+                  disabled={!selKab}
+                />
+              </div>
+
+              {/* Kelurahan */}
+              <div className="grid gap-1.5">
+                <Label className="text-xs text-muted-foreground">Kelurahan / Desa</Label>
+                <SimpleSelect
+                  items={filteredKel}
+                  value={selKel}
+                  onChange={(id) => setSelKel(id)}
+                  placeholder={selKec ? "Pilih kelurahan…" : "Pilih kecamatan dulu"}
+                  disabled={!selKec}
+                />
+              </div>
+            </div>
+
+            {/* Selected area summary badge */}
+            {selKab && (
+              <div className="flex items-center gap-2 flex-wrap pt-1">
+                <MapPin size={12} className="text-primary/60 shrink-0" />
+                <span className="text-xs text-muted-foreground">
+                  {kabupatens.find(k => k.id === selKab)?.name ?? ""}
+                  {selKec && ` › ${kecamatans.find(k => k.id === selKec)?.name ?? ""}`}
+                  {selKel && ` › ${kelurahans.find(k => k.id === selKel)?.name ?? ""}`}
+                </span>
+              </div>
+            )}
           </section>
 
           {/* Card Pengaturan Booking */}
