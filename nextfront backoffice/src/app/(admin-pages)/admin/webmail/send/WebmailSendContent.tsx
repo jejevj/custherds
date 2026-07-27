@@ -176,13 +176,13 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
       <ToolbarBtn title="Divider" onClick={() => editor.chain().focus().setHorizontalRule().run()}><Minus size={14} /></ToolbarBtn>
       <span className="w-px h-4 bg-white/15 mx-1" />
 
-      {/* Alignment */}
+      {/* Alignment — method yang benar: setTextAlign (bukan setTextAlignment) */}
       <ToolbarBtn title="Rata Kiri" active={editor.isActive({ textAlign: 'left' })}
-        onClick={() => editor.chain().focus().setTextAlignment('left').run()}><AlignLeft size={14} /></ToolbarBtn>
+        onClick={() => editor.chain().focus().setTextAlign('left').run()}><AlignLeft size={14} /></ToolbarBtn>
       <ToolbarBtn title="Rata Tengah" active={editor.isActive({ textAlign: 'center' })}
-        onClick={() => editor.chain().focus().setTextAlignment('center').run()}><AlignCenter size={14} /></ToolbarBtn>
+        onClick={() => editor.chain().focus().setTextAlign('center').run()}><AlignCenter size={14} /></ToolbarBtn>
       <ToolbarBtn title="Rata Kanan" active={editor.isActive({ textAlign: 'right' })}
-        onClick={() => editor.chain().focus().setTextAlignment('right').run()}><AlignRight size={14} /></ToolbarBtn>
+        onClick={() => editor.chain().focus().setTextAlign('right').run()}><AlignRight size={14} /></ToolbarBtn>
     </div>
   )
 }
@@ -218,7 +218,6 @@ export default function WebmailSendContent() {
         class: [
           'min-h-[320px] px-4 py-3 text-sm text-foreground',
           'focus:outline-none',
-          // Prose styles (dark-mode safe)
           '[&_h2]:text-lg [&_h2]:font-bold [&_h2]:my-2',
           '[&_p]:my-1 [&_p]:leading-relaxed',
           '[&_strong]:font-bold [&_em]:italic [&_u]:underline',
@@ -317,21 +316,16 @@ export default function WebmailSendContent() {
   }
 
   return (
-    // full-width: hilangkan max-w-3xl, pakai w-full
     <div className="w-full space-y-5">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Kirim Email</h1>
         <p className="text-muted-foreground text-sm">Compose dan kirim email ke grup atau penerima tertentu.</p>
       </div>
 
-      {/* 2-column layout di layar besar: kiri = form header, kanan = editor */}
       <div className="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-5 items-start">
 
-        {/* ── Kolom kiri: config + penerima + subject ── */}
+        {/* Kolom kiri */}
         <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-5 space-y-4">
-
-          {/* Config */}
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">Kirim dari</label>
             <div className="relative">
@@ -351,7 +345,6 @@ export default function WebmailSendContent() {
             </div>
           </div>
 
-          {/* Grup */}
           <div className="space-y-2">
             <label className="text-xs text-muted-foreground">Grup Penerima</label>
             <div className="grid grid-cols-2 gap-2">
@@ -370,7 +363,6 @@ export default function WebmailSendContent() {
             </div>
           </div>
 
-          {/* Penerima */}
           {group !== 'custom' ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -410,7 +402,6 @@ export default function WebmailSendContent() {
             </div>
           )}
 
-          {/* Ringkasan penerima */}
           {group !== 'custom' && resolvedTo.length > 0 && (
             <div className="rounded-lg border border-white/10 bg-background/40 px-3 py-2 text-xs text-muted-foreground">
               <ChevronRight size={11} className="inline mr-1 text-primary" />
@@ -419,13 +410,11 @@ export default function WebmailSendContent() {
             </div>
           )}
 
-          {/* Subject */}
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">Subjek</label>
             <Input value={subject} onChange={e => setSubject(e.target.value)} placeholder="Subjek email…" />
           </div>
 
-          {/* Actions */}
           <div className="flex items-center justify-between pt-1">
             <button type="button" onClick={handleClear} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
               <X size={12} /> Bersihkan
@@ -437,28 +426,21 @@ export default function WebmailSendContent() {
           </div>
         </div>
 
-        {/* ── Kolom kanan: WYSIWYG Editor ── */}
+        {/* Kolom kanan: Editor */}
         <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
             <span className="text-sm font-medium">Isi Email</span>
             <span className="text-xs text-muted-foreground">HTML • WYSIWYG Editor</span>
           </div>
-
-          {/* Toolbar */}
           <EditorToolbar editor={editor} />
-
-          {/* Editor area */}
           <div className="flex-1 overflow-y-auto">
             <EditorContent
               editor={editor}
               className="h-full [&_.ProseMirror]:min-h-[400px] [&_.ProseMirror-placeholder]:text-muted-foreground [&_.ProseMirror-placeholder]:pointer-events-none"
             />
           </div>
-
-          {/* Footer hint */}
-          <div className="px-4 py-2 border-t border-white/10 text-[11px] text-muted-foreground flex items-center justify-between">
-            <span>Output dikirim sebagai HTML ke backend • juga otomatis di-strip sebagai plain-text fallback</span>
-            <span>{editor?.storage?.characterCount?.characters?.() ?? ''}</span>
+          <div className="px-4 py-2 border-t border-white/10 text-[11px] text-muted-foreground">
+            Output dikirim sebagai HTML ke backend • plain-text fallback otomatis di-strip
           </div>
         </div>
       </div>
