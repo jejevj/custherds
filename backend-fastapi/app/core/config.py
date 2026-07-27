@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     XENDIT_SECRET_KEY: str = "xnd_development_xxxxxxxxxxxxxxxxxxxxxxxx"
     XENDIT_WEBHOOK_TOKEN: str = ""
 
+    # ── CORS ─────────────────────────────────────────────────────────────────────
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://localhost:3001",
@@ -31,10 +32,17 @@ class Settings(BaseSettings):
         "https://partners.custherds.com",
         "https://custherds.com",
         "https://www.custherds.com",
+        # API domain sendiri (untuk Swagger UI / internal calls)
+        "https://api.custherds.com",
         # Legacy / staging
         "https://partners-custherds.ourtestcloud.my.id",
         "https://custherds.ourtestcloud.my.id",
     ]
+
+    # ── Proxy / HTTPS ───────────────────────────────────────────────────────────
+    # Set BEHIND_PROXY=true di .env jika uvicorn berjalan di belakang Nginx/Apache.
+    # ProxyHeadersMiddleware akan aktif dan membaca X-Forwarded-Proto.
+    BEHIND_PROXY: bool = True
 
     class Config:
         env_file = ".env"

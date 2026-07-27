@@ -4,24 +4,26 @@ import secrets
 
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.api.v1.router import api_router
 from app.middleware.logging import RequestLoggingMiddleware
 
-# ── Logging setup ────────────────────────────────────────────────────────────
+# ── Logging setup ───────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
-# ─────────────────────────────────────────────────────────────────────────────
-
+# ────────────────────────────────────────────────────────────────────────────
 START_TIME = time.time()
 
 app = FastAPI(
@@ -33,7 +35,14 @@ app = FastAPI(
     openapi_url=None,
 )
 
-# Middleware
+# ── Middleware (urutan penting: outer → inner) ─────────────────────────────────────
+
+# 1. ProxyHeaders — baca X-Forwarded-Proto dari reverse proxy (Nginx/Apache)
+#    Wajib agar FastAPI tahu request datang via HTTPS meskipun uvicorn terima HTTP.
+#    trusted_hosts="*" aman karena traffic sudah difilter Nginx sebelum masuk.
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+
+# 2. CORS — harus setelah ProxyHeaders
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
@@ -41,12 +50,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 3. Request logging
 app.add_middleware(RequestLoggingMiddleware)
 
-# Global exception handlers
+# ── Exception handlers ──────────────────────────────────────────────────────────────
 register_exception_handlers(app)
 
-# Routers
+# ── Routers ──────────────────────────────────────────────────────────────────────
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 security = HTTPBasic()
