@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { adminService, AdminVendor } from "@/services/admin.service"
+import { vendorCategoriesService, VendorCategory } from "@/services/vendorCategories.service"
 import { Button } from "@/components/ui/button"
 import { UserCheck, UserX, Eye, X, FileText } from "lucide-react"
 import { uploadsService } from "@/services/uploads.service"
@@ -35,14 +36,51 @@ async function fetchProtectedFile(relUrl: string): Promise<string | null> {
   }
 }
 
-function VendorDetailModal({ vendor, onClose }: { vendor: AdminVendor; onClose: () => void }) {
-  const [idCardSrc,   setIdCardSrc]   = useState<string | null>(null)
-  const [loadingId,   setLoadingId]   = useState(false)
+// Render nama kategori — jika id tidak ditemukan tampilkan badge "ID tidak valid"
+function CategoryLabel({
+  categoryId,
+  categoryMap,
+}: {
+  categoryId: number | null | undefined
+  categoryMap: Map<number, VendorCategory>
+}) {
+  if (categoryId == null) return <span className="text-muted-foreground">—</span>
+  const cat = categoryMap.get(categoryId)
+  if (!cat) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-600">
+        ID tidak valid
+        <span className="opacity-60">#{categoryId}</span>
+      </span>
+    )
+  }
+  return (
+    <span className="text-sm">
+      {cat.name}
+      <span className="ml-1 text-xs text-muted-foreground">· {cat.group_name}</span>
+    </span>
+  )
+}
+
+function VendorDetailModal({
+  vendor,
+  categoryMap,
+  onClose,
+}: {
+  vendor: AdminVendor
+  categoryMap: Map<number, VendorCategory>
+  onClose: () => void
+}) {
+  const [idCardSrc, setIdCardSrc] = useState<string | null>(null)
+  const [loadingId, setLoadingId] = useState(false)
 
   useEffect(() => {
     if (vendor.vendor_owner_id_card_url) {
       setLoadingId(true)
-      fetchProtectedFile(vendor.vendor_owner_id_card_url).then(src => { setIdCardSrc(src); setLoadingId(false) })
+      fetchProtectedFile(vendor.vendor_owner_id_card_url).then(src => {
+        setIdCardSrc(src)
+        setLoadingId(false)
+      })
     }
     return () => { if (idCardSrc) URL.revokeObjectURL(idCardSrc) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -50,6 +88,14 @@ function VendorDetailModal({ vendor, onClose }: { vendor: AdminVendor; onClose: 
 
   const isImage = (url: string) => /\.(jpg|jpeg|png|webp)$/i.test(url)
   const isPdf   = (url: string) => /\.pdf$/i.test(url)
+
+  // Resolve category display string for the info grid
+  const categoryDisplay = (() => {
+    if (vendor.vendor_category == null) return null
+    const cat = categoryMap.get(vendor.vendor_category)
+    if (!cat) return `ID tidak valid (#${vendor.vendor_category})`
+    return `${cat.name} · ${cat.group_name}`
+  })()
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto">
@@ -86,21 +132,23 @@ function VendorDetailModal({ vendor, onClose }: { vendor: AdminVendor; onClose: 
           {/* Info grid */}
           <div className="grid grid-cols-2 gap-3 text-sm">
             {([
-              ["Nama Toko",         vendor.vendor_business_name],
-              ["Contact Person",    vendor.vendor_contact_person ?? vendor.user_name],
-              ["Telepon",           vendor.user_phone],
-              ["Kategori",          vendor.vendor_category != null ? String(vendor.vendor_category) : null],
-              ["Area",              vendor.vendor_area != null ? String(vendor.vendor_area) : null],
-              ["Jam Operasional",   vendor.vendor_opening_hours],
-              ["NPWP",              vendor.vendor_npwp],
-              ["NIB",               vendor.vendor_nib],
-              ["Min. Spend",        vendor.vendor_min_spend ? `Rp ${Number(vendor.vendor_min_spend).toLocaleString('id-ID')}` : null],
-              ["Cashback",          vendor.vendor_cashback_percent != null ? `${vendor.vendor_cashback_percent}%` : null],
-              ["Terdaftar",         new Date(vendor.created_at).toLocaleDateString('id-ID', { day:'2-digit', month:'long', year:'numeric' })],
+              ["Nama Toko",       vendor.vendor_business_name],
+              ["Contact Person",  vendor.vendor_contact_person ?? vendor.user_name],
+              ["Telepon",         vendor.user_phone],
+              ["Kategori",        categoryDisplay],
+              ["Area",            vendor.vendor_area != null ? String(vendor.vendor_area) : null],
+              ["Jam Operasional", vendor.vendor_opening_hours],
+              ["NPWP",            vendor.vendor_npwp],
+              ["NIB",             vendor.vendor_nib],
+              ["Min. Spend",      vendor.vendor_min_spend ? `Rp ${Number(vendor.vendor_min_spend).toLocaleString('id-ID')}` : null],
+              ["Cashback",        vendor.vendor_cashback_percent != null ? `${vendor.vendor_cashback_percent}%` : null],
+              ["Terdaftar",       new Date(vendor.created_at).toLocaleDateString('id-ID', { day:'2-digit', month:'long', year:'numeric' })],
             ] as [string, string | null | undefined][]).map(([k, v]) => (
               <div key={k}>
                 <p className="text-xs text-muted-foreground">{k}</p>
-                <p className="font-medium">{v ?? '\u2014'}</p>
+                <p className={`font-medium ${k === 'Kategori' && v?.startsWith('ID tidak valid') ? 'text-red-500 text-xs' : ''}`}>
+                  {v ?? '—'}
+                </p>
               </div>
             ))}
           </div>
@@ -167,13 +215,23 @@ export default function AdminVendorsContent() {
   const router       = useRouter()
   const statusFilter = searchParams.get("status") ?? undefined
 
-  const [vendors,    setVendors]    = useState<AdminVendor[]>([])
-  const [loading,    setLoading]    = useState(true)
-  const [error,      setError]      = useState("")
-  const [acting,     setActing]     = useState<string | null>(null)
-  const [rejectId,   setRejectId]   = useState<string | null>(null)
-  const [rejectNote, setRejectNote] = useState("")
-  const [detail,     setDetail]     = useState<AdminVendor | null>(null)
+  const [vendors,     setVendors]     = useState<AdminVendor[]>([])
+  const [categoryMap, setCategoryMap] = useState<Map<number, VendorCategory>>(new Map())
+  const [loading,     setLoading]     = useState(true)
+  const [error,       setError]       = useState("")
+  const [acting,      setActing]      = useState<string | null>(null)
+  const [rejectId,    setRejectId]    = useState<string | null>(null)
+  const [rejectNote,  setRejectNote]  = useState("")
+  const [detail,      setDetail]      = useState<AdminVendor | null>(null)
+
+  // Fetch categories once on mount — build a lookup map id → VendorCategory
+  useEffect(() => {
+    vendorCategoriesService.list().then(cats => {
+      const map = new Map<number, VendorCategory>()
+      cats.forEach(c => map.set(c.id, c))
+      setCategoryMap(map)
+    })
+  }, [])
 
   const load = useCallback(() => {
     setLoading(true)
@@ -258,10 +316,12 @@ export default function AdminVendorsContent() {
               <tr><td colSpan={7} className="text-center py-10 text-muted-foreground">No vendors found.</td></tr>
             ) : vendors.map(v => (
               <tr key={v.vendor_id} className="border-b last:border-0 hover:bg-muted/30">
-                <td className="px-4 py-3 font-medium">{v.vendor_business_name ?? '\u2014'}</td>
+                <td className="px-4 py-3 font-medium">{v.vendor_business_name ?? '—'}</td>
                 <td className="px-4 py-3 text-muted-foreground text-xs">{v.user_email}</td>
-                <td className="px-4 py-3 text-muted-foreground text-xs">{v.user_phone ?? '\u2014'}</td>
-                <td className="px-4 py-3">{v.vendor_category ?? <span className="text-muted-foreground">\u2014</span>}</td>
+                <td className="px-4 py-3 text-muted-foreground text-xs">{v.user_phone ?? '—'}</td>
+                <td className="px-4 py-3">
+                  <CategoryLabel categoryId={v.vendor_category} categoryMap={categoryMap} />
+                </td>
                 <td className="px-4 py-3">
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${
                     STATUS_BADGE[v.vendor_status] ?? 'bg-muted text-muted-foreground'
@@ -303,7 +363,13 @@ export default function AdminVendorsContent() {
         </table>
       </div>
 
-      {detail && <VendorDetailModal vendor={detail} onClose={() => setDetail(null)} />}
+      {detail && (
+        <VendorDetailModal
+          vendor={detail}
+          categoryMap={categoryMap}
+          onClose={() => setDetail(null)}
+        />
+      )}
 
       {rejectId && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
