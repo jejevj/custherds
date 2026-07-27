@@ -40,3 +40,13 @@ def require_user_type(*user_types: int):
             )
         return current_user
     return _checker
+
+
+def get_current_superadmin(current_user: User = Depends(get_current_user)) -> User:
+    """Dependency: hanya user dengan user_type=99 (superadmin) yang diizinkan."""
+    if current_user.user_type != 99:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Akses hanya untuk superadmin",
+        )
+    return current_user
