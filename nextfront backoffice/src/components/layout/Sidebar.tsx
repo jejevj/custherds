@@ -6,21 +6,27 @@ import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, Users, BookOpen, Receipt,
   Wallet, Settings, LogOut, ChevronLeft, ChevronRight,
-  Briefcase, UserCheck,
+  Briefcase, UserCheck, Mail, MailOpen, Send, ServerCog,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuthStore } from '@/store/auth.store'
 import { useRouter } from 'next/navigation'
 
 const NAV_ITEMS = [
-  { href: '/dashboard',            label: 'Dashboard',      icon: LayoutDashboard },
-  { href: '/dashboard/users',      label: 'Users',          icon: Users },
-  { href: '/dashboard/guides',     label: 'Guides',         icon: UserCheck },
-  { href: '/dashboard/vendors',    label: 'Vendors',        icon: Briefcase },
-  { href: '/dashboard/bookings',   label: 'Bookings',       icon: BookOpen },
-  { href: '/dashboard/transactions', label: 'Transactions', icon: Receipt },
-  { href: '/dashboard/withdrawals', label: 'Withdrawals',   icon: Wallet },
-  { href: '/dashboard/split-config', label: 'Split Config', icon: Settings },
+  { href: '/admin/dashboard',              label: 'Dashboard',        icon: LayoutDashboard },
+  { href: '/admin/users',                  label: 'Users',            icon: Users },
+  { href: '/admin/guides',                 label: 'Guides',           icon: UserCheck },
+  { href: '/admin/vendors',                label: 'Vendors',          icon: Briefcase },
+  { href: '/admin/bookings',               label: 'Bookings',         icon: BookOpen },
+  { href: '/admin/transactions',           label: 'Transactions',     icon: Receipt },
+  { href: '/admin/withdrawals',            label: 'Withdrawals',      icon: Wallet },
+  { href: '/admin/payment-gateway-config', label: 'Payment Config',   icon: Settings },
+]
+
+const WEBMAIL_ITEMS = [
+  { href: '/admin/webmail',                label: 'Inbox',            icon: MailOpen },
+  { href: '/admin/webmail/send',           label: 'Kirim Email',      icon: Send },
+  { href: '/admin/webmail/config',         label: 'Email Config',     icon: ServerCog },
 ]
 
 export default function Sidebar() {
@@ -28,11 +34,17 @@ export default function Sidebar() {
   const router    = useRouter()
   const logout    = useAuthStore((s) => s.logout)
   const [collapsed, setCollapsed] = useState(false)
+  const [mailOpen,  setMailOpen]  = useState(() =>
+    pathname.startsWith('/admin/webmail'),
+  )
 
   const handleLogout = () => {
     logout()
     router.replace('/login')
   }
+
+  const isActive = (href: string) =>
+    href === '/admin/dashboard' ? pathname === href : pathname.startsWith(href)
 
   return (
     <aside
@@ -55,28 +67,73 @@ export default function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 py-4 space-y-1 px-2 overflow-y-auto">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-          const active = href === '/dashboard'
-            ? pathname === href
-            : pathname.startsWith(href)
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                active
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              )}
-              title={collapsed ? label : undefined}
-            >
-              <Icon size={18} className="shrink-0" />
-              {!collapsed && <span>{label}</span>}
-            </Link>
-          )
-        })}
+      <nav className="flex-1 py-4 space-y-0.5 px-2 overflow-y-auto">
+        {/* Main nav items */}
+        {NAV_ITEMS.map(({ href, label, icon: Icon }) => (
+          <Link
+            key={href}
+            href={href}
+            className={cn(
+              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+              isActive(href)
+                ? 'bg-blue-600 text-white'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            )}
+            title={collapsed ? label : undefined}
+          >
+            <Icon size={18} className="shrink-0" />
+            {!collapsed && <span>{label}</span>}
+          </Link>
+        ))}
+
+        {/* Webmail group */}
+        <div className="pt-2">
+          {/* Group header / toggle */}
+          <button
+            onClick={() => !collapsed && setMailOpen(o => !o)}
+            className={cn(
+              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full transition-colors',
+              mailOpen && !collapsed
+                ? 'text-white'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            )}
+            title={collapsed ? 'Webmail' : undefined}
+          >
+            <Mail size={18} className="shrink-0" />
+            {!collapsed && (
+              <>
+                <span className="flex-1 text-left">Webmail</span>
+                <svg
+                  className={cn('w-3.5 h-3.5 transition-transform', mailOpen ? 'rotate-180' : '')}
+                  fill="none" stroke="currentColor" strokeWidth={2}
+                  viewBox="0 0 24 24"
+                ><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+              </>
+            )}
+          </button>
+
+          {/* Sub items */}
+          {(mailOpen || collapsed) && (
+            <div className={cn('space-y-0.5', !collapsed && 'pl-3 mt-0.5')}>
+              {WEBMAIL_ITEMS.map(({ href, label, icon: Icon }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                    isActive(href)
+                      ? 'bg-blue-600/80 text-white'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  )}
+                  title={collapsed ? label : undefined}
+                >
+                  <Icon size={16} className="shrink-0" />
+                  {!collapsed && <span>{label}</span>}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
       </nav>
 
       {/* Logout */}
