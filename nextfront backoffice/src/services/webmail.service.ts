@@ -16,6 +16,28 @@ export interface EmailConfig {
   is_active: boolean
 }
 
+/** Payload untuk create / update konfigurasi SMTP */
+export interface EmailConfigPayload {
+  name: string
+  provider: string
+  host: string
+  port: number
+  use_tls?: boolean
+  username: string
+  /** Wajib saat create; opsional saat update (kosongkan = tidak diubah) */
+  password?: string
+  from_address: string
+  from_name?: string
+  is_default?: boolean
+  is_active?: boolean
+}
+
+/** Payload untuk endpoint test konfigurasi SMTP */
+export interface TestEmailConfigPayload {
+  config_id: number
+  send_to: string
+}
+
 export interface SendEmailPayload {
   config_id: number
   to: string[]
@@ -55,11 +77,8 @@ export interface EmailMessage {
   received_at?: string
   created_at: string
   has_attachments: boolean
-  /** Isi HTML email — tersedia saat detail email dibuka */
   body_html?: string
-  /** Isi teks plain email — fallback dari body_html */
   body_text?: string
-  /** Daftar lampiran — default array kosong di list, terisi saat detail */
   attachments: EmailAttachment[]
 }
 
@@ -76,7 +95,6 @@ export interface ListEmailsParams {
   folder?: string
   page?: number
   per_page?: number
-  /** Kata kunci pencarian subjek / pengirim */
   search?: string
 }
 
@@ -97,16 +115,16 @@ export const webmailService = {
   listConfigs: (): Promise<EmailConfig[]> =>
     api.get<EmailConfig[]>('/webmail/configs').then(r => r),
 
-  createConfig: (data: Partial<EmailConfig> & { password: string }): Promise<EmailConfig> =>
+  createConfig: (data: EmailConfigPayload): Promise<EmailConfig> =>
     api.post<EmailConfig>('/webmail/configs', data).then(r => r),
 
-  updateConfig: (id: number, data: Partial<EmailConfig> & { password?: string }): Promise<EmailConfig> =>
+  updateConfig: (id: number, data: Partial<EmailConfigPayload>): Promise<EmailConfig> =>
     api.put<EmailConfig>(`/webmail/configs/${id}`, data).then(r => r),
 
   deleteConfig: (id: number): Promise<void> =>
     api.delete<void>(`/webmail/configs/${id}`),
 
-  testConfig: (config_id: number, send_to: string) =>
+  testConfig: ({ config_id, send_to }: TestEmailConfigPayload) =>
     api.post('/webmail/configs/test', { config_id, send_to }).then(r => r),
 
   // Email
