@@ -34,6 +34,14 @@ export interface SendEmailResponse {
   detail?: string
 }
 
+export interface EmailAttachment {
+  id: number
+  filename: string
+  content_type: string
+  size: number
+  url: string
+}
+
 export interface EmailMessage {
   id: number
   message_id: string
@@ -47,6 +55,12 @@ export interface EmailMessage {
   received_at?: string
   created_at: string
   has_attachments: boolean
+  /** Isi HTML email — tersedia saat detail email dibuka */
+  body_html?: string
+  /** Isi teks plain email — fallback dari body_html */
+  body_text?: string
+  /** Daftar lampiran — default array kosong di list, terisi saat detail */
+  attachments: EmailAttachment[]
 }
 
 export interface PaginatedEmailMessages {
@@ -109,14 +123,14 @@ export const webmailService = {
   getEmail: (id: number): Promise<EmailMessage> =>
     api.get<EmailMessage>(`/webmail/emails/${id}`).then(r => r),
 
-  markRead: (id: number, is_read: boolean) =>
-    api.patch(`/webmail/emails/${id}/read`, { is_read }).then(r => r),
+  markRead: (id: number, is_read: boolean): Promise<EmailMessage> =>
+    api.patch<EmailMessage>(`/webmail/emails/${id}/read`, { is_read }).then(r => r),
 
-  markStarred: (id: number, is_starred: boolean) =>
-    api.patch(`/webmail/emails/${id}/star`, { is_starred }).then(r => r),
+  markStarred: (id: number, is_starred: boolean): Promise<EmailMessage> =>
+    api.patch<EmailMessage>(`/webmail/emails/${id}/star`, { is_starred }).then(r => r),
 
-  moveFolder: (id: number, folder: string) =>
-    api.patch(`/webmail/emails/${id}/move`, { folder }).then(r => r),
+  moveFolder: (id: number, folder: string): Promise<EmailMessage> =>
+    api.patch<EmailMessage>(`/webmail/emails/${id}/move`, { folder }).then(r => r),
 
   deleteEmail: (id: number): Promise<void> =>
     api.delete<void>(`/webmail/emails/${id}`),
