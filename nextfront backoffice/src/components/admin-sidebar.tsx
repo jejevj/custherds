@@ -11,6 +11,7 @@ import {
 import {
   House, Users, ShoppingBag, Landmark,
   CircleUserRound, LifeBuoyIcon, SendIcon, Map, Tag,
+  Mail, MailOpen, ServerCog,
 } from "lucide-react"
 import { ScrollArea } from "./ui/scroll-area"
 import Image from "next/image"
@@ -32,10 +33,10 @@ const navMain = [
   {
     title: "Vendors", url: "#", icon: <ShoppingBag />,
     items: [
-      { title: "All Vendors",      url: "/admin/vendors" },
-      { title: "Pending Approval", url: "/admin/vendors?status=pending" },
-      { title: "Approved",         url: "/admin/vendors?status=approved" },
-      { title: "Rejected",         url: "/admin/vendors?status=rejected" },
+      { title: "All Vendors",       url: "/admin/vendors" },
+      { title: "Pending Approval",  url: "/admin/vendors?status=pending" },
+      { title: "Approved",          url: "/admin/vendors?status=approved" },
+      { title: "Rejected",          url: "/admin/vendors?status=rejected" },
       { title: "Vendor Categories", url: "/admin/vendor-categories" },
       { title: "Vendor Areas",      url: "/admin/vendor-areas" },
     ],
@@ -43,11 +44,19 @@ const navMain = [
   {
     title: "Finance", url: "#", icon: <Landmark />,
     items: [
-      { title: "Transactions",          url: "/admin/finance/transactions" },
-      { title: "Withdrawals",           url: "/admin/finance/withdrawals" },
-      { title: "Commission",            url: "/admin/finance/commission" },
-      { title: "Settlement Bank Acct",  url: "/admin/finance/settlement-bank-account" },
-      { title: "Payment Gateway",       url: "/admin/payment-gateway-config" },
+      { title: "Transactions",         url: "/admin/finance/transactions" },
+      { title: "Withdrawals",          url: "/admin/finance/withdrawals" },
+      { title: "Commission",           url: "/admin/finance/commission" },
+      { title: "Settlement Bank Acct", url: "/admin/finance/settlement-bank-account" },
+      { title: "Payment Gateway",      url: "/admin/payment-gateway-config" },
+    ],
+  },
+  {
+    title: "Webmail", url: "#", icon: <Mail />,
+    items: [
+      { title: "Inbox",         url: "/admin/webmail" },
+      { title: "Kirim Email",   url: "/admin/webmail/send" },
+      { title: "Email Config",  url: "/admin/webmail/config" },
     ],
   },
   { title: "Profile", url: "/admin/profile", icon: <CircleUserRound /> },
