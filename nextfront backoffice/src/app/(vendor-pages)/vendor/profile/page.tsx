@@ -244,12 +244,52 @@ export default function VendorProfilePage() {
         setCategories([...cats].sort((a, b) =>
           a.group_name.localeCompare(b.group_name) || a.sort_order - b.sort_order,
         ))
-        setKabupatens(kabs.filter((k) => k.is_active))
-        setKecamatans(kecs.filter((k) => k.is_active))
-        setKelurahans(kels.filter((k) => k.is_active))
-        setSelKab(p.vendor_area_kabupaten ?? null)
-        setSelKec(p.vendor_area_kecamatan ?? null)
-        setSelKel(p.vendor_area_kelurahan ?? null)
+
+        const activeKabs = kabs.filter((k) => k.is_active)
+        const activeKecs = kecs.filter((k) => k.is_active)
+        const activeKels = kels.filter((k) => k.is_active)
+        setKabupatens(activeKabs)
+        setKecamatans(activeKecs)
+        setKelurahans(activeKels)
+
+        // ── Resolve area yang tersimpan di profil ──────────────────────
+        // Prioritas: vendor_area_kabupaten/kecamatan/kelurahan (kolom baru)
+        // Fallback : vendor_area (legacy = id kecamatan atau kelurahan)
+        let initKab = p.vendor_area_kabupaten ?? null
+        let initKec = p.vendor_area_kecamatan ?? null
+        let initKel = p.vendor_area_kelurahan ?? null
+
+        // Jika kolom baru belum terisi, coba resolve dari vendor_area
+        if (!initKab && !initKec && !initKel && p.vendor_area) {
+          const areaId = p.vendor_area
+
+          // Cek apakah vendor_area cocok dengan id kelurahan
+          const matchKel = activeKels.find((k) => k.id === areaId)
+          if (matchKel) {
+            initKel = matchKel.id
+            // Cari kecamatannya
+            const matchKec = activeKecs.find((k) => k.id === matchKel.kecamatan_id)
+            if (matchKec) {
+              initKec = matchKec.id
+              initKab = matchKec.kabupaten_id
+            }
+          } else {
+            // Coba cocokkan dengan id kecamatan
+            const matchKec = activeKecs.find((k) => k.id === areaId)
+            if (matchKec) {
+              initKec = matchKec.id
+              initKab = matchKec.kabupaten_id
+            } else {
+              // Terakhir coba cocokkan dengan id kabupaten
+              const matchKab = activeKabs.find((k) => k.id === areaId)
+              if (matchKab) initKab = matchKab.id
+            }
+          }
+        }
+
+        setSelKab(initKab)
+        setSelKec(initKec)
+        setSelKel(initKel)
       })
       .finally(() => setLoading(false))
   }, [])
@@ -318,6 +358,11 @@ export default function VendorProfilePage() {
   const removeGalleryPhoto = (idx: number) =>
     setProfile(p => p ? { ...p, gallery_urls: p.gallery_urls.filter((_, i) => i !== idx) } : p)
 
+  // ── Derived display names (untuk badge read-only) ─────────────────────
+  const kabName = kabupatens.find(k => k.id === selKab)?.name
+  const kecName = kecamatans.find(k => k.id === selKec)?.name
+  const kelName = kelurahans.find(k => k.id === selKel)?.name
+
   if (loading) return (
     <div className="grid grid-cols-12 gap-6">
       {[...Array(8)].map((_, i) => (
@@ -334,12 +379,23 @@ export default function VendorProfilePage() {
           <h1 className="text-2xl font-bold tracking-tight">Store Profile</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Kelola informasi dan galeri toko kamu.</p>
         </div>
-        <Badge
-          variant={profile?.vendor_status === "approved" ? "default" : "secondary"}
-          className="capitalize mt-1"
-        >
-          {profile?.vendor_status}
-        </Badge>
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/* Badge area aktif — tampil otomatis dari vendor_area profil */}
+          {kabName && (
+            <span className="inline-flex items-center gap-1.5 text-xs bg-primary/10 text-primary border border-primary/20 rounded-full px-3 py-1">
+              <MapPin size={11} />
+              {kabName}
+              {kecName && <> › {kecName}</>}
+              {kelName && <> › {kelName}</>}
+            </span>
+          )}
+          <Badge
+            variant={profile?.vendor_status === "approved" ? "default" : "secondary"}
+            className="capitalize"
+          >
+            {profile?.vendor_status}
+          </Badge>
+        </div>
       </div>
 
       {error   && <p className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-4 py-2.5">{error}</p>}
@@ -439,8 +495,17 @@ export default function VendorProfilePage() {
             className={`${glass} p-6 space-y-4`}
             style={{ overflow: "visible" }}
           >
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground/70">
-              <MapPin size={13} /> Area Layanan
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground/70">
+                <MapPin size={13} /> Area Layanan
+              </div>
+              {/* Badge area saat ini yang tersimpan */}
+              {kabName && (
+                <span className="text-[11px] bg-primary/10 text-primary border border-primary/20 rounded-full px-2.5 py-0.5 flex items-center gap-1">
+                  <MapPin size={10} />
+                  {kelName ?? kecName ?? kabName}
+                </span>
+              )}
             </div>
             <p className="text-xs text-muted-foreground/60 -mt-2">
               Pilih area operasional toko kamu. Digunakan guide untuk mencari vendor berdasarkan lokasi.
@@ -478,13 +543,14 @@ export default function VendorProfilePage() {
               </div>
             </div>
 
+            {/* Breadcrumb area terpilih (selalu tampil selama ada selKab) */}
             {selKab && (
               <div className="flex items-center gap-2 flex-wrap pt-1">
                 <MapPin size={12} className="text-primary/60 shrink-0" />
                 <span className="text-xs text-muted-foreground">
-                  {kabupatens.find(k => k.id === selKab)?.name ?? ""}
-                  {selKec && ` › ${kecamatans.find(k => k.id === selKec)?.name ?? ""}`}
-                  {selKel && ` › ${kelurahans.find(k => k.id === selKel)?.name ?? ""}`}
+                  {kabName}
+                  {kecName && ` › ${kecName}`}
+                  {kelName && ` › ${kelName}`}
                 </span>
                 {selKel && (
                   <span className="text-[10px] bg-primary/15 text-primary px-2 py-0.5 rounded-full">
@@ -495,7 +561,7 @@ export default function VendorProfilePage() {
             )}
           </section>
 
-          {/* Tombol Simpan di kiri bawah */}
+          {/* Tombol Simpan */}
           <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto px-10">
             {saving
               ? <><Loader2 size={14} className="animate-spin mr-2" />Menyimpan…</>
@@ -569,7 +635,7 @@ export default function VendorProfilePage() {
             </p>
           </section>
 
-          {/* Card Pengaturan Booking — dipindah ke sini di bawah Galeri */}
+          {/* Card Pengaturan Booking */}
           <section className={`${glass} p-6 space-y-4`}>
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground/70">
               <Settings2 size={13} /> Pengaturan Booking
