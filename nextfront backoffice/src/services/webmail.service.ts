@@ -1,167 +1,135 @@
-/**
- * webmail.service.ts
- * Models & API calls untuk fitur Webmail (inbox, send email, email config)
- */
-import { api } from '@/services/api'
+import api from './api'
 
-// ─── Models ────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-/** Satu pesan email di inbox */
-export interface EmailMessage {
+export interface EmailConfig {
   id: number
-  message_id: string          // RFC5322 Message-ID
+  name: string
+  provider: string
+  host: string
+  port: number
+  use_tls: boolean
+  username: string
   from_address: string
-  from_name:    string | null
-  to_addresses: string[]      // bisa lebih dari 1 penerima
-  cc_addresses: string[]
-  bcc_addresses: string[]
-  subject:      string
-  body_text:    string | null // plain-text version
-  body_html:    string | null // HTML version
-  is_read:      boolean
-  is_starred:   boolean
-  folder:       'inbox' | 'sent' | 'draft' | 'trash' | 'spam'
-  attachments:  EmailAttachment[]
-  received_at:  string        // ISO datetime
-  created_at:   string
+  from_name?: string
+  is_default: boolean
+  is_active: boolean
 }
 
-export interface EmailAttachment {
-  id:        number
-  filename:  string
-  mime_type: string
-  size:      number           // bytes
-  url:       string
-}
-
-/** Payload untuk mengirim email */
 export interface SendEmailPayload {
-  to:       string[]          // wajib minimal 1
-  cc?:      string[]
-  bcc?:     string[]
-  subject:  string
+  config_id: number
+  to: string[]
+  cc?: string[]
+  bcc?: string[]
+  subject: string
   body_html?: string
   body_text?: string
-  reply_to_id?: number        // id EmailMessage jika reply
-  config_id: number           // harus pakai config mana
+  reply_to_id?: number
 }
 
-/** Response dari send */
 export interface SendEmailResponse {
-  success:    boolean
-  message_id: string          // RFC5322 id yang digenerate SMTP
-  queued:     boolean         // true jika masuk queue, false jika langsung terkirim
-}
-
-/** Konfigurasi SMTP / email provider */
-export interface EmailConfig {
-  id:           number
-  name:         string        // label, mis. "Gmail Custherds"
-  provider:     'smtp' | 'sendgrid' | 'mailgun' | 'ses' | 'resend'
-  host:         string | null // untuk SMTP
-  port:         number | null
-  use_tls:      boolean
-  username:     string
-  from_address: string
-  from_name:    string | null
-  is_default:   boolean
-  is_active:    boolean
-  created_at:   string
-  updated_at:   string
-}
-
-/** Payload untuk create / update EmailConfig */
-export interface EmailConfigPayload {
-  name:         string
-  provider:     EmailConfig['provider']
-  host?:        string
-  port?:        number
-  use_tls?:     boolean
-  username:     string
-  password:     string        // hanya dikirim saat create/update, tidak pernah dikembalikan
-  from_address: string
-  from_name?:   string
-  is_default?:  boolean
-  is_active?:   boolean
-}
-
-/** Test connection payload */
-export interface TestEmailConfigPayload {
-  config_id:  number
-  send_to:    string          // alamat penerima test
-}
-
-export interface TestEmailConfigResponse {
   success: boolean
-  message: string
-  latency_ms: number | null
+  message_id?: string
+  queued?: boolean
+  detail?: string
 }
 
-// ─── Query params ─────────────────────────────────────────────────────────────
-
-export interface ListEmailsParams {
-  folder?:   EmailMessage['folder']
-  is_read?:  boolean
-  search?:   string
-  page?:     number
-  per_page?: number
+export interface EmailMessage {
+  id: number
+  message_id: string
+  from_address: string
+  from_name?: string
+  to_addresses: string[]
+  subject: string
+  folder: string
+  is_read: boolean
+  is_starred: boolean
+  received_at?: string
+  created_at: string
+  has_attachments: boolean
 }
 
-export interface PaginatedEmails {
-  items:    EmailMessage[]
-  total:    number
-  page:     number
+export interface PaginatedEmailMessages {
+  items: EmailMessage[]
+  total: number
+  page: number
   per_page: number
-  pages:    number
+  pages: number
 }
 
-// ─── Service ──────────────────────────────────────────────────────────────────
+// Grup penerima
+export interface RecipientUser {
+  id: number
+  email: string
+  full_name?: string
+  role: 'guide' | 'vendor' | 'user' | 'admin'
+}
+
+export type RecipientGroup = 'guides' | 'vendors' | 'all' | 'custom'
+
+// ── Service ───────────────────────────────────────────────────────────────────
 
 export const webmailService = {
-  // ── Inbox ──
-  listEmails: (params?: ListEmailsParams): Promise<PaginatedEmails> =>
-    api.get<PaginatedEmails>('/webmail/emails', {
-      params: params as Record<string, string | number | boolean | undefined>,
-    }),
-
-  getEmail: (id: number): Promise<EmailMessage> =>
-    api.get<EmailMessage>(`/webmail/emails/${id}`),
-
-  markRead: (id: number, is_read = true): Promise<EmailMessage> =>
-    api.patch<EmailMessage>(`/webmail/emails/${id}/read`, { is_read }),
-
-  markStarred: (id: number, is_starred: boolean): Promise<EmailMessage> =>
-    api.patch<EmailMessage>(`/webmail/emails/${id}/star`, { is_starred }),
-
-  moveFolder: (id: number, folder: EmailMessage['folder']): Promise<EmailMessage> =>
-    api.patch<EmailMessage>(`/webmail/emails/${id}/folder`, { folder }),
-
-  deleteEmail: (id: number): Promise<void> =>
-    api.delete<void>(`/webmail/emails/${id}`),
-
-  // ── Send ──
-  sendEmail: (payload: SendEmailPayload): Promise<SendEmailResponse> =>
-    api.post<SendEmailResponse>('/webmail/send', payload),
-
-  // ── Config ──
+  // Konfigurasi SMTP
   listConfigs: (): Promise<EmailConfig[]> =>
-    api.get<EmailConfig[]>('/webmail/configs'),
+    api.get('/webmail/configs').then(r => r.data),
 
-  getConfig: (id: number): Promise<EmailConfig> =>
-    api.get<EmailConfig>(`/webmail/configs/${id}`),
+  createConfig: (data: Partial<EmailConfig> & { password: string }): Promise<EmailConfig> =>
+    api.post('/webmail/configs', data).then(r => r.data),
 
-  createConfig: (payload: EmailConfigPayload): Promise<EmailConfig> =>
-    api.post<EmailConfig>('/webmail/configs', payload),
-
-  updateConfig: (id: number, payload: Partial<EmailConfigPayload>): Promise<EmailConfig> =>
-    api.put<EmailConfig>(`/webmail/configs/${id}`, payload),
+  updateConfig: (id: number, data: Partial<EmailConfig> & { password?: string }): Promise<EmailConfig> =>
+    api.put(`/webmail/configs/${id}`, data).then(r => r.data),
 
   deleteConfig: (id: number): Promise<void> =>
-    api.delete<void>(`/webmail/configs/${id}`),
+    api.delete(`/webmail/configs/${id}`),
 
-  testConfig: (payload: TestEmailConfigPayload): Promise<TestEmailConfigResponse> =>
-    api.post<TestEmailConfigResponse>('/webmail/configs/test', payload),
+  testConfig: (config_id: number, send_to: string) =>
+    api.post('/webmail/configs/test', { config_id, send_to }).then(r => r.data),
 
-  setDefault: (id: number): Promise<EmailConfig> =>
-    api.patch<EmailConfig>(`/webmail/configs/${id}/default`, {}),
+  // Email
+  // FIX: endpoint yang benar adalah /webmail/emails/send — bukan /webmail/send
+  sendEmail: (payload: SendEmailPayload): Promise<SendEmailResponse> =>
+    api.post('/webmail/emails/send', payload).then(r => r.data),
+
+  listEmails: (folder = 'inbox', page = 1, per_page = 20): Promise<PaginatedEmailMessages> =>
+    api.get('/webmail/emails', { params: { folder, page, per_page } }).then(r => r.data),
+
+  getEmail: (id: number): Promise<EmailMessage> =>
+    api.get(`/webmail/emails/${id}`).then(r => r.data),
+
+  markRead: (id: number, is_read: boolean) =>
+    api.patch(`/webmail/emails/${id}/read`, { is_read }).then(r => r.data),
+
+  markStarred: (id: number, is_starred: boolean) =>
+    api.patch(`/webmail/emails/${id}/star`, { is_starred }).then(r => r.data),
+
+  moveFolder: (id: number, folder: string) =>
+    api.patch(`/webmail/emails/${id}/move`, { folder }).then(r => r.data),
+
+  deleteEmail: (id: number): Promise<void> =>
+    api.delete(`/webmail/emails/${id}`),
+
+  // ── Ambil daftar penerima per grup ─────────────────────────────────────────
+  // Menggunakan endpoint /guides dan /vendors yang sudah ada
+  listGuides: (): Promise<RecipientUser[]> =>
+    api.get('/guides', { params: { per_page: 500, page: 1 } }).then(r => {
+      const items = r.data?.items ?? r.data ?? []
+      return items.map((g: any) => ({
+        id: g.id,
+        email: g.user?.email ?? g.email ?? '',
+        full_name: g.user?.full_name ?? g.full_name ?? g.name ?? '',
+        role: 'guide' as const,
+      })).filter((u: RecipientUser) => !!u.email)
+    }),
+
+  listVendors: (): Promise<RecipientUser[]> =>
+    api.get('/vendors', { params: { per_page: 500, page: 1 } }).then(r => {
+      const items = r.data?.items ?? r.data ?? []
+      return items.map((v: any) => ({
+        id: v.id,
+        email: v.user?.email ?? v.email ?? '',
+        full_name: v.user?.full_name ?? v.full_name ?? v.vendor_business_name ?? '',
+        role: 'vendor' as const,
+      })).filter((u: RecipientUser) => !!u.email)
+    }),
 }
