@@ -57,6 +57,13 @@ export interface PaginatedEmailMessages {
   pages: number
 }
 
+/** Parameter untuk listEmails — dibutuhkan oleh WebmailInboxContent */
+export interface ListEmailsParams {
+  folder?: string
+  page?: number
+  per_page?: number
+}
+
 // Grup penerima
 export interface RecipientUser {
   id: number
@@ -87,12 +94,13 @@ export const webmailService = {
     api.post('/webmail/configs/test', { config_id, send_to }).then(r => r),
 
   // Email
-  // Endpoint yang benar: /webmail/emails/send — bukan /webmail/send
   sendEmail: (payload: SendEmailPayload): Promise<SendEmailResponse> =>
     api.post<SendEmailResponse>('/webmail/emails/send', payload).then(r => r),
 
-  listEmails: (folder = 'inbox', page = 1, per_page = 20): Promise<PaginatedEmailMessages> =>
-    api.get<PaginatedEmailMessages>('/webmail/emails', { params: { folder, page, per_page } }).then(r => r),
+  listEmails: (params: ListEmailsParams = {}): Promise<PaginatedEmailMessages> => {
+    const { folder = 'inbox', page = 1, per_page = 20 } = params
+    return api.get<PaginatedEmailMessages>('/webmail/emails', { params: { folder, page, per_page } }).then(r => r)
+  },
 
   getEmail: (id: number): Promise<EmailMessage> =>
     api.get<EmailMessage>(`/webmail/emails/${id}`).then(r => r),
@@ -110,7 +118,6 @@ export const webmailService = {
     api.delete<void>(`/webmail/emails/${id}`),
 
   // ── Ambil daftar penerima per grup ────────────────────────────────────────
-  // Menggunakan endpoint /guides dan /vendors yang sudah ada
   listGuides: (): Promise<RecipientUser[]> =>
     api.get<any>('/guides', { params: { per_page: 500, page: 1 } }).then(r => {
       const items = (r as any)?.items ?? r ?? []
