@@ -12,11 +12,11 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 const FOLDERS: { value: EmailMessage['folder']; label: string; icon: React.ElementType }[] = [
-  { value: 'inbox',  label: 'Inbox',  icon: Inbox },
-  { value: 'sent',   label: 'Terkirim', icon: Send },
-  { value: 'draft',  label: 'Draft',  icon: Archive },
-  { value: 'spam',   label: 'Spam',   icon: AlertOctagon },
-  { value: 'trash',  label: 'Sampah', icon: Trash2 },
+  { value: 'inbox',  label: 'Inbox',     icon: Inbox },
+  { value: 'sent',   label: 'Terkirim',  icon: Send },
+  { value: 'draft',  label: 'Draft',     icon: Archive },
+  { value: 'spam',   label: 'Spam',      icon: AlertOctagon },
+  { value: 'trash',  label: 'Sampah',    icon: Trash2 },
 ]
 
 export default function WebmailInboxContent() {
@@ -117,7 +117,9 @@ export default function WebmailInboxContent() {
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-1.5 min-w-0">
-                  {email.is_read ? <MailOpen size={13} className="text-muted-foreground shrink-0" /> : <Mail size={13} className="text-primary shrink-0" />}
+                  {email.is_read
+                    ? <MailOpen size={13} className="text-muted-foreground shrink-0" />
+                    : <Mail size={13} className="text-primary shrink-0" />}
                   <span className={cn('text-xs truncate', !email.is_read && 'font-semibold text-foreground')}>
                     {email.from_name ?? email.from_address}
                   </span>
@@ -133,7 +135,10 @@ export default function WebmailInboxContent() {
                 {email.subject}
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                {formatDistanceToNow(new Date(email.received_at), { addSuffix: true, locale: localeId })}
+                {formatDistanceToNow(
+                  new Date(email.received_at ?? email.created_at),
+                  { addSuffix: true, locale: localeId }
+                )}
               </p>
             </button>
           ))}
