@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { TableSearchInput } from "@/components/ui/TableSearchInput"
 import {
-  Map, PlusCircle, Pencil, Trash2, ChevronDown, ChevronRight, Layers,
+  Map as MapIcon, PlusCircle, Pencil, Trash2, ChevronDown, ChevronRight, Layers,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -33,7 +33,7 @@ type Level = "kabupaten" | "kecamatan" | "kelurahan"
 interface DialogState {
   open:         boolean
   level:        Level
-  parentId?:    number   // kabupaten_id or kecamatan_id
+  parentId?:    number
   parentLabel?: string
   editId?:      number
   name:         string
@@ -68,16 +68,13 @@ export default function VendorAreasContent() {
   const [error,       setError]       = useState("")
   const [query,       setQuery]       = useState("")
 
-  // Expand / collapse kabupaten rows
-  const [expandedKab,  setExpandedKab]  = useState<Set<number>>(new Set())
-  const [expandedKec,  setExpandedKec]  = useState<Set<number>>(new Set())
+  const [expandedKab,  setExpandedKab]  = useState<Set<number>>(new Set<number>())
+  const [expandedKec,  setExpandedKec]  = useState<Set<number>>(new Set<number>())
 
-  // Dialog state
   const [dlg,         setDlg]         = useState<DialogState>(EMPTY_DIALOG)
   const [submitting,  setSubmitting]  = useState(false)
   const [formError,   setFormError]   = useState("")
 
-  // Delete state
   const [delState,    setDelState]    = useState<DeleteState | null>(null)
   const [deleting,    setDeleting]    = useState(false)
 
@@ -109,8 +106,8 @@ export default function VendorAreasContent() {
     return kabupatens.filter((k) => k.name.toLowerCase().includes(q))
   }, [kabupatens, query])
 
-  const kecByKab  = useMemo(() => {
-    const map = new Map<number, VendorAreaKecamatan[]>()
+  const kecByKab = useMemo((): Map<number, VendorAreaKecamatan[]> => {
+    const map: Map<number, VendorAreaKecamatan[]> = new Map<number, VendorAreaKecamatan[]>()
     kecamatans.forEach((k) => {
       if (!map.has(k.kabupaten_id)) map.set(k.kabupaten_id, [])
       map.get(k.kabupaten_id)!.push(k)
@@ -118,8 +115,8 @@ export default function VendorAreasContent() {
     return map
   }, [kecamatans])
 
-  const kelByKec  = useMemo(() => {
-    const map = new Map<number, VendorAreaKelurahan[]>()
+  const kelByKec = useMemo((): Map<number, VendorAreaKelurahan[]> => {
+    const map: Map<number, VendorAreaKelurahan[]> = new Map<number, VendorAreaKelurahan[]>()
     kelurahans.forEach((k) => {
       if (!map.has(k.kecamatan_id)) map.set(k.kecamatan_id, [])
       map.get(k.kecamatan_id)!.push(k)
@@ -129,9 +126,9 @@ export default function VendorAreasContent() {
 
   // ── Expand helpers ────────────────────────────────────────────────────────
   const toggleKab = (id: number) =>
-    setExpandedKab((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
+    setExpandedKab((p) => { const n = new Set<number>(p); n.has(id) ? n.delete(id) : n.add(id); return n })
   const toggleKec = (id: number) =>
-    setExpandedKec((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
+    setExpandedKec((p) => { const n = new Set<number>(p); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   // ── Open dialog ───────────────────────────────────────────────────────────
   const openCreate = (level: Level, parentId?: number, parentLabel?: string) =>
@@ -310,7 +307,7 @@ export default function VendorAreasContent() {
                           </button>
                         </td>
                         <td className="px-3 py-2.5 font-semibold flex items-center gap-2">
-                          <Map className="h-3.5 w-3.5 text-primary shrink-0" />
+                          <MapIcon className="h-3.5 w-3.5 text-primary shrink-0" />
                           {kab.name}
                           <Badge variant="outline" className="text-xs ml-1">{kecs.length} kec</Badge>
                         </td>
