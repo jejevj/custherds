@@ -16,3 +16,7 @@ from app.models.audit_log import AuditLog
 from app.models.api_log import ApiLog
 from app.models.settlement_bank_account import SettlementBankAccount
 from app.models.payment_gateway_config import PaymentGatewayConfig
+# Webmail
+from app.models.email_config import EmailConfig
+from app.models.email_message import EmailMessage
+from app.models.email_attachment import EmailAttachment
