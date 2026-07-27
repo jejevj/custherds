@@ -58,10 +58,36 @@ class TransactionResponse(BaseModel):
 
 
 class TransactionInvoiceResponse(BaseModel):
+    """
+    Response untuk endpoint approve / retry-payment / invoice-url.
+
+    Breakdown tagihan vendor (pay_as_you_go):
+      tagihan_net   = guide_commission + platform_fee   (nilai split asli)
+      mdr_amount    = MDR QRIS 0.7% yang ditanggung vendor
+      tagihan_gross = tagihan_net + mdr_amount          (nominal yang di-scan)
+
+    Contoh (gross_amount=850.000, split 10%+5%):
+      tagihan_net   = 85.000 + 42.500 = 127.500
+      mdr_amount    = ceil(127.500 / 0.993 * 0.007) = 899
+      tagihan_gross = 128.399
+
+    Untuk deposit: ketiga field ini None (MDR tidak berlaku).
+    """
     transaction: TransactionResponse
     payment_method: str
     invoice_url: Optional[str] = None
     xendit_invoice_id: Optional[str] = None
     qris_string: Optional[str] = None
     doku_reference_no: Optional[str] = None
+
+    # ── Breakdown tagihan QRIS (Opsi C MDR) ───────────────────────
+    tagihan_net: Optional[Decimal] = None
+    """Komisi Guide + Fee Platform (nilai split asli sebelum gross-up MDR)"""
+
+    mdr_amount: Optional[Decimal] = None
+    """Potongan MDR QRIS 0.7% yang ditanggung vendor"""
+
+    tagihan_gross: Optional[Decimal] = None
+    """Nominal QR yang harus di-scan vendor = tagihan_net + mdr_amount"""
+
     message: str
