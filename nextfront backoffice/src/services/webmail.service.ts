@@ -57,11 +57,13 @@ export interface PaginatedEmailMessages {
   pages: number
 }
 
-/** Parameter untuk listEmails — dibutuhkan oleh WebmailInboxContent */
+/** Parameter untuk listEmails */
 export interface ListEmailsParams {
   folder?: string
   page?: number
   per_page?: number
+  /** Kata kunci pencarian subjek / pengirim */
+  search?: string
 }
 
 // Grup penerima
@@ -98,8 +100,10 @@ export const webmailService = {
     api.post<SendEmailResponse>('/webmail/emails/send', payload).then(r => r),
 
   listEmails: (params: ListEmailsParams = {}): Promise<PaginatedEmailMessages> => {
-    const { folder = 'inbox', page = 1, per_page = 20 } = params
-    return api.get<PaginatedEmailMessages>('/webmail/emails', { params: { folder, page, per_page } }).then(r => r)
+    const { folder = 'inbox', page = 1, per_page = 20, search } = params
+    return api.get<PaginatedEmailMessages>('/webmail/emails', {
+      params: { folder, page, per_page, ...(search ? { search } : {}) },
+    }).then(r => r)
   },
 
   getEmail: (id: number): Promise<EmailMessage> =>
