@@ -37,6 +37,7 @@ const navMain = [
       { title: "Approved",         url: "/admin/vendors?status=approved" },
       { title: "Rejected",         url: "/admin/vendors?status=rejected" },
       { title: "Vendor Categories", url: "/admin/vendor-categories" },
+      { title: "Vendor Areas",      url: "/admin/vendor-areas" },
     ],
   },
   {
