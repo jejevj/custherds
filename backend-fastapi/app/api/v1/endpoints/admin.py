@@ -18,6 +18,8 @@ from app.schemas.admin import (
 )
 from app.schemas.guides import GuideProfile, GuideAdminBankSettlementUpdate
 from app.services.xendit_disbursement import create_disbursement
+from app.utils.email_sender import send_transactional_email
+from app.utils.notification_emails import build_account_verified_email, build_account_rejected_email
 from datetime import datetime, timezone
 
 router = APIRouter()
@@ -87,7 +89,6 @@ def admin_toggle_create_permission(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user_type(99)),
 ) -> Any:
-    # Hanya user dengan is_create_user=True yang boleh mengakses endpoint ini
     if not current_user.is_create_user:
         raise HTTPException(403, "You don't have permission to manage user creation rights")
 
@@ -95,8 +96,6 @@ def admin_toggle_create_permission(
     if not target:
         raise HTTPException(404, "User not found")
 
-    # Tidak boleh menonaktifkan (set false) user yang sudah punya is_create_user=True
-    # Hanya bisa MENAMBAHKAN (set true), tidak bisa MENCABUT dari sesama pemegang hak
     if not is_create_user and target.is_create_user:
         raise HTTPException(
             403,
@@ -163,19 +162,58 @@ def admin_approve_guide(
     if not guide:
         raise HTTPException(404, "Guide not found")
 
+    user = db.query(User).filter(User.id == guide.user_id).first()
+
     if action == "approve":
         guide.guide_status = "approved"
         guide.guide_certificate_status = "approved"
         guide.rejection_notes = None
-        user = db.query(User).filter(User.id == guide.user_id).first()
         if user:
             user.is_verified = True
+        db.commit()
+
+        # ── Email tahap 3a: Akun guide terverifikasi ──
+        if user:
+            try:
+                subject, body_html, body_text = build_account_verified_email(
+                    user_name=user.user_name,
+                    user_email=user.user_email,
+                    role="guide",
+                )
+                send_transactional_email(
+                    db=db,
+                    to_address=user.user_email,
+                    subject=subject,
+                    body_html=body_html,
+                    body_text=body_text,
+                )
+            except Exception:
+                pass
     else:
         guide.guide_status = "rejected"
         guide.guide_certificate_status = "rejected"
         guide.rejection_notes = notes
+        db.commit()
 
-    db.commit()
+        # ── Email tahap 3b: Akun guide ditolak ──
+        if user:
+            try:
+                subject, body_html, body_text = build_account_rejected_email(
+                    user_name=user.user_name,
+                    user_email=user.user_email,
+                    role="guide",
+                    rejection_notes=notes,
+                )
+                send_transactional_email(
+                    db=db,
+                    to_address=user.user_email,
+                    subject=subject,
+                    body_html=body_html,
+                    body_text=body_text,
+                )
+            except Exception:
+                pass
+
     return {
         "message":                  f"Guide {guide.guide_status}",
         "guide_id":                 str(guide.id),
@@ -199,8 +237,6 @@ def admin_set_guide_bank_settlement_id(
     """
     Hanya admin (user_type=99) yang dapat mengisi atau mengubah bank_settlement_id guide.
     Field ini tidak dapat diubah oleh guide sendiri.
-
-    Kirim `bank_settlement_id: null` untuk menghapus/kosongkan nilai yang ada.
     """
     guide = db.query(Guide).filter(Guide.id == guide_id).first()
     if not guide:
@@ -268,17 +304,58 @@ def admin_approve_vendor(
     if not vendor:
         raise HTTPException(404, "Vendor not found")
 
+    user = db.query(User).filter(User.id == vendor.user_id).first()
+
     if action == "approve":
         vendor.vendor_status = "approved"
         vendor.approval_notes = None
-        user = db.query(User).filter(User.id == vendor.user_id).first()
         if user:
             user.is_verified = True
+        db.commit()
+
+        # ── Email tahap 3a: Akun vendor terverifikasi ──
+        if user:
+            try:
+                subject, body_html, body_text = build_account_verified_email(
+                    user_name=user.user_name,
+                    user_email=user.user_email,
+                    role="vendor",
+                    vendor_business_name=vendor.vendor_business_name or "",
+                )
+                send_transactional_email(
+                    db=db,
+                    to_address=user.user_email,
+                    subject=subject,
+                    body_html=body_html,
+                    body_text=body_text,
+                )
+            except Exception:
+                pass
     else:
         vendor.vendor_status = "rejected"
         vendor.approval_notes = notes
+        db.commit()
 
-    db.commit()
+        # ── Email tahap 3b: Akun vendor ditolak ──
+        if user:
+            try:
+                subject, body_html, body_text = build_account_rejected_email(
+                    user_name=user.user_name,
+                    user_email=user.user_email,
+                    role="vendor",
+                    rejection_notes=notes,
+                    vendor_business_name=vendor.vendor_business_name or "",
+                )
+                send_transactional_email(
+                    db=db,
+                    to_address=user.user_email,
+                    subject=subject,
+                    body_html=body_html,
+                    body_text=body_text,
+                )
+            except Exception:
+                pass
+
     return {
         "message":       f"Vendor {vendor.vendor_status}",
         "vendor_id":     str(vendor.id),

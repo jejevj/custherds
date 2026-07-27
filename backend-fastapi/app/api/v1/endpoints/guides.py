@@ -7,6 +7,8 @@ from app.core.deps import require_user_type
 from app.models.user import User
 from app.models.guide import Guide
 from app.schemas.guides import GuideProfile, GuideUpdateRequest, GuideWallet, GuideSubmitRequest
+from app.utils.email_sender import send_transactional_email
+from app.utils.notification_emails import build_document_submitted_email
 import uuid
 
 router = APIRouter()
@@ -82,7 +84,7 @@ def submit_guide_for_review(
     """
     Guide mengisi semua data wajib dan submit.
     Status berubah: incomplete/rejected -> pending.
-    Admin akan menerima notifikasi untuk mereview.
+    Email tahap 2 dikirim: dokumen diterima, akun sedang diverifikasi.
     """
     guide = db.query(Guide).filter(Guide.user_id == current_user.id).first()
     if not guide:
@@ -100,6 +102,24 @@ def submit_guide_for_review(
     guide.rejection_notes = None
     db.commit()
     db.refresh(guide)
+
+    # ── Email tahap 2: Dokumen diterima, akun dalam proses verifikasi ──
+    try:
+        subject, body_html, body_text = build_document_submitted_email(
+            user_name=current_user.user_name,
+            user_email=current_user.user_email,
+            role="guide",
+        )
+        send_transactional_email(
+            db=db,
+            to_address=current_user.user_email,
+            subject=subject,
+            body_html=body_html,
+            body_text=body_text,
+        )
+    except Exception:
+        pass  # Email gagal tidak boleh gagalkan submit
+
     return guide
 
 
