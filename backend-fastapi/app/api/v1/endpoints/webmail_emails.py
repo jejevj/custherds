@@ -17,12 +17,14 @@ from app.schemas.webmail import (
     SendEmailResponse,
 )
 
-router = APIRouter()
+# redirect_slashes=False → mencegah 307 redirect yang strip CORS header
+router = APIRouter(redirect_slashes=False)
 
 
-# ── List emails (inbox, sent, dll) ───────────────────────────────────────────
+# ── List emails ─────────────────────────────────────────────────────────────
 
-@router.get("/", response_model=PaginatedEmailMessages)
+@router.get("", response_model=PaginatedEmailMessages)
+@router.get("/", response_model=PaginatedEmailMessages, include_in_schema=False)
 def list_emails(
     folder: EmailFolder = Query(EmailFolder.inbox),
     page: int = Query(1, ge=1),
@@ -40,24 +42,22 @@ def list_emails(
         .all()
     )
 
-    # Lampirkan flag has_attachments
     result = []
     for msg in items:
-        d = {
-            "id":            msg.id,
-            "message_id":    msg.message_id,
-            "from_address":  msg.from_address,
-            "from_name":     msg.from_name,
-            "to_addresses":  msg.to_addresses or [],
-            "subject":       msg.subject,
-            "folder":        msg.folder,
-            "is_read":       msg.is_read,
-            "is_starred":    msg.is_starred,
-            "received_at":   msg.received_at,
-            "created_at":    msg.created_at,
-            "has_attachments": len(msg.attachments) > 0 if msg.attachments else False,
-        }
-        result.append(d)
+        result.append({
+            "id":             msg.id,
+            "message_id":     msg.message_id,
+            "from_address":   msg.from_address,
+            "from_name":      msg.from_name,
+            "to_addresses":   msg.to_addresses or [],
+            "subject":        msg.subject,
+            "folder":         msg.folder,
+            "is_read":        msg.is_read,
+            "is_starred":     msg.is_starred,
+            "received_at":    msg.received_at,
+            "created_at":     msg.created_at,
+            "has_attachments": bool(msg.attachments),
+        })
 
     return PaginatedEmailMessages(
         items=result,
@@ -68,19 +68,17 @@ def list_emails(
     )
 
 
-# ── Send email ────────────────────────────────────────────────────────────────
+# ── Send ──────────────────────────────────────────────────────────────────────
 
 @router.post("/send", response_model=SendEmailResponse, status_code=status.HTTP_201_CREATED)
 def send_email(payload: SendEmailPayload, db: Session = Depends(get_db)):
-    """
-    Kirim email melalui config yang dipilih.
-    Menyimpan record ke tabel email_messages (folder=sent).
-    """
+    """Kirim email via SMTP config yang dipilih dan simpan ke folder sent."""
     import smtplib
+    import uuid
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
+
     from app.core.security import decrypt_password
-    from app.models.email_message import EmailFolder
 
     config: EmailConfig = db.get(EmailConfig, payload.config_id)
     if not config:
@@ -91,7 +89,7 @@ def send_email(payload: SendEmailPayload, db: Session = Depends(get_db)):
     if config.provider.value != "smtp":
         return SendEmailResponse(
             success=False,
-            detail=f"Pengiriman via provider '{config.provider.value}' belum didukung langsung. Gunakan SDK eksternal.",
+            detail=f"Provider '{config.provider.value}' belum didukung langsung.",
         )
 
     msg = MIMEMultipart("alternative")
@@ -100,7 +98,6 @@ def send_email(payload: SendEmailPayload, db: Session = Depends(get_db)):
     if payload.cc:
         msg["Cc"] = ", ".join(str(a) for a in payload.cc)
     msg["Subject"] = payload.subject
-
     if payload.body_text:
         msg.attach(MIMEText(payload.body_text, "plain"))
     if payload.body_html:
@@ -117,8 +114,6 @@ def send_email(payload: SendEmailPayload, db: Session = Depends(get_db)):
     except Exception as e:
         return SendEmailResponse(success=False, detail=str(e))
 
-    # Simpan ke DB sebagai sent
-    import uuid
     msg_id = f"<{uuid.uuid4().hex}@custherds>"
     db_msg = EmailMessage(
         config_id=config.id,
@@ -138,11 +133,10 @@ def send_email(payload: SendEmailPayload, db: Session = Depends(get_db)):
     db.add(db_msg)
     db.commit()
     db.refresh(db_msg)
-
     return SendEmailResponse(success=True, message_id=msg_id)
 
 
-# ── Detail email ──────────────────────────────────────────────────────────────
+# ── Detail ──────────────────────────────────────────────────────────────────
 
 @router.get("/{email_id}", response_model=EmailMessageOut)
 def get_email(email_id: int, db: Session = Depends(get_db)):
@@ -156,7 +150,7 @@ def get_email(email_id: int, db: Session = Depends(get_db)):
     return msg
 
 
-# ── Mark read / starred / move ────────────────────────────────────────────────
+# ── Patch actions ─────────────────────────────────────────────────────────────
 
 @router.patch("/{email_id}/read", response_model=EmailMessageOut)
 def mark_read(email_id: int, payload: MarkReadPayload, db: Session = Depends(get_db)):
@@ -193,7 +187,6 @@ def move_to_folder(email_id: int, payload: MoveFolderPayload, db: Session = Depe
 
 @router.delete("/{email_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_email(email_id: int, db: Session = Depends(get_db)):
-    """Hapus permanen. Biasanya pindahkan ke trash dulu via PATCH /move."""
     msg: EmailMessage = db.get(EmailMessage, email_id)
     if not msg:
         raise HTTPException(status_code=404, detail="Email tidak ditemukan.")

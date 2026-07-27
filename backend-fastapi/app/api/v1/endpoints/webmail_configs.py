@@ -3,6 +3,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.security import decrypt_password, encrypt_password
 from app.db.session import get_db
 from app.models.email_config import EmailConfig
 from app.schemas.webmail import (
@@ -13,26 +14,28 @@ from app.schemas.webmail import (
     TestEmailConfigResponse,
 )
 
-router = APIRouter()
+# redirect_slashes=False → mencegah 307 redirect dari /configs → /configs/
+# yang menyebabkan browser membuang CORS header pada request cross-origin.
+router = APIRouter(redirect_slashes=False)
 
 
 # ── List & Create ─────────────────────────────────────────────────────────────
 
-@router.get("/", response_model=List[EmailConfigOut])
+@router.get("", response_model=List[EmailConfigOut])
+@router.get("/", response_model=List[EmailConfigOut], include_in_schema=False)
 def list_email_configs(db: Session = Depends(get_db)):
     """Daftar semua konfigurasi email."""
     return db.query(EmailConfig).order_by(EmailConfig.id).all()
 
 
-@router.post("/", response_model=EmailConfigOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=EmailConfigOut, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=EmailConfigOut, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def create_email_config(payload: EmailConfigCreate, db: Session = Depends(get_db)):
     """
     Buat konfigurasi email baru.
     Password akan dienkripsi sebelum disimpan.
     Jika is_default=True, config lain akan di-unset.
     """
-    from app.core.security import encrypt_password  # lazy import agar tidak circular
-
     if payload.is_default:
         db.query(EmailConfig).update({"is_default": False})
 
@@ -66,7 +69,6 @@ def test_email_config(payload: TestEmailConfigPayload, db: Session = Depends(get
     import smtplib
     import time
     from email.message import EmailMessage as StdEmail
-    from app.core.security import decrypt_password
 
     config: EmailConfig = db.get(EmailConfig, payload.config_id)
     if not config:
@@ -124,8 +126,6 @@ def get_email_config(config_id: int, db: Session = Depends(get_db)):
 @router.put("/{config_id}", response_model=EmailConfigOut)
 def update_email_config(config_id: int, payload: EmailConfigUpdate, db: Session = Depends(get_db)):
     """Update konfigurasi. Jika password diisi, akan diencrypt ulang."""
-    from app.core.security import encrypt_password
-
     config: EmailConfig = db.get(EmailConfig, config_id)
     if not config:
         raise HTTPException(status_code=404, detail="Email config tidak ditemukan.")
@@ -155,6 +155,9 @@ def delete_email_config(config_id: int, db: Session = Depends(get_db)):
     if not config:
         raise HTTPException(status_code=404, detail="Email config tidak ditemukan.")
     if config.is_default:
-        raise HTTPException(status_code=400, detail="Config default tidak bisa dihapus. Set config lain sebagai default dulu.")
+        raise HTTPException(
+            status_code=400,
+            detail="Config default tidak bisa dihapus. Set config lain sebagai default dulu.",
+        )
     db.delete(config)
     db.commit()
