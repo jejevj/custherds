@@ -1,5 +1,11 @@
+/**
+ * Di production, gunakan path relatif '/api/v1' agar request melewati
+ * Next.js rewrites proxy (server-side) → tidak kena CORS.
+ * Di development, tetap bisa override via NEXT_PUBLIC_API_URL.
+ */
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'https://api.custherds.com/api/v1'
+  process.env.NEXT_PUBLIC_API_URL ??
+  (typeof window !== 'undefined' ? '/api/v1' : 'https://api.custherds.com/api/v1')
 
 export const STATUS_COLORS: Record<string, string> = {
   // Transaction
