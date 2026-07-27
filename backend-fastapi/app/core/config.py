@@ -26,6 +26,12 @@ class Settings(BaseSettings):
 
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:3000",
+        "http://localhost:3001",
+        # Production domains
+        "https://partners.custherds.com",
+        "https://custherds.com",
+        "https://www.custherds.com",
+        # Legacy / staging
         "https://partners-custherds.ourtestcloud.my.id",
         "https://custherds.ourtestcloud.my.id",
     ]
