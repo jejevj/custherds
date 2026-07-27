@@ -1,29 +1,155 @@
 "use client"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useMemo } from "react"
 import Image from "next/image"
 import { vendorsService, VendorProfile, resolveCoverPhoto } from "@/services/vendors.service"
+import { vendorCategoriesService, VendorCategory } from "@/services/vendorCategories.service"
 import { uploadPhotos } from "@/services/uploads.service"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { ImagePlus, X, Loader2, Store, Images, Settings2 } from "lucide-react"
+import {
+  ImagePlus, X, Loader2, Store, Images, Settings2,
+  Tag, ChevronDown, Check,
+} from "lucide-react"
 
-// Shared glass class
-const glass = "rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md"
+const glass    = "rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md"
 const inputCls = "w-full border border-white/10 rounded-xl px-3 py-2 text-sm bg-white/5 backdrop-blur-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-colors"
 
+// ─── CategorySelect ────────────────────────────────────────────────────────
+// Grouped dropdown untuk pilih kategori vendor (hanya yang is_active=true)
+function CategorySelect({
+  categories,
+  value,
+  onChange,
+}: {
+  categories: VendorCategory[]
+  value: number | null
+  onChange: (id: number) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  // Grup berdasarkan group_name
+  const grouped = useMemo(() => {
+    const map = new Map<string, VendorCategory[]>()
+    categories.forEach((c) => {
+      if (!map.has(c.group_name)) map.set(c.group_name, [])
+      map.get(c.group_name)!.push(c)
+    })
+    return map
+  }, [categories])
+
+  const selected = categories.find((c) => c.id === value)
+
+  // Close on outside click
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", h)
+    return () => document.removeEventListener("mousedown", h)
+  }, [])
+
+  return (
+    <div ref={ref} className="relative">
+      {/* Trigger */}
+      <button
+        type="button"
+        onClick={() => setOpen((p) => !p)}
+        className={[
+          "w-full flex items-center justify-between gap-2",
+          "border border-white/10 rounded-xl px-3 py-2 text-sm",
+          "bg-white/5 backdrop-blur-sm transition-colors",
+          "hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/40",
+          !selected ? "text-muted-foreground/50" : "",
+        ].join(" ")}
+      >
+        <span className="flex items-center gap-2 truncate">
+          {selected ? (
+            <>
+              <Tag className="h-3.5 w-3.5 shrink-0 text-primary/70" />
+              <span>{selected.name}</span>
+              <span className="text-muted-foreground/50 text-xs">· {selected.group_name}</span>
+            </>
+          ) : (
+            <span>Pilih kategori toko…</span>
+          )}
+        </span>
+        <ChevronDown className={[
+          "h-4 w-4 shrink-0 text-muted-foreground/60 transition-transform duration-200",
+          open ? "rotate-180" : "",
+        ].join(" ")} />
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <div className="absolute z-50 mt-1.5 w-full rounded-xl border border-white/10 bg-popover shadow-xl text-sm overflow-hidden">
+          <ul className="max-h-64 overflow-y-auto py-1">
+            {Array.from(grouped.entries()).map(([groupName, items]) => (
+              <li key={groupName}>
+                {/* Group header */}
+                <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+                  {groupName}
+                </div>
+                {/* Items */}
+                {items.map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => { onChange(cat.id); setOpen(false) }}
+                    className={[
+                      "w-full flex items-center gap-2 px-4 py-2 text-left transition-colors",
+                      "hover:bg-white/5",
+                      cat.id === value ? "text-primary" : "",
+                    ].join(" ")}
+                  >
+                    <Check className={[
+                      "h-3.5 w-3.5 shrink-0",
+                      cat.id === value ? "opacity-100" : "opacity-0",
+                    ].join(" ")} />
+                    {cat.name}
+                  </button>
+                ))}
+              </li>
+            ))}
+
+            {categories.length === 0 && (
+              <li className="px-4 py-6 text-center text-xs text-muted-foreground/50">
+                Tidak ada kategori tersedia.
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Main page ─────────────────────────────────────────────────────────────
 export default function VendorProfilePage() {
-  const [profile,   setProfile]   = useState<VendorProfile | null>(null)
-  const [loading,   setLoading]   = useState(true)
-  const [saving,    setSaving]    = useState(false)
-  const [error,     setError]     = useState("")
-  const [success,   setSuccess]   = useState(false)
-  const [uploading, setUploading] = useState(false)
+  const [profile,     setProfile]     = useState<VendorProfile | null>(null)
+  const [categories,  setCategories]  = useState<VendorCategory[]>([])
+  const [loading,     setLoading]     = useState(true)
+  const [saving,      setSaving]      = useState(false)
+  const [error,       setError]       = useState("")
+  const [success,     setSuccess]     = useState(false)
+  const [uploading,   setUploading]   = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    vendorsService.getProfile().then(setProfile).finally(() => setLoading(false))
+    Promise.all([
+      vendorsService.getProfile(),
+      vendorCategoriesService.list({ is_active: true }),
+    ])
+      .then(([p, cats]) => {
+        setProfile(p)
+        // sort by group then sort_order
+        setCategories([...cats].sort((a, b) =>
+          a.group_name.localeCompare(b.group_name) || a.sort_order - b.sort_order,
+        ))
+      })
+      .finally(() => setLoading(false))
   }, [])
 
   const handleSave = async () => {
@@ -32,6 +158,7 @@ export default function VendorProfilePage() {
     try {
       const updated = await vendorsService.updateProfile({
         vendor_business_name:     profile.vendor_business_name,
+        vendor_category:          profile.vendor_category,
         vendor_short_description: profile.vendor_short_description,
         vendor_contact_person:    profile.vendor_contact_person,
         vendor_location:          profile.vendor_location,
@@ -108,6 +235,21 @@ export default function VendorProfilePage() {
                 placeholder="Nama toko / usaha"
                 className="bg-white/5 border-white/10 backdrop-blur-sm focus:border-primary/40 focus:ring-primary/20 rounded-xl"
               />
+            </div>
+
+            {/* Kategori */}
+            <div className="grid gap-1.5">
+              <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <Tag size={11} /> Kategori Toko
+              </Label>
+              <CategorySelect
+                categories={categories}
+                value={profile?.vendor_category ?? null}
+                onChange={(id) => setProfile(p => p ? { ...p, vendor_category: id } : p)}
+              />
+              <p className="text-[11px] text-muted-foreground/50">
+                Kategori menentukan bagaimana toko kamu ditampilkan ke guide.
+              </p>
             </div>
 
             {/* Deskripsi */}

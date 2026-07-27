@@ -28,6 +28,7 @@ export interface VendorProfile {
 
 export interface VendorUpdatePayload {
   vendor_business_name?: string | null
+  vendor_category?: number | null
   vendor_location?: string | null
   vendor_contact_person?: string | null
   vendor_website?: string | null
