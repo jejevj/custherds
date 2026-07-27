@@ -17,11 +17,10 @@ from app.schemas.webmail import (
     SendEmailResponse,
 )
 
-# redirect_slashes=False → mencegah 307 redirect yang strip CORS header
 router = APIRouter(redirect_slashes=False)
 
 
-# ── List emails ─────────────────────────────────────────────────────────────
+# ── List emails ────────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=PaginatedEmailMessages)
 @router.get("/", response_model=PaginatedEmailMessages, include_in_schema=False)
@@ -57,6 +56,9 @@ def list_emails(
             "received_at":    msg.received_at,
             "created_at":     msg.created_at,
             "has_attachments": bool(msg.attachments),
+            # ✔ Sertakan body agar history preview bisa tampil tanpa fetch ulang
+            "body_text":      msg.body_text,
+            "body_html":      msg.body_html,
         })
 
     return PaginatedEmailMessages(
@@ -68,7 +70,7 @@ def list_emails(
     )
 
 
-# ── Send ──────────────────────────────────────────────────────────────────────
+# ── Send ────────────────────────────────────────────────────────────────────────
 
 @router.post("/send", response_model=SendEmailResponse, status_code=status.HTTP_201_CREATED)
 def send_email(payload: SendEmailPayload, db: Session = Depends(get_db)):
@@ -105,7 +107,7 @@ def send_email(payload: SendEmailPayload, db: Session = Depends(get_db)):
 
     try:
         password = decrypt_password(config.password_encrypted)
-        all_rcpt = [str(a) for a in (payload.to + payload.cc + payload.bcc)]
+        all_rcpt = [str(a) for a in (payload.to + (payload.cc or []) + (payload.bcc or []))]
         with smtplib.SMTP(config.host, config.port, timeout=30) as server:
             if config.use_tls:
                 server.starttls()
@@ -121,8 +123,8 @@ def send_email(payload: SendEmailPayload, db: Session = Depends(get_db)):
         from_address=config.from_address,
         from_name=config.from_name,
         to_addresses=[str(a) for a in payload.to],
-        cc_addresses=[str(a) for a in payload.cc],
-        bcc_addresses=[str(a) for a in payload.bcc],
+        cc_addresses=[str(a) for a in (payload.cc or [])],
+        bcc_addresses=[str(a) for a in (payload.bcc or [])],
         subject=payload.subject,
         body_text=payload.body_text,
         body_html=payload.body_html,
@@ -136,7 +138,7 @@ def send_email(payload: SendEmailPayload, db: Session = Depends(get_db)):
     return SendEmailResponse(success=True, message_id=msg_id)
 
 
-# ── Detail ──────────────────────────────────────────────────────────────────
+# ── Detail ──────────────────────────────────────────────────────────────────────
 
 @router.get("/{email_id}", response_model=EmailMessageOut)
 def get_email(email_id: int, db: Session = Depends(get_db)):
@@ -150,7 +152,7 @@ def get_email(email_id: int, db: Session = Depends(get_db)):
     return msg
 
 
-# ── Patch actions ─────────────────────────────────────────────────────────────
+# ── Patch actions ───────────────────────────────────────────────────────────────────
 
 @router.patch("/{email_id}/read", response_model=EmailMessageOut)
 def mark_read(email_id: int, payload: MarkReadPayload, db: Session = Depends(get_db)):
