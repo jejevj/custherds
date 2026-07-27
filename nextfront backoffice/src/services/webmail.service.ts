@@ -2,9 +2,9 @@
  * webmail.service.ts
  * Models & API calls untuk fitur Webmail (inbox, send email, email config)
  */
-import api from '@/lib/axios'
+import { api } from '@/services/api'
 
-// ─── Models ──────────────────────────────────────────────────────────────────
+// ─── Models ────────────────────────────────────────────────────────────────────
 
 /** Satu pesan email di inbox */
 export interface EmailMessage {
@@ -120,46 +120,48 @@ export interface PaginatedEmails {
 export const webmailService = {
   // ── Inbox ──
   listEmails: (params?: ListEmailsParams): Promise<PaginatedEmails> =>
-    api.get('/webmail/emails', { params }).then(r => r.data),
+    api.get<PaginatedEmails>('/webmail/emails', {
+      params: params as Record<string, string | number | boolean | undefined>,
+    }),
 
   getEmail: (id: number): Promise<EmailMessage> =>
-    api.get(`/webmail/emails/${id}`).then(r => r.data),
+    api.get<EmailMessage>(`/webmail/emails/${id}`),
 
   markRead: (id: number, is_read = true): Promise<EmailMessage> =>
-    api.patch(`/webmail/emails/${id}/read`, { is_read }).then(r => r.data),
+    api.patch<EmailMessage>(`/webmail/emails/${id}/read`, { is_read }),
 
   markStarred: (id: number, is_starred: boolean): Promise<EmailMessage> =>
-    api.patch(`/webmail/emails/${id}/star`, { is_starred }).then(r => r.data),
+    api.patch<EmailMessage>(`/webmail/emails/${id}/star`, { is_starred }),
 
   moveFolder: (id: number, folder: EmailMessage['folder']): Promise<EmailMessage> =>
-    api.patch(`/webmail/emails/${id}/folder`, { folder }).then(r => r.data),
+    api.patch<EmailMessage>(`/webmail/emails/${id}/folder`, { folder }),
 
   deleteEmail: (id: number): Promise<void> =>
-    api.delete(`/webmail/emails/${id}`).then(() => undefined),
+    api.delete<void>(`/webmail/emails/${id}`),
 
   // ── Send ──
   sendEmail: (payload: SendEmailPayload): Promise<SendEmailResponse> =>
-    api.post('/webmail/send', payload).then(r => r.data),
+    api.post<SendEmailResponse>('/webmail/send', payload),
 
   // ── Config ──
   listConfigs: (): Promise<EmailConfig[]> =>
-    api.get('/webmail/configs').then(r => r.data),
+    api.get<EmailConfig[]>('/webmail/configs'),
 
   getConfig: (id: number): Promise<EmailConfig> =>
-    api.get(`/webmail/configs/${id}`).then(r => r.data),
+    api.get<EmailConfig>(`/webmail/configs/${id}`),
 
   createConfig: (payload: EmailConfigPayload): Promise<EmailConfig> =>
-    api.post('/webmail/configs', payload).then(r => r.data),
+    api.post<EmailConfig>('/webmail/configs', payload),
 
   updateConfig: (id: number, payload: Partial<EmailConfigPayload>): Promise<EmailConfig> =>
-    api.put(`/webmail/configs/${id}`, payload).then(r => r.data),
+    api.put<EmailConfig>(`/webmail/configs/${id}`, payload),
 
   deleteConfig: (id: number): Promise<void> =>
-    api.delete(`/webmail/configs/${id}`).then(() => undefined),
+    api.delete<void>(`/webmail/configs/${id}`),
 
   testConfig: (payload: TestEmailConfigPayload): Promise<TestEmailConfigResponse> =>
-    api.post('/webmail/configs/test', payload).then(r => r.data),
+    api.post<TestEmailConfigResponse>('/webmail/configs/test', payload),
 
   setDefault: (id: number): Promise<EmailConfig> =>
-    api.patch(`/webmail/configs/${id}/default`).then(r => r.data),
+    api.patch<EmailConfig>(`/webmail/configs/${id}/default`, {}),
 }
