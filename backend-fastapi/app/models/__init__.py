@@ -1,6 +1,7 @@
 from app.models.user import User
 from app.models.guide import Guide
 from app.models.vendor import Vendor
+from app.models.vendor_category import VendorCategory
 from app.models.product import Product
 from app.models.package import Package
 from app.models.booking import Booking
