@@ -166,25 +166,32 @@ export const webmailService = {
     api.delete<void>(`/webmail/emails/${id}`),
 
   // ── Ambil daftar penerima per grup ────────────────────────────────────────
+  // Endpoint yang benar:
+  //   GET /api/v1/admin/guides   → list semua guide (admin only)
+  //   GET /api/v1/admin/vendors  → list semua vendor (admin only)
+  // Bukan /guides atau /vendors langsung (itu 404).
+
   listGuides: (): Promise<RecipientUser[]> =>
-    api.get<any>('/guides', { params: { per_page: 500, page: 1 } }).then(r => {
-      const items = (r as any)?.items ?? r ?? []
-      return (items as any[]).map((g: any) => ({
-        id: g.id,
-        email: g.user?.email ?? g.email ?? '',
-        full_name: g.user?.full_name ?? g.full_name ?? g.name ?? '',
-        role: 'guide' as const,
-      })).filter((u: RecipientUser) => !!u.email)
-    }),
+    api.get<any[]>('/admin/guides').then(rows =>
+      rows
+        .filter((g: any) => !!g.user_email)
+        .map((g: any): RecipientUser => ({
+          id:        g.guide_id ?? g.user_id,
+          email:     g.user_email,
+          full_name: g.user_name ?? '',
+          role:      'guide',
+        }))
+    ),
 
   listVendors: (): Promise<RecipientUser[]> =>
-    api.get<any>('/vendors', { params: { per_page: 500, page: 1 } }).then(r => {
-      const items = (r as any)?.items ?? r ?? []
-      return (items as any[]).map((v: any) => ({
-        id: v.id,
-        email: v.user?.email ?? v.email ?? '',
-        full_name: v.user?.full_name ?? v.full_name ?? v.vendor_business_name ?? '',
-        role: 'vendor' as const,
-      })).filter((u: RecipientUser) => !!u.email)
-    }),
+    api.get<any[]>('/admin/vendors').then(rows =>
+      rows
+        .filter((v: any) => !!v.user_email)
+        .map((v: any): RecipientUser => ({
+          id:        v.vendor_id ?? v.user_id,
+          email:     v.user_email,
+          full_name: v.vendor_business_name ?? v.user_name ?? '',
+          role:      'vendor',
+        }))
+    ),
 }
