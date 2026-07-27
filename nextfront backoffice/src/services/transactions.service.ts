@@ -38,6 +38,12 @@ export interface TransactionInvoiceResponse {
   xendit_invoice_id: string | null
   qris_string: string | null
   doku_reference_no: string | null
+  /** Komisi Guide + Fee Platform (sebelum gross-up MDR) */
+  tagihan_net: string | null
+  /** Potongan MDR QRIS 0.7% yang ditanggung vendor */
+  mdr_amount: string | null
+  /** Nominal QR yang harus di-scan vendor = tagihan_net + mdr_amount */
+  tagihan_gross: string | null
   message: string
 }
 

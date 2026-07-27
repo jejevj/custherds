@@ -28,6 +28,13 @@ interface PaymentStatusResponse {
   settled_at: string | null
 }
 
+// MDR info yang disimpan dari response approve/retry/invoice-url
+interface MdrInfo {
+  tagihan_net: string | null
+  mdr_amount: string | null
+  tagihan_gross: string | null
+}
+
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
   confirmed: "default",
   pending_vendor: "secondary",
@@ -206,6 +213,35 @@ function SettlementWarningBanner() {
   )
 }
 
+// ── MDR Info Banner (muncul saat ada tagihan_gross dari API) ─────────────────────────
+function MdrInfoBanner({ mdr }: { mdr: MdrInfo }) {
+  if (!mdr.tagihan_gross || !mdr.mdr_amount) return null
+  return (
+    <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 px-4 py-3 space-y-2 text-sm">
+      <p className="text-xs font-medium text-yellow-400 uppercase tracking-wide">Rincian Tagihan QRIS</p>
+      <div className="space-y-1.5">
+        <div className="flex justify-between text-muted-foreground">
+          <span>Komisi Guide + Fee Platform</span>
+          <span>{formatRupiah(mdr.tagihan_net)}</span>
+        </div>
+        <div className="flex justify-between text-yellow-400">
+          <span>MDR QRIS (0.7%, ditanggung vendor)</span>
+          <span>+ {formatRupiah(mdr.mdr_amount)}</span>
+        </div>
+        <div className="border-t border-white/10 pt-1.5 flex justify-between font-bold text-orange-300">
+          <span>Total yang Discan</span>
+          <span>{formatRupiah(mdr.tagihan_gross)}</span>
+        </div>
+      </div>
+      <p className="text-[11px] text-muted-foreground leading-relaxed">
+        Biaya MDR (Merchant Discount Rate) QRIS 0.7% dibebankan ke vendor sesuai
+        ketentuan Bank Indonesia. Setelah Anda scan dan bayar nominal di atas,
+        DOKU akan mendistribusikan komisi guide + fee platform secara otomatis.
+      </p>
+    </div>
+  )
+}
+
 // ── Main Component ───────────────────────────────────────────────────────────────────
 export default function BookingDetailContent() {
   const { id } = useParams<{ id: string }>()
@@ -230,10 +266,10 @@ export default function BookingDetailContent() {
   const [dokuRefNo, setDokuRefNo]         = useState<string | null>(null)
   const [showQrisModal, setShowQrisModal] = useState(false)
 
+  // MDR info dari response approve / retry / invoice-url
+  const [mdrInfo, setMdrInfo] = useState<MdrInfo>({ tagihan_net: null, mdr_amount: null, tagihan_gross: null })
+
   // ── Settlement status guide ──────────────────────────────────────────────
-  // null  = belum di-fetch / tidak diketahui
-  // true  = siap (bank_settlement_id sudah ada)
-  // false = belum siap
   const [guideSettlementReady, setGuideSettlementReady]     = useState<boolean | null>(null)
   const [guideSettlementChecking, setGuideSettlementChecking] = useState(false)
 
@@ -258,6 +294,15 @@ export default function BookingDetailContent() {
           if (t?.status === "payment_pending" && t?.xendit_invoice_url) {
             setQrisString(t.xendit_invoice_url)
             setDokuRefNo(t.xendit_invoice_id ?? null)
+            // Coba ambil MDR info dari invoice-url endpoint
+            try {
+              const inv = await transactionsService.getInvoiceUrl(t.id)
+              setMdrInfo({
+                tagihan_net:   inv.tagihan_net,
+                mdr_amount:    inv.mdr_amount,
+                tagihan_gross: inv.tagihan_gross,
+              })
+            } catch { /* tidak blocking */ }
           }
         } catch { /* tx belum ada */ }
       }
@@ -268,21 +313,18 @@ export default function BookingDetailContent() {
     }
   }, [id])
 
-  // ── Fetch settlement status guide saat booking tersedia ─────────────────
   const checkGuideSettlement = useCallback(async (guideId: string) => {
     setGuideSettlementChecking(true)
     try {
       const result = await guidesService.getSettlementStatus(guideId)
       setGuideSettlementReady(result.has_bank_settlement_id)
     } catch {
-      // Jika gagal fetch, biarkan null — tombol tidak akan di-disable permanen
       setGuideSettlementReady(null)
     } finally {
       setGuideSettlementChecking(false)
     }
   }, [])
 
-  // ── Polling: hit /payment-status agar backend query DOKU ─────────────────────────
   const startPolling = useCallback((txId: string) => {
     if (pollTimerRef.current) return
     setPolling(true)
@@ -336,7 +378,6 @@ export default function BookingDetailContent() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  // Jalankan pengecekan settlement saat booking sudah loaded & status pending_completion
   useEffect(() => {
     if (booking?.guide_id && booking.status === "pending_completion") {
       checkGuideSettlement(booking.guide_id)
@@ -364,6 +405,11 @@ export default function BookingDetailContent() {
         setDokuRefNo(result.doku_reference_no ?? null)
         setShowQrisModal(true)
       }
+      setMdrInfo({
+        tagihan_net:   result.tagihan_net,
+        mdr_amount:    result.mdr_amount,
+        tagihan_gross: result.tagihan_gross,
+      })
       toast.success("QRIS baru berhasil dibuat!", { description: "Silakan scan QR untuk menyelesaikan pembayaran.", duration: 5000 })
     } catch (err: unknown) {
       const detail = (err as { detail?: string })?.detail ?? "Gagal membuat QRIS baru."
@@ -403,7 +449,6 @@ export default function BookingDetailContent() {
     finally { setSubmitting(false) }
   }
 
-  // ── Approve transaksi — QRIS only ────────────────────────────────────────────
   const handleTxApproveQris = async () => {
     if (!tx) return
     setSubmitting(true)
@@ -415,6 +460,11 @@ export default function BookingDetailContent() {
         setDokuRefNo(result.doku_reference_no ?? null)
         setShowQrisModal(true)
       }
+      setMdrInfo({
+        tagihan_net:   result.tagihan_net,
+        mdr_amount:    result.mdr_amount,
+        tagihan_gross: result.tagihan_gross,
+      })
       const updated = await bookingsService.get(booking!.id)
       setBooking(updated)
       setShowPayConfirm(false)
@@ -448,7 +498,6 @@ export default function BookingDetailContent() {
   const txPaymentPending  = tx?.status === "payment_pending"
   const txPaymentFailed   = tx?.status === "payment_failed"
 
-  // Tombol QRIS di-disable jika: settlement belum ready (false) atau sedang dicek
   const qrisBlocked = guideSettlementReady === false
   const qrisLoading = guideSettlementChecking
 
@@ -461,6 +510,9 @@ export default function BookingDetailContent() {
 
   const hasTxPanel = (isNeedTxReview || booking.status === "completed") && !!tx
   const activeQris = txPaymentPending ? (qrisString ?? tx?.xendit_invoice_url) : null
+
+  // Apakah harus tampilkan MDR info (pay_as_you_go dan ada tagihan_gross)
+  const showMdrInfo = tx?.payment_method === "pay_as_you_go" && !!mdrInfo.tagihan_gross
 
   return (
     <div className="w-full space-y-5 py-6 px-4">
@@ -572,7 +624,6 @@ export default function BookingDetailContent() {
           {actionError && <p className="text-xs text-red-500">{actionError}</p>}
 
           <div className="flex flex-wrap gap-3">
-            {/* ─ Approve / Tolak booking ─ */}
             {isPending && !showReject && (
               <>
                 <Button variant="destructive" onClick={() => setShowReject(true)}><XCircle size={14} className="mr-1" /> Tolak</Button>
@@ -592,14 +643,12 @@ export default function BookingDetailContent() {
               </div>
             )}
 
-            {/* ─ Checkin ─ */}
             {isConfirmed && (
               <Button onClick={handleCheckin} disabled={submitting} className="bg-blue-600 hover:bg-blue-700 text-white">
                 <MapPin size={14} className="mr-1" />{submitting ? "Memproses..." : "Checkin Guide"}
               </Button>
             )}
 
-            {/* ─ Approve transaksi: tombol awal ─ */}
             {isNeedTxReview && txPendingApproval && !showPayConfirm && !showTxReject && (
               <>
                 <Button variant="destructive" onClick={() => setShowTxReject(true)} disabled={submitting}>
@@ -618,14 +667,12 @@ export default function BookingDetailContent() {
               </>
             )}
 
-            {/* ─ Warning settlement sebelum form konfirmasi QRIS ─ */}
             {isNeedTxReview && txPendingApproval && !showPayConfirm && !showTxReject && qrisBlocked && (
               <div className="w-full">
                 <SettlementWarningBanner />
               </div>
             )}
 
-            {/* ─ Konfirmasi bayar via QRIS ─ */}
             {isNeedTxReview && txPendingApproval && showPayConfirm && (
               <div className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-4 space-y-3">
                 <div className="flex items-center gap-2">
@@ -634,6 +681,7 @@ export default function BookingDetailContent() {
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Sistem akan generate QRIS DOKU. Scan QR untuk menyelesaikan pembayaran komisi guide + fee platform.
+                  <strong className="text-yellow-400"> Nominal scan akan lebih besar dari tagihan net karena termasuk biaya MDR QRIS 0.7%.</strong>
                 </p>
                 <div className="flex gap-3">
                   <Button variant="outline" size="sm" onClick={() => setShowPayConfirm(false)} disabled={submitting}>
@@ -650,14 +698,10 @@ export default function BookingDetailContent() {
                       : <><QrCode size={14} className="mr-1" /> Generate & Bayar QRIS</>}
                   </Button>
                 </div>
-                {/* Warning di dalam panel konfirmasi jika settlement belum ada */}
-                {qrisBlocked && (
-                  <SettlementWarningBanner />
-                )}
+                {qrisBlocked && <SettlementWarningBanner />}
               </div>
             )}
 
-            {/* ─ Tolak transaksi form ─ */}
             {isNeedTxReview && txPendingApproval && showTxReject && (
               <div className="w-full space-y-2">
                 <Label>Alasan Penolakan Transaksi <span className="text-red-500">*</span></Label>
@@ -669,7 +713,6 @@ export default function BookingDetailContent() {
               </div>
             )}
 
-            {/* ─ Bayar Ulang (QRIS failed) ─ */}
             {isNeedTxReview && txPaymentFailed && (
               <Button
                 onClick={handleRetryPayment}
@@ -728,15 +771,38 @@ export default function BookingDetailContent() {
                 </div>
               </div>
 
-              <div className="rounded-lg border border-orange-500/40 bg-orange-500/5 px-4 py-3">
-                <p className="text-xs text-muted-foreground mb-1">Tagihan ke Vendor</p>
+              {/* ── Tagihan ke Vendor ── */}
+              <div className="rounded-lg border border-orange-500/40 bg-orange-500/5 px-4 py-3 space-y-2">
+                <p className="text-xs text-muted-foreground">Tagihan ke Vendor</p>
                 <div className="flex justify-between items-center">
                   <span className="text-sm">Komisi Guide + Fee Platform</span>
-                  <span className="text-lg font-bold text-orange-400">
+                  <span className="font-semibold">
                     {formatRupiah(Number(tx!.guide_commission) + Number(tx!.platform_fee))}
                   </span>
                 </div>
+                {showMdrInfo && (
+                  <>
+                    <div className="flex justify-between items-center text-yellow-400 text-sm">
+                      <span>MDR QRIS (0.7%)</span>
+                      <span>+ {formatRupiah(mdrInfo.mdr_amount)}</span>
+                    </div>
+                    <div className="border-t border-orange-500/30 pt-2 flex justify-between items-center">
+                      <span className="text-sm font-semibold">Total Scan QRIS</span>
+                      <span className="text-xl font-bold text-orange-400">
+                        {formatRupiah(mdrInfo.tagihan_gross)}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Biaya MDR QRIS 0.7% dibebankan ke vendor sesuai ketentuan Bank Indonesia.
+                    </p>
+                  </>
+                )}
               </div>
+
+              {/* MDR Banner detail (hanya saat payment_pending) */}
+              {showMdrInfo && txPaymentPending && (
+                <MdrInfoBanner mdr={mdrInfo} />
+              )}
 
               {/* QRIS aktif */}
               {txPaymentPending && activeQris && (
