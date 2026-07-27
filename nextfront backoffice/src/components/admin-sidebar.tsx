@@ -10,8 +10,8 @@ import {
 } from "@/components/ui/sidebar"
 import {
   House, Users, ShoppingBag, Landmark,
-  CircleUserRound, LifeBuoyIcon, SendIcon, Map, Tag,
-  Mail, MailOpen, ServerCog,
+  CircleUserRound, LifeBuoyIcon, SendIcon, Map,
+  Mail, History, ServerCog,
 } from "lucide-react"
 import { ScrollArea } from "./ui/scroll-area"
 import Image from "next/image"
@@ -54,9 +54,9 @@ const navMain = [
   {
     title: "Webmail", url: "#", icon: <Mail />,
     items: [
-      { title: "Inbox",         url: "/admin/webmail" },
-      { title: "Kirim Email",   url: "/admin/webmail/send" },
-      { title: "Email Config",  url: "/admin/webmail/config" },
+      { title: "Kirim Email",     url: "/admin/webmail/send" },
+      { title: "History Email",   url: "/admin/webmail/history" },
+      { title: "Email Config",    url: "/admin/webmail/config" },
     ],
   },
   { title: "Profile", url: "/admin/profile", icon: <CircleUserRound /> },
