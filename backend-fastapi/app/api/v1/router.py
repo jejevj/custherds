@@ -17,6 +17,7 @@ from app.api.v1.endpoints import (
     payment_gateway_config,
     settlement_bank_account,
     vendor_categories,
+    vendor_areas,
 )
 
 api_router = APIRouter()
@@ -28,6 +29,7 @@ api_router.include_router(uploads.router,                       prefix="/uploads
 api_router.include_router(guides.router,                        prefix="/guides",                        tags=["Guides"])
 api_router.include_router(vendors.router,                       prefix="/vendors",                       tags=["Vendors"])
 api_router.include_router(vendor_categories.router,             prefix="/vendor-categories",             tags=["Vendor Categories"])
+api_router.include_router(vendor_areas.router,                  prefix="/vendor-areas",                  tags=["Vendor Areas"])
 api_router.include_router(packages.router,                      prefix="/packages",                      tags=["Packages"])
 api_router.include_router(bookings.router,                      prefix="/bookings",                      tags=["Bookings"])
 api_router.include_router(transactions.router,                  prefix="/transactions",                  tags=["Transactions"])
