@@ -19,6 +19,7 @@ from app.api.v1.endpoints import (
     vendor_categories,
     vendor_areas,
 )
+from app.api.v1.endpoints import webmail_configs, webmail_emails
 
 api_router = APIRouter()
 
@@ -40,3 +41,6 @@ api_router.include_router(webhooks.router,                      prefix="/webhook
 api_router.include_router(payments.router,                      prefix="/payments",                      tags=["Payments"])
 api_router.include_router(payment_gateway_config.router,        prefix="/admin/payment-gateway-config",  tags=["Admin"])
 api_router.include_router(settlement_bank_account.router,       prefix="/settlement-bank-account",       tags=["Settlement Bank Account"])
+# Webmail
+api_router.include_router(webmail_configs.router,               prefix="/webmail/configs",               tags=["Webmail"])
+api_router.include_router(webmail_emails.router,                prefix="/webmail/emails",                tags=["Webmail"])
