@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/sidebar"
 import {
   House, Users, ShoppingBag, Landmark,
-  CircleUserRound, LifeBuoyIcon, SendIcon, Map,
+  CircleUserRound, LifeBuoyIcon, SendIcon, Map, Tag,
 } from "lucide-react"
 import { ScrollArea } from "./ui/scroll-area"
 import Image from "next/image"
@@ -36,6 +36,7 @@ const navMain = [
       { title: "Pending Approval", url: "/admin/vendors?status=pending" },
       { title: "Approved",         url: "/admin/vendors?status=approved" },
       { title: "Rejected",         url: "/admin/vendors?status=rejected" },
+      { title: "Vendor Categories", url: "/admin/vendor-categories" },
     ],
   },
   {
