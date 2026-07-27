@@ -9,7 +9,7 @@ from app.models.email_config import EmailProvider
 from app.models.email_message import EmailFolder
 
 
-# ─── EmailAttachment ──────────────────────────────────────────────────────────
+# ─── EmailAttachment ─────────────────────────────────────────────────────────────────
 
 class EmailAttachmentOut(BaseModel):
     id:         int
@@ -21,7 +21,7 @@ class EmailAttachmentOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ─── EmailMessage ─────────────────────────────────────────────────────────────
+# ─── EmailMessage ─────────────────────────────────────────────────────────────────
 
 class EmailMessageOut(BaseModel):
     id:            int
@@ -46,7 +46,7 @@ class EmailMessageOut(BaseModel):
 
 
 class EmailMessageListItem(BaseModel):
-    """Versi ringkas untuk list inbox — tanpa body."""
+    """Item list email — include body agar preview langsung bisa tampil tanpa fetch ulang."""
     id:           int
     message_id:   Optional[str]
     from_address: str
@@ -59,6 +59,9 @@ class EmailMessageListItem(BaseModel):
     received_at:  Optional[datetime]
     created_at:   datetime
     has_attachments: bool = False
+    # ✔ Body fields — dibutuhkan untuk preview di history
+    body_text:    Optional[str] = None
+    body_html:    Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -83,7 +86,7 @@ class MoveFolderPayload(BaseModel):
     folder: EmailFolder
 
 
-# ─── SendEmail ────────────────────────────────────────────────────────────────
+# ─── SendEmail ─────────────────────────────────────────────────────────────────────
 
 class SendEmailPayload(BaseModel):
     to:          List[EmailStr]
@@ -110,7 +113,7 @@ class SendEmailResponse(BaseModel):
     detail:     Optional[str] = None
 
 
-# ─── EmailConfig ──────────────────────────────────────────────────────────────
+# ─── EmailConfig ───────────────────────────────────────────────────────────────────
 
 class EmailConfigOut(BaseModel):
     id:           int
@@ -137,7 +140,7 @@ class EmailConfigCreate(BaseModel):
     port:         Optional[int]  = None
     use_tls:      bool           = True
     username:     str
-    password:     str            # plain, akan diencrypt sebelum disimpan
+    password:     str
     from_address: EmailStr
     from_name:    Optional[str]  = None
     is_default:   bool           = False
@@ -145,17 +148,17 @@ class EmailConfigCreate(BaseModel):
 
 
 class EmailConfigUpdate(BaseModel):
-    name:         Optional[str]          = None
-    provider:     Optional[EmailProvider]= None
-    host:         Optional[str]          = None
-    port:         Optional[int]          = None
-    use_tls:      Optional[bool]         = None
-    username:     Optional[str]          = None
-    password:     Optional[str]          = None  # kosong = tidak ubah password
-    from_address: Optional[EmailStr]     = None
-    from_name:    Optional[str]          = None
-    is_default:   Optional[bool]         = None
-    is_active:    Optional[bool]         = None
+    name:         Optional[str]           = None
+    provider:     Optional[EmailProvider] = None
+    host:         Optional[str]           = None
+    port:         Optional[int]           = None
+    use_tls:      Optional[bool]          = None
+    username:     Optional[str]           = None
+    password:     Optional[str]           = None
+    from_address: Optional[EmailStr]      = None
+    from_name:    Optional[str]           = None
+    is_default:   Optional[bool]          = None
+    is_active:    Optional[bool]          = None
 
 
 class TestEmailConfigPayload(BaseModel):
