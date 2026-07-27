@@ -1,4 +1,4 @@
-import api from './api'
+import { api } from './api'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -72,49 +72,49 @@ export type RecipientGroup = 'guides' | 'vendors' | 'all' | 'custom'
 export const webmailService = {
   // Konfigurasi SMTP
   listConfigs: (): Promise<EmailConfig[]> =>
-    api.get('/webmail/configs').then(r => r.data),
+    api.get<EmailConfig[]>('/webmail/configs').then(r => r),
 
   createConfig: (data: Partial<EmailConfig> & { password: string }): Promise<EmailConfig> =>
-    api.post('/webmail/configs', data).then(r => r.data),
+    api.post<EmailConfig>('/webmail/configs', data).then(r => r),
 
   updateConfig: (id: number, data: Partial<EmailConfig> & { password?: string }): Promise<EmailConfig> =>
-    api.put(`/webmail/configs/${id}`, data).then(r => r.data),
+    api.put<EmailConfig>(`/webmail/configs/${id}`, data).then(r => r),
 
   deleteConfig: (id: number): Promise<void> =>
-    api.delete(`/webmail/configs/${id}`),
+    api.delete<void>(`/webmail/configs/${id}`),
 
   testConfig: (config_id: number, send_to: string) =>
-    api.post('/webmail/configs/test', { config_id, send_to }).then(r => r.data),
+    api.post('/webmail/configs/test', { config_id, send_to }).then(r => r),
 
   // Email
-  // FIX: endpoint yang benar adalah /webmail/emails/send — bukan /webmail/send
+  // Endpoint yang benar: /webmail/emails/send — bukan /webmail/send
   sendEmail: (payload: SendEmailPayload): Promise<SendEmailResponse> =>
-    api.post('/webmail/emails/send', payload).then(r => r.data),
+    api.post<SendEmailResponse>('/webmail/emails/send', payload).then(r => r),
 
   listEmails: (folder = 'inbox', page = 1, per_page = 20): Promise<PaginatedEmailMessages> =>
-    api.get('/webmail/emails', { params: { folder, page, per_page } }).then(r => r.data),
+    api.get<PaginatedEmailMessages>('/webmail/emails', { params: { folder, page, per_page } }).then(r => r),
 
   getEmail: (id: number): Promise<EmailMessage> =>
-    api.get(`/webmail/emails/${id}`).then(r => r.data),
+    api.get<EmailMessage>(`/webmail/emails/${id}`).then(r => r),
 
   markRead: (id: number, is_read: boolean) =>
-    api.patch(`/webmail/emails/${id}/read`, { is_read }).then(r => r.data),
+    api.patch(`/webmail/emails/${id}/read`, { is_read }).then(r => r),
 
   markStarred: (id: number, is_starred: boolean) =>
-    api.patch(`/webmail/emails/${id}/star`, { is_starred }).then(r => r.data),
+    api.patch(`/webmail/emails/${id}/star`, { is_starred }).then(r => r),
 
   moveFolder: (id: number, folder: string) =>
-    api.patch(`/webmail/emails/${id}/move`, { folder }).then(r => r.data),
+    api.patch(`/webmail/emails/${id}/move`, { folder }).then(r => r),
 
   deleteEmail: (id: number): Promise<void> =>
-    api.delete(`/webmail/emails/${id}`),
+    api.delete<void>(`/webmail/emails/${id}`),
 
-  // ── Ambil daftar penerima per grup ─────────────────────────────────────────
+  // ── Ambil daftar penerima per grup ────────────────────────────────────────
   // Menggunakan endpoint /guides dan /vendors yang sudah ada
   listGuides: (): Promise<RecipientUser[]> =>
-    api.get('/guides', { params: { per_page: 500, page: 1 } }).then(r => {
-      const items = r.data?.items ?? r.data ?? []
-      return items.map((g: any) => ({
+    api.get<any>('/guides', { params: { per_page: 500, page: 1 } }).then(r => {
+      const items = (r as any)?.items ?? r ?? []
+      return (items as any[]).map((g: any) => ({
         id: g.id,
         email: g.user?.email ?? g.email ?? '',
         full_name: g.user?.full_name ?? g.full_name ?? g.name ?? '',
@@ -123,9 +123,9 @@ export const webmailService = {
     }),
 
   listVendors: (): Promise<RecipientUser[]> =>
-    api.get('/vendors', { params: { per_page: 500, page: 1 } }).then(r => {
-      const items = r.data?.items ?? r.data ?? []
-      return items.map((v: any) => ({
+    api.get<any>('/vendors', { params: { per_page: 500, page: 1 } }).then(r => {
+      const items = (r as any)?.items ?? r ?? []
+      return (items as any[]).map((v: any) => ({
         id: v.id,
         email: v.user?.email ?? v.email ?? '',
         full_name: v.user?.full_name ?? v.full_name ?? v.vendor_business_name ?? '',
