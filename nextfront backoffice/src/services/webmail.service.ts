@@ -16,16 +16,16 @@ export interface EmailConfig {
   is_active: boolean
 }
 
-/** Payload untuk create / update konfigurasi SMTP */
+/** Payload untuk create konfigurasi SMTP (password wajib saat create) */
 export interface EmailConfigPayload {
   name: string
   provider: string
-  host: string
-  port: number
+  host?: string
+  port?: number
   use_tls?: boolean
   username: string
-  /** Wajib saat create; opsional saat update (kosongkan = tidak diubah) */
-  password?: string
+  /** Wajib saat create; kirim string kosong saat update jika tidak diubah */
+  password: string
   from_address: string
   from_name?: string
   is_default?: boolean
@@ -36,6 +36,14 @@ export interface EmailConfigPayload {
 export interface TestEmailConfigPayload {
   config_id: number
   send_to: string
+}
+
+/** Response dari endpoint test konfigurasi SMTP */
+export interface TestEmailConfigResponse {
+  success: boolean
+  latency_ms?: number
+  message?: string
+  detail?: string
 }
 
 export interface SendEmailPayload {
@@ -124,8 +132,12 @@ export const webmailService = {
   deleteConfig: (id: number): Promise<void> =>
     api.delete<void>(`/webmail/configs/${id}`),
 
-  testConfig: ({ config_id, send_to }: TestEmailConfigPayload) =>
-    api.post('/webmail/configs/test', { config_id, send_to }).then(r => r),
+  /** Set konfigurasi sebagai default — PATCH /webmail/configs/{id}/default */
+  setDefault: (id: number): Promise<EmailConfig> =>
+    api.patch<EmailConfig>(`/webmail/configs/${id}/default`, {}).then(r => r),
+
+  testConfig: (payload: TestEmailConfigPayload): Promise<TestEmailConfigResponse> =>
+    api.post<TestEmailConfigResponse>('/webmail/configs/test', payload).then(r => r),
 
   // Email
   sendEmail: (payload: SendEmailPayload): Promise<SendEmailResponse> =>
