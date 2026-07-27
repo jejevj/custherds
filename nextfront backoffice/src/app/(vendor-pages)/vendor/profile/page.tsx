@@ -223,7 +223,6 @@ export default function VendorProfilePage() {
   const [uploading,   setUploading]   = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  // ── Vendor Areas state ──
   const [kabupatens,  setKabupatens]  = useState<VendorAreaKabupaten[]>([])
   const [kecamatans,  setKecamatans]  = useState<VendorAreaKecamatan[]>([])
   const [kelurahans,  setKelurahans]  = useState<VendorAreaKelurahan[]>([])
@@ -265,16 +264,8 @@ export default function VendorProfilePage() {
     return kelurahans.filter((k) => k.kecamatan_id === selKec)
   }, [kelurahans, selKec])
 
-  const handleKabChange = (id: number | null) => {
-    setSelKab(id)
-    setSelKec(null)
-    setSelKel(null)
-  }
-
-  const handleKecChange = (id: number | null) => {
-    setSelKec(id)
-    setSelKel(null)
-  }
+  const handleKabChange = (id: number | null) => { setSelKab(id); setSelKec(null); setSelKel(null) }
+  const handleKecChange = (id: number | null) => { setSelKec(id); setSelKel(null) }
 
   const handleSave = async () => {
     if (!profile) return
@@ -283,8 +274,6 @@ export default function VendorProfilePage() {
       const updated = await vendorsService.updateProfile({
         vendor_business_name:     profile.vendor_business_name,
         vendor_category:          profile.vendor_category,
-        // vendor_area = id kelurahan (level paling spesifik)
-        // fallback ke kecamatan atau kabupaten jika belum dipilih sampai kelurahan
         vendor_area:              selKel ?? selKec ?? selKab ?? null,
         vendor_area_kabupaten:    selKab,
         vendor_area_kecamatan:    selKec,
@@ -358,7 +347,7 @@ export default function VendorProfilePage() {
 
       <div className="grid grid-cols-12 gap-6">
 
-        {/* KIRI col-8 */}
+        {/* ── KIRI col-8 ── */}
         <div className="col-span-12 lg:col-span-8 space-y-6">
 
           {/* Card Info Dasar */}
@@ -445,12 +434,7 @@ export default function VendorProfilePage() {
             </div>
           </section>
 
-          {/*
-            Card Area Layanan
-            FIX z-index: style overflow:visible agar dropdown tidak ter-clip
-            oleh batas card. Setiap kolom punya z-index bertingkat (30/20/10)
-            sehingga dropdown Kabupaten selalu tampil di atas kolom lainnya.
-          */}
+          {/* Card Area Layanan */}
           <section
             className={`${glass} p-6 space-y-4`}
             style={{ overflow: "visible" }}
@@ -463,7 +447,6 @@ export default function VendorProfilePage() {
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {/* Kabupaten — z-index 30 (tertinggi) */}
               <div className="grid gap-1.5" style={{ position: "relative", zIndex: 30 }}>
                 <Label className="text-xs text-muted-foreground">Kabupaten / Kota</Label>
                 <SimpleSelect
@@ -473,8 +456,6 @@ export default function VendorProfilePage() {
                   placeholder="Pilih kabupaten…"
                 />
               </div>
-
-              {/* Kecamatan — z-index 20 */}
               <div className="grid gap-1.5" style={{ position: "relative", zIndex: 20 }}>
                 <Label className="text-xs text-muted-foreground">Kecamatan</Label>
                 <SimpleSelect
@@ -485,8 +466,6 @@ export default function VendorProfilePage() {
                   disabled={!selKab}
                 />
               </div>
-
-              {/* Kelurahan — z-index 10 */}
               <div className="grid gap-1.5" style={{ position: "relative", zIndex: 10 }}>
                 <Label className="text-xs text-muted-foreground">Kelurahan / Desa</Label>
                 <SimpleSelect
@@ -499,7 +478,6 @@ export default function VendorProfilePage() {
               </div>
             </div>
 
-            {/* Summary badge area terpilih */}
             {selKab && (
               <div className="flex items-center gap-2 flex-wrap pt-1">
                 <MapPin size={12} className="text-primary/60 shrink-0" />
@@ -517,37 +495,7 @@ export default function VendorProfilePage() {
             )}
           </section>
 
-          {/* Card Pengaturan Booking */}
-          <section className={`${glass} p-6 space-y-4`}>
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground/70">
-              <Settings2 size={13} /> Pengaturan Booking
-            </div>
-            <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-              <div>
-                <p className="text-sm font-medium">Izinkan Direct Booking</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Jika dimatikan, guide wajib memilih package saat booking.
-                </p>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={profile?.allow_direct_booking ?? true}
-                onClick={() => setProfile(p => p ? { ...p, allow_direct_booking: !p.allow_direct_booking } : p)}
-                className={[
-                  "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent",
-                  "transition-colors focus-visible:outline-none",
-                  profile?.allow_direct_booking ? "bg-primary" : "bg-white/20",
-                ].join(" ")}
-              >
-                <span className={[
-                  "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg transition-transform",
-                  profile?.allow_direct_booking ? "translate-x-5" : "translate-x-0",
-                ].join(" ")} />
-              </button>
-            </div>
-          </section>
-
+          {/* Tombol Simpan di kiri bawah */}
           <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto px-10">
             {saving
               ? <><Loader2 size={14} className="animate-spin mr-2" />Menyimpan…</>
@@ -556,8 +504,10 @@ export default function VendorProfilePage() {
           </Button>
         </div>
 
-        {/* KANAN col-4 sticky */}
-        <div className="col-span-12 lg:col-span-4">
+        {/* ── KANAN col-4 ── */}
+        <div className="col-span-12 lg:col-span-4 space-y-6">
+
+          {/* Card Galeri Foto */}
           <section className={`${glass} p-6 space-y-4 sticky top-6`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground/70">
@@ -618,8 +568,39 @@ export default function VendorProfilePage() {
               Klik <span className="text-muted-foreground">Simpan Perubahan</span> setelah upload.
             </p>
           </section>
-        </div>
 
+          {/* Card Pengaturan Booking — dipindah ke sini di bawah Galeri */}
+          <section className={`${glass} p-6 space-y-4`}>
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground/70">
+              <Settings2 size={13} /> Pengaturan Booking
+            </div>
+            <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+              <div>
+                <p className="text-sm font-medium">Izinkan Direct Booking</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Jika dimatikan, guide wajib memilih package saat booking.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={profile?.allow_direct_booking ?? true}
+                onClick={() => setProfile(p => p ? { ...p, allow_direct_booking: !p.allow_direct_booking } : p)}
+                className={[
+                  "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent",
+                  "transition-colors focus-visible:outline-none",
+                  profile?.allow_direct_booking ? "bg-primary" : "bg-white/20",
+                ].join(" ")}
+              >
+                <span className={[
+                  "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg transition-transform",
+                  profile?.allow_direct_booking ? "translate-x-5" : "translate-x-0",
+                ].join(" ")} />
+              </button>
+            </div>
+          </section>
+
+        </div>
       </div>
     </div>
   )
