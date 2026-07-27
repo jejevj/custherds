@@ -1,7 +1,7 @@
 import uuid
 from typing import Any, List, Optional
 from datetime import datetime, timezone
-from decimal import Decimal, ROUND_DOWN
+from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -35,6 +35,12 @@ DEV_BANK_SETTLEMENT_ID = "BNK-0368-1784799585862"
 # Platform share: dari platform_fee, 5% untuk developer, sisanya 95% untuk operasional platform
 DEV_SHARE_PERCENT = Decimal("0.05")
 
+# ── MDR QRIS (Opsi C) ──────────────────────────────────────────────────────
+# MDR 0.7% ditanggung vendor: tagihan di-gross-up sehingga setelah DOKU
+# memotong MDR, net yang didistribusikan ke settlement items = tagihan asli.
+# Referensi: BI QRIS MDR standar merchant reguler = 0.7%
+QRIS_MDR_RATE = Decimal("0.007")
+
 
 def _fmt_rp(amount: Decimal) -> str:
     return f"Rp {int(amount):,}".replace(",", ".")
@@ -65,6 +71,32 @@ def _get_doku_base_url(gateway: PaymentGatewayConfig) -> str:
     return "https://api.doku.com" if gateway.is_production else "https://api-sandbox.doku.com"
 
 
+def _gross_up_mdr(tagihan_net: Decimal) -> tuple[Decimal, Decimal]:
+    """
+    Gross-up tagihan agar setelah DOKU potong MDR 0.7%, net yang
+    diterima = tagihan_net (nilai split asli).
+
+    Formula:  tagihan_gross = tagihan_net / (1 - QRIS_MDR_RATE)
+    Dibulatkan ke atas ke satuan rupiah (ROUND_HALF_UP).
+
+    Returns:
+        tagihan_gross : nominal yang di-scan vendor (lebih besar)
+        mdr_amount    : estimasi potongan MDR oleh DOKU
+
+    Contoh: tagihan_net = 75.000
+        → tagihan_gross = 75.529  (75.000 / 0.993, ROUND_HALF_UP)
+        → mdr_amount    =    529  (75.529 × 0.007)
+        → net diterima  = 75.000  ✓
+    """
+    tagihan_gross = (tagihan_net / (1 - QRIS_MDR_RATE)).quantize(
+        Decimal("1"), rounding=ROUND_HALF_UP
+    )
+    mdr_amount = (tagihan_gross * QRIS_MDR_RATE).quantize(
+        Decimal("1"), rounding=ROUND_HALF_UP
+    )
+    return tagihan_gross, mdr_amount
+
+
 async def _disburse_guide_commission(tx: Transaction, db: Session) -> None:
     guide = db.query(Guide).filter(Guide.id == tx.guide_id).first()
     if not guide:
@@ -91,15 +123,16 @@ async def _disburse_guide_commission(tx: Transaction, db: Session) -> None:
 
 def _build_settlement_items(tx: Transaction, guide: Optional[Guide]) -> list:
     """
-    Susun 3 settlement items untuk DOKU QRIS.
+    Susun 3 settlement items untuk DOKU QRIS — menggunakan nilai NET
+    (sebelum gross-up MDR). DOKU mendistribusikan net ini setelah
+    memotong MDR dari tagihan_gross yang di-scan vendor.
 
-    Contoh dengan platform_fee = Rp 25.000 & guide_commission = Rp 50.000:
-      1. Developer (5% dari platform_fee) → Rp 1.250   → DEV_BANK_SETTLEMENT_ID
-      2. Sisa platform_fee (95%)          → Rp 23.750   → DEV_BANK_SETTLEMENT_ID
-      3. Guide commission                 → Rp 50.000   → guide.bank_settlement_id
+    Distribusi platform_fee:
+      1. Developer  (5%)  → DEV_BANK_SETTLEMENT_ID
+      2. Platform   (95%) → DEV_BANK_SETTLEMENT_ID
+      3. Guide commission → guide.bank_settlement_id
 
-    Raises HTTPException 422 jika guide tidak memiliki bank_settlement_id.
-    bank_settlement_id bersifat REQUIRED — harus di-set admin sebelum transaksi QRIS bisa diproses.
+    Raises HTTPException 422 jika guide belum memiliki bank_settlement_id.
     """
     if not guide:
         logger.error("[Settlement] Guide tidak ditemukan untuk transaksi ini.")
@@ -109,9 +142,8 @@ def _build_settlement_items(tx: Transaction, guide: Optional[Guide]) -> list:
         )
 
     if not guide.bank_settlement_id:
-        guide_id_str = str(guide.id)
         logger.error(
-            f"[Settlement] Guide {guide_id_str} belum memiliki bank_settlement_id. "
+            f"[Settlement] Guide {guide.id} belum memiliki bank_settlement_id. "
             "QRIS tidak dapat di-generate."
         )
         raise HTTPException(
@@ -156,8 +188,20 @@ def _build_settlement_items(tx: Transaction, guide: Optional[Guide]) -> list:
     return items
 
 
-async def _create_doku_qris(tx: Transaction, tagihan: Decimal, db: Session) -> dict:
-    """Generate DOKU QRIS untuk TX. Return dict dengan qris_string, doku_ref, partner_ref."""
+async def _create_doku_qris(tx: Transaction, tagihan_net: Decimal, db: Session) -> dict:
+    """
+    Generate DOKU QRIS untuk TX.
+
+    Opsi C — MDR ditanggung vendor:
+      - tagihan_net  : nilai split asli (guide_commission + platform_fee)
+                       → dipakai sebagai settlement items (net)
+      - tagihan_gross: tagihan_net di-gross-up MDR 0.7%
+                       → nominal QR yang di-scan vendor
+      Setelah vendor scan & bayar tagihan_gross, DOKU potong MDR lalu
+      mendistribusikan tagihan_net ke settlement items secara otomatis.
+
+    Return dict: qris_string, doku_ref, partner_ref, tagihan_gross, mdr_amount
+    """
     gateway = _get_active_gateway(db)
     if not gateway:
         raise HTTPException(503, "Tidak ada payment gateway aktif. Hubungi admin.")
@@ -182,11 +226,20 @@ async def _create_doku_qris(tx: Transaction, tagihan: Decimal, db: Session) -> d
     if not merchant_id:
         raise HTTPException(503, "Konfigurasi DOKU belum lengkap: 'qris_merchant_id' tidak ditemukan.")
 
+    # ── Gross-up MDR 0.7% (Opsi C) ──────────────────────────────────────
+    tagihan_gross, mdr_amount = _gross_up_mdr(tagihan_net)
+    logger.info(
+        f"[MDR Gross-up] TX={tx.transaction_code} "
+        f"tagihan_net={tagihan_net} mdr={mdr_amount} tagihan_gross={tagihan_gross} "
+        f"(MDR 0.7% ditanggung vendor)"
+    )
+
     ts       = int(datetime.now(timezone.utc).timestamp())
     order_id = f"CST-{tx.transaction_code}-{ts}"
 
     # Ambil guide & validasi bank_settlement_id — akan raise 422 jika belum diset
     guide = db.query(Guide).filter(Guide.id == tx.guide_id).first()
+    # Settlement items menggunakan nilai NET — DOKU distribusi net setelah potong MDR
     settlement_items = _build_settlement_items(tx, guide)
 
     try:
@@ -197,11 +250,11 @@ async def _create_doku_qris(tx: Transaction, tagihan: Decimal, db: Session) -> d
             private_key_pem=private_key,
             client_secret=client_secret,
             order_id=order_id,
-            amount=int(tagihan),
+            amount=int(tagihan_gross),      # ← gross (yang di-scan vendor)
             merchant_id=merchant_id,
             terminal_id=terminal_id,
             expired_time=30,
-            settlement_items=settlement_items,
+            settlement_items=settlement_items,  # ← net values
         )
     except HTTPException:
         raise
@@ -221,9 +274,11 @@ async def _create_doku_qris(tx: Transaction, tagihan: Decimal, db: Session) -> d
     )
 
     return {
-        "qris_string":   qris_string,
-        "doku_ref":      doku_ref or partner_ref,
-        "partner_ref":   partner_ref,
+        "qris_string":    qris_string,
+        "doku_ref":       doku_ref or partner_ref,
+        "partner_ref":    partner_ref,
+        "tagihan_gross":  tagihan_gross,
+        "mdr_amount":     mdr_amount,
     }
 
 
@@ -353,18 +408,20 @@ async def vendor_approve_transaction(
     if tx.status != "pending_vendor_approval":
         raise HTTPException(400, f"Transaksi tidak bisa diproses, status saat ini: {tx.status}")
 
-    tagihan = tx.guide_commission + tx.platform_fee
+    # tagihan_net = nilai split asli yang harus diterima guide + platform
+    tagihan_net = Decimal(str(tx.guide_commission)) + Decimal(str(tx.platform_fee))
 
     # ── DEPOSIT ────────────────────────────────────────────────────────────
+    # Deposit tidak kena MDR — vendor bayar tagihan_net langsung dari saldo
     if payload.payment_method == "deposit":
-        if vendor.deposit_balance < tagihan:
+        if vendor.deposit_balance < tagihan_net:
             raise HTTPException(
                 400,
                 f"Saldo deposit tidak cukup. "
                 f"Saldo: {_fmt_rp(vendor.deposit_balance)}, "
-                f"Tagihan (Komisi Guide + Fee Platform): {_fmt_rp(tagihan)}"
+                f"Tagihan (Komisi Guide + Fee Platform): {_fmt_rp(tagihan_net)}"
             )
-        vendor.deposit_balance -= tagihan
+        vendor.deposit_balance -= tagihan_net
         tx.status              = "settled"
         tx.payment_method      = "deposit"
         tx.paid_at             = datetime.now(timezone.utc)
@@ -393,12 +450,14 @@ async def vendor_approve_transaction(
             xendit_invoice_id=None,
             qris_string=None,
             doku_reference_no=None,
+            tagihan_gross=None,
+            mdr_amount=None,
             message="Pembayaran via deposit berhasil. Komisi guide sedang diproses ke rekening.",
         )
 
-    # ── PAY AS YOU GO — DOKU SNAP QRIS ────────────────────────────────────
+    # ── PAY AS YOU GO — DOKU SNAP QRIS (Opsi C: MDR ditanggung vendor) ───
     elif payload.payment_method == "pay_as_you_go":
-        qris = await _create_doku_qris(tx, tagihan, db)
+        qris = await _create_doku_qris(tx, tagihan_net, db)
 
         tx.status             = "payment_pending"
         tx.payment_method     = "pay_as_you_go"
@@ -409,6 +468,9 @@ async def vendor_approve_transaction(
         db.commit()
         db.refresh(tx)
 
+        tagihan_gross = qris["tagihan_gross"]
+        mdr_amount    = qris["mdr_amount"]
+
         return TransactionInvoiceResponse(
             transaction=tx,
             payment_method="pay_as_you_go",
@@ -416,7 +478,14 @@ async def vendor_approve_transaction(
             xendit_invoice_id=qris["doku_ref"],
             qris_string=qris["qris_string"],
             doku_reference_no=qris["doku_ref"],
-            message="QRIS DOKU berhasil dibuat. Silakan scan QR untuk menyelesaikan pembayaran.",
+            tagihan_gross=tagihan_gross,
+            mdr_amount=mdr_amount,
+            message=(
+                f"QRIS DOKU berhasil dibuat. "
+                f"Nominal scan: {_fmt_rp(tagihan_gross)} "
+                f"(termasuk MDR QRIS {_fmt_rp(mdr_amount)}). "
+                f"Silakan scan QR untuk menyelesaikan pembayaran."
+            ),
         )
 
     else:
@@ -432,6 +501,7 @@ async def retry_payment(
     """
     Generate ulang QRIS untuk TX yang statusnya payment_failed atau payment_pending
     (QRIS lama expired). Reset ke payment_pending dengan QRIS baru.
+    MDR gross-up tetap diterapkan (Opsi C).
     """
     vendor = db.query(Vendor).filter(Vendor.user_id == current_user.id).first()
     if not vendor:
@@ -451,8 +521,8 @@ async def retry_payment(
             f"Status saat ini: {tx.status}"
         )
 
-    tagihan = tx.guide_commission + tx.platform_fee
-    qris = await _create_doku_qris(tx, tagihan, db)
+    tagihan_net = Decimal(str(tx.guide_commission)) + Decimal(str(tx.platform_fee))
+    qris = await _create_doku_qris(tx, tagihan_net, db)
 
     tx.status             = "payment_pending"
     tx.xendit_invoice_url = qris["qris_string"]
@@ -463,6 +533,9 @@ async def retry_payment(
 
     logger.info(f"[RetryPayment] TX {tx.transaction_code} QRIS baru dibuat oleh vendor {vendor.id}")
 
+    tagihan_gross = qris["tagihan_gross"]
+    mdr_amount    = qris["mdr_amount"]
+
     return TransactionInvoiceResponse(
         transaction=tx,
         payment_method="pay_as_you_go",
@@ -470,7 +543,14 @@ async def retry_payment(
         xendit_invoice_id=qris["doku_ref"],
         qris_string=qris["qris_string"],
         doku_reference_no=qris["doku_ref"],
-        message="QRIS baru berhasil dibuat. Silakan scan ulang untuk menyelesaikan pembayaran.",
+        tagihan_gross=tagihan_gross,
+        mdr_amount=mdr_amount,
+        message=(
+            f"QRIS baru berhasil dibuat. "
+            f"Nominal scan: {_fmt_rp(tagihan_gross)} "
+            f"(termasuk MDR QRIS {_fmt_rp(mdr_amount)}). "
+            f"Silakan scan ulang untuk menyelesaikan pembayaran."
+        ),
     )
 
 
@@ -521,6 +601,11 @@ def get_invoice_url(
         raise HTTPException(404, "Transaksi tidak ditemukan")
     if tx.status != "payment_pending":
         raise HTTPException(400, f"Tidak ada pembayaran aktif untuk transaksi ini. Status: {tx.status}")
+
+    # Recalculate gross untuk ditampilkan ulang
+    tagihan_net = Decimal(str(tx.guide_commission)) + Decimal(str(tx.platform_fee))
+    tagihan_gross, mdr_amount = _gross_up_mdr(tagihan_net)
+
     return TransactionInvoiceResponse(
         transaction=tx,
         payment_method=tx.payment_method,
@@ -528,6 +613,8 @@ def get_invoice_url(
         xendit_invoice_id=tx.xendit_invoice_id,
         qris_string=tx.xendit_invoice_url,
         doku_reference_no=tx.xendit_invoice_id,
+        tagihan_gross=tagihan_gross,
+        mdr_amount=mdr_amount,
         message="QRIS aktif.",
     )
 
