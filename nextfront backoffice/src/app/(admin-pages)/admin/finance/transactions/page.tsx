@@ -1,8 +1,12 @@
 "use client"
 import { useEffect, useState, useMemo } from "react"
-import { adminService, AdminTransaction } from "@/services/admin.service"
+import {
+  transactionsService,
+  Transaction,
+  resolveReceiptUrl,
+} from "@/services/transactions.service"
 import { Badge } from "@/components/ui/badge"
-import { ChevronLeft, ChevronRight, Search, SlidersHorizontal, X, Info } from "lucide-react"
+import { ChevronLeft, ChevronRight, Search, SlidersHorizontal, X, Info, ExternalLink, ImageOff } from "lucide-react"
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
   settled:                 "default",
@@ -41,12 +45,12 @@ function fmtDate(dateStr?: string | null) {
   })
 }
 
-// ─── Detail Modal ───────────────────────────────────────────────────────────
+// ─── Detail Modal ────────────────────────────────────────────────────────────
 function TransactionDetailModal({
   tx,
   onClose,
 }: {
-  tx: AdminTransaction
+  tx: Transaction
   onClose: () => void
 }) {
   const handleBackdrop = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -60,6 +64,7 @@ function TransactionDetailModal({
   }, [onClose])
 
   const isRejected = tx.status === "rejected"
+  const receiptUrl = resolveReceiptUrl(tx.receipt_image)
 
   const rows: { label: string; value: React.ReactNode }[] = [
     { label: "ID Transaksi",    value: <span className="font-mono text-xs break-all">{tx.id}</span> },
@@ -71,6 +76,12 @@ function TransactionDetailModal({
       )
     },
     { label: "Gross Total",     value: <span className="font-semibold">{fmt(tx.gross_amount)}</span> },
+    ...(tx.extra_amount && tx.extra_amount !== "0" ? [
+      { label: "Extra Amount",  value: <span className="text-orange-400">{fmt(tx.extra_amount)}</span> },
+    ] : []),
+    ...(tx.extra_notes ? [
+      { label: "Extra Notes",   value: <span className="text-muted-foreground text-xs">{tx.extra_notes}</span> },
+    ] : []),
     { label: "Vendor Share",    value: <span className="text-blue-400">{fmt(tx.vendor_amount)}</span> },
     { label: "Komisi Guide",    value: <span className="text-emerald-400">{fmt(tx.guide_commission)}</span> },
     { label: "Fee Platform",    value: <span className="text-amber-400">{fmt(tx.platform_fee)}</span> },
@@ -80,8 +91,23 @@ function TransactionDetailModal({
            : tx.payment_method === "pay_as_you_go" ? "QRIS"
            : (tx.payment_method ?? "-"),
     },
+    ...(tx.xendit_invoice_url ? [{
+      label: "Invoice Xendit",
+      value: (
+        <a
+          href={tx.xendit_invoice_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1 text-blue-400 hover:underline text-xs"
+        >
+          Buka Link <ExternalLink size={11} />
+        </a>
+      ),
+    }] : []),
     { label: "Dibuat",          value: fmtDate(tx.created_at) },
-    { label: "Diperbarui",      value: fmtDate((tx as any).updated_at) },
+    { label: "Diperbarui",      value: fmtDate(tx.updated_at) },
+    ...(tx.paid_at    ? [{ label: "Dibayar",    value: fmtDate(tx.paid_at) }]    : []),
+    ...(tx.settled_at ? [{ label: "Settled",    value: fmtDate(tx.settled_at) }] : []),
   ]
 
   return (
@@ -106,26 +132,56 @@ function TransactionDetailModal({
           </button>
         </div>
 
-        {/* Rejection reason banner */}
-        {isRejected && (
-          <div className="mx-5 mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3">
-            <p className="text-xs font-semibold text-red-400 mb-1">⚠ Alasan Penolakan</p>
-            <p className="text-xs text-red-300 leading-relaxed">
-              {(tx as any).rejection_reason
-                ? (tx as any).rejection_reason
-                : "Vendor menolak pesanan ini. Tidak ada catatan alasan spesifik yang disimpan. Silakan hubungi vendor atau periksa log aktivitas untuk informasi lebih lanjut."}
-            </p>
-          </div>
-        )}
+        <div className="px-5 py-4 space-y-4 max-h-[72vh] overflow-y-auto">
 
-        {/* Data rows */}
-        <div className="px-5 py-4 space-y-3 max-h-[60vh] overflow-y-auto">
-          {rows.map(({ label, value }) => (
-            <div key={label} className="flex items-start justify-between gap-4 text-sm">
-              <span className="text-muted-foreground shrink-0 w-36">{label}</span>
-              <span className="text-foreground text-right">{value ?? "-"}</span>
+          {/* Rejection reason banner */}
+          {isRejected && (
+            <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3">
+              <p className="text-xs font-semibold text-red-400 mb-1">⚠ Alasan Penolakan</p>
+              <p className="text-xs text-red-300 leading-relaxed">
+                {tx.vendor_rejection_reason
+                  ? tx.vendor_rejection_reason
+                  : "Vendor menolak pesanan ini. Tidak ada catatan alasan spesifik yang disimpan. Silakan hubungi vendor atau periksa log aktivitas untuk informasi lebih lanjut."}
+              </p>
             </div>
-          ))}
+          )}
+
+          {/* Bukti Transaksi / Receipt */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+              Bukti Transaksi
+            </p>
+            {receiptUrl ? (
+              <div className="space-y-2">
+                <a href={receiptUrl} target="_blank" rel="noopener noreferrer">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={receiptUrl}
+                    alt="Bukti transaksi"
+                    className="w-full rounded-xl border border-white/10 object-contain max-h-64 bg-white/5 cursor-zoom-in hover:opacity-90 transition"
+                  />
+                </a>
+                {tx.receipt_notes && (
+                  <p className="text-xs text-muted-foreground italic">{tx.receipt_notes}</p>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-2 py-8 rounded-xl border border-white/10 bg-white/5 text-muted-foreground">
+                <ImageOff size={28} strokeWidth={1.5} />
+                <p className="text-xs">Tidak ada bukti transaksi yang diunggah</p>
+              </div>
+            )}
+          </div>
+
+          {/* Data rows */}
+          <div className="space-y-3">
+            {rows.map(({ label, value }) => (
+              <div key={label} className="flex items-start justify-between gap-4 text-sm">
+                <span className="text-muted-foreground shrink-0 w-36">{label}</span>
+                <span className="text-foreground text-right">{value ?? "-"}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Footer */}
@@ -142,9 +198,9 @@ function TransactionDetailModal({
   )
 }
 
-// ─── Main Page ───────────────────────────────────────────────────────────────
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function AdminTransactionsPage() {
-  const [data,    setData]    = useState<AdminTransaction[]>([])
+  const [data,    setData]    = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState("")
 
@@ -153,10 +209,13 @@ export default function AdminTransactionsPage() {
   const [perPage,  setPerPage]  = useState(25)
   const [page,     setPage]     = useState(1)
 
-  const [selected, setSelected] = useState<AdminTransaction | null>(null)
+  const [selected, setSelected] = useState<Transaction | null>(null)
 
   useEffect(() => {
-    adminService.listTransactions()
+    // Use transactionsService (not adminService) — returns full Transaction
+    // type that includes receipt_image, vendor_rejection_reason, etc.
+    // Admin endpoint strips those fields.
+    transactionsService.list()
       .then(setData)
       .catch(() => setError("Gagal memuat transaksi."))
       .finally(() => setLoading(false))
