@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react"
 import { GuideSidebar } from "@/components/guide-sidebar"
-import { NotificationDropdown } from "@/components/notification-dropdown"
+// import { NotificationDropdown } from "@/components/notification-dropdown" // TODO: aktifkan setelah fitur siap
 import { ThemeToggle } from "@/components/theme-toggle"
-import { GlobalSearch } from "@/components/global-search"
+// import { GlobalSearch } from "@/components/global-search" // TODO: aktifkan setelah fitur siap
 import { UserDropdown } from "@/components/UserDropdown"
 import Footer from "@/components/layout/Footer"
 import GuideStatusGate from "@/components/layout/GuideStatusGate"
@@ -56,11 +56,11 @@ export default function GuideLayout({
           </div>
           <div className="ml-auto">
             <div className="flex items-center gap-1">
-              <GlobalSearch />
+              {/* <GlobalSearch /> */}
               <ThemeToggle />
-              <div className="relative hidden md:inline-flex">
+              {/* <div className="relative hidden md:inline-flex">
                 <NotificationDropdown />
-              </div>
+              </div> */}
               <UserDropdown loginPath="/guide/login" />
             </div>
           </div>
