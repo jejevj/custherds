@@ -28,6 +28,14 @@ router = APIRouter()
 ALLOWED_ADMIN_STATUSES = {"in_review", "resolved", "dismissed"}
 
 
+def _populate_guide_info(item: BookingReportResponse, report: BookingReport) -> None:
+    """Isi guide_email dan guide_name dari relasi guide.user."""
+    if report.guide and report.guide.user:
+        u = report.guide.user
+        item.guide_email = u.user_email
+        item.guide_name  = u.user_name or u.user_email
+
+
 def _load_report(db: Session, report_id: uuid.UUID) -> BookingReportResponse:
     """Load report + semua relasi termasuk guide.user untuk email & nama."""
     report = (
@@ -44,9 +52,7 @@ def _load_report(db: Session, report_id: uuid.UUID) -> BookingReportResponse:
         raise HTTPException(404, "Laporan tidak ditemukan")
 
     data = BookingReportResponse.model_validate(report)
-    if report.guide and report.guide.user:
-        data.guide_email = report.guide.user.email
-        data.guide_name  = report.guide.user.full_name or report.guide.user.email
+    _populate_guide_info(data, report)
     return data
 
 
@@ -86,9 +92,7 @@ def admin_list_reports(
     result = []
     for r in reports:
         item = BookingReportResponse.model_validate(r)
-        if r.guide and r.guide.user:
-            item.guide_email = r.guide.user.email
-            item.guide_name  = r.guide.user.full_name or r.guide.user.email
+        _populate_guide_info(item, r)
         result.append(item)
     return result
 
