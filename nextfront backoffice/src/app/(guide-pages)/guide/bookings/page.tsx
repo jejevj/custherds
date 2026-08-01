@@ -34,20 +34,18 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled:          "Dibatalkan",
 }
 
-/** Booking yang boleh dilaporkan: sudah confirmed ke atas, bukan dibatalkan */
-const REPORTABLE_STATUSES = [
-  "confirmed",
-  "pending_receipt",
-  "pending_completion",
-  "completed",
-]
-
 function canCancel(b: Booking): boolean {
   return ["pending_vendor", "confirmed", "pending_receipt"].includes(b.status) && !b.checkin_at
 }
 
+/**
+ * Tombol "Laporkan" HANYA muncul jika:
+ * - status === "rejected"  (booking final ditolak)
+ * - tx_attempt sudah mencapai batas maksimal (tx_attempt >= tx_attempt_max)
+ * Artinya: bukan reject biasa dari vendor, tapi karena habis 3x percobaan transaksi.
+ */
 function canReport(b: Booking): boolean {
-  return REPORTABLE_STATUSES.includes(b.status)
+  return b.status === "rejected" && b.tx_attempt >= b.tx_attempt_max
 }
 
 // ─── Modal Laporan ────────────────────────────────────────────────────────────
@@ -235,15 +233,14 @@ export default function GuideBookingsPage() {
                 <th className="px-4 py-3 font-medium">Tanggal</th>
                 <th className="px-4 py-3 font-medium">Pax</th>
                 <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Detail</th>
                 <th className="px-4 py-3 font-medium">Aksi</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} className="text-center py-10 text-muted-foreground">Memuat...</td></tr>
+                <tr><td colSpan={5} className="text-center py-10 text-muted-foreground">Memuat...</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={6} className="text-center py-10 text-muted-foreground">
+                <tr><td colSpan={5} className="text-center py-10 text-muted-foreground">
                   {query ? `Tidak ada hasil untuk "${query}"` : "Belum ada booking."}
                 </td></tr>
               ) : filtered.map(b => (
@@ -255,24 +252,29 @@ export default function GuideBookingsPage() {
                     <Badge variant={STATUS_VARIANT[b.status] ?? "secondary"}>{STATUS_LABEL[b.status] ?? b.status}</Badge>
                   </td>
                   <td className="px-4 py-3">
-                    <Button size="sm" variant="outline" onClick={() => router.push(`/guide/bookings/${b.id}`)}>
-                      <Eye size={13} className="mr-1" /> Lihat Detail
-                    </Button>
-                  </td>
-                  <td className="px-4 py-3">
                     <div className="flex gap-2 flex-wrap">
+                      {/* Detail — selalu ada */}
+                      <Button size="sm" variant="outline" onClick={() => router.push(`/guide/bookings/${b.id}`)}>
+                        <Eye size={13} className="mr-1" /> Detail
+                      </Button>
+
+                      {/* Submit Transaksi */}
                       {b.status === "pending_receipt" && (
                         <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white"
                           onClick={() => router.push(`/guide/bookings/${b.id}`)}>
                           <Receipt size={13} className="mr-1" /> Submit Transaksi
                         </Button>
                       )}
+
+                      {/* Batalkan */}
                       {canCancel(b) && (
                         <Button size="sm" variant="outline" className="text-red-500 border-red-300 hover:bg-red-50"
                           onClick={() => router.push(`/guide/bookings/${b.id}`)}>
                           Batalkan
                         </Button>
                       )}
+
+                      {/* Laporkan — hanya saat rejected DAN tx_attempt sudah habis */}
                       {canReport(b) && (
                         <Button
                           size="sm"
