@@ -20,3 +20,5 @@ from app.models.payment_gateway_config import PaymentGatewayConfig
 from app.models.email_config import EmailConfig
 from app.models.email_message import EmailMessage
 from app.models.email_attachment import EmailAttachment
+# Reports
+from app.models.booking_report import BookingReport

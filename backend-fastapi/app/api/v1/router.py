@@ -18,6 +18,7 @@ from app.api.v1.endpoints import (
     settlement_bank_account,
     vendor_categories,
     vendor_areas,
+    booking_reports,
 )
 from app.api.v1.endpoints import webmail_configs, webmail_emails
 
@@ -41,6 +42,7 @@ api_router.include_router(webhooks.router,                      prefix="/webhook
 api_router.include_router(payments.router,                      prefix="/payments",                      tags=["Payments"])
 api_router.include_router(payment_gateway_config.router,        prefix="/admin/payment-gateway-config",  tags=["Admin"])
 api_router.include_router(settlement_bank_account.router,       prefix="/settlement-bank-account",       tags=["Settlement Bank Account"])
+api_router.include_router(booking_reports.router,               prefix="/reports",                       tags=["Reports"])
 
 # ── Webmail ──────────────────────────────────────────────────────────────────
 # /webmail/configs  → CRUD konfigurasi SMTP
