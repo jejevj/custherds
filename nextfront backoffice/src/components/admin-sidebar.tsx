@@ -11,7 +11,7 @@ import {
 import {
   House, Users, ShoppingBag, Landmark,
   CircleUserRound, LifeBuoyIcon, SendIcon, Map,
-  Mail, History, ServerCog,
+  Mail, Flag,
 } from "lucide-react"
 import { ScrollArea } from "./ui/scroll-area"
 import Image from "next/image"
@@ -52,11 +52,21 @@ const navMain = [
     ],
   },
   {
+    title: "Laporan Masuk", url: "#", icon: <Flag />,
+    items: [
+      { title: "Semua Laporan",  url: "/admin/reports" },
+      { title: "Open",           url: "/admin/reports?status=open" },
+      { title: "Sedang Ditinjau", url: "/admin/reports?status=in_review" },
+      { title: "Selesai",        url: "/admin/reports?status=resolved" },
+      { title: "Ditolak",        url: "/admin/reports?status=dismissed" },
+    ],
+  },
+  {
     title: "Webmail", url: "#", icon: <Mail />,
     items: [
-      { title: "Kirim Email",     url: "/admin/webmail/send" },
-      { title: "History Email",   url: "/admin/webmail/history" },
-      { title: "Email Config",    url: "/admin/webmail/config" },
+      { title: "Kirim Email",   url: "/admin/webmail/send" },
+      { title: "History Email", url: "/admin/webmail/history" },
+      { title: "Email Config",  url: "/admin/webmail/config" },
     ],
   },
   { title: "Profile", url: "/admin/profile", icon: <CircleUserRound /> },
