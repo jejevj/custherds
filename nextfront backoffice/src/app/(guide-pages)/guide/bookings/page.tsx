@@ -3,8 +3,8 @@ import { useEffect, useState } from "react"
 import { bookingsService, Booking } from "@/services/bookings.service"
 import {
   bookingReportsService,
+  BookingReport,
   BookingReportCreate,
-  ReportType,
   REPORT_TYPE_LABEL,
 } from "@/services/booking-reports.service"
 import { Badge } from "@/components/ui/badge"
@@ -39,14 +39,13 @@ function canCancel(b: Booking): boolean {
 }
 
 /**
- * Aturan tombol "Laporkan" — sinkron dengan ALLOWED_BOOKING_STATUSES di backend:
- *
- * - "completed"  → selalu bisa dilaporkan (transaction_dispute)
- * - "rejected"   → hanya jika tx_attempt sudah habis (>= tx_attempt_max),
- *                  artinya reject karena 3x percobaan transaksi, bukan reject
- *                  biasa dari vendor.
+ * Tombol "Laporkan" muncul jika:
+ * - "completed"  → selalu bisa (dispute transaksi)
+ * - "rejected"   → hanya jika tx_attempt sudah habis (>= tx_attempt_max)
+ * DAN booking belum pernah dilaporkan (tidak ada di reportedIds)
  */
-function canReport(b: Booking): boolean {
+function canReport(b: Booking, reportedIds: Set<string>): boolean {
+  if (reportedIds.has(b.id)) return false
   if (b.status === "completed") return true
   if (b.status === "rejected") return b.tx_attempt >= b.tx_attempt_max
   return false
@@ -56,11 +55,10 @@ function canReport(b: Booking): boolean {
 interface ReportModalProps {
   booking: Booking
   onClose: () => void
-  onSuccess: () => void
+  onSuccess: (bookingId: string) => void
 }
 
 function ReportModal({ booking, onClose, onSuccess }: ReportModalProps) {
-  const [reportType,  setReportType]  = useState<ReportType>("other")
   const [description, setDescription] = useState("")
   const [submitting,  setSubmitting]  = useState(false)
   const [error,       setError]       = useState("")
@@ -73,11 +71,10 @@ function ReportModal({ booking, onClose, onSuccess }: ReportModalProps) {
     try {
       const payload: BookingReportCreate = {
         booking_id:  booking.id,
-        report_type: reportType,
         description: description.trim(),
       }
       await bookingReportsService.create(payload)
-      onSuccess()
+      onSuccess(booking.id)
     } catch (err: unknown) {
       const msg =
         err instanceof Error
@@ -91,10 +88,8 @@ function ReportModal({ booking, onClose, onSuccess }: ReportModalProps) {
   }
 
   return (
-    // Overlay
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
       <div className="w-full max-w-lg bg-card rounded-2xl shadow-xl border overflow-hidden">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b bg-muted/30">
           <div>
             <h2 className="text-base font-semibold">Laporkan Booking</h2>
@@ -104,24 +99,7 @@ function ReportModal({ booking, onClose, onSuccess }: ReportModalProps) {
             <X size={18} />
           </button>
         </div>
-
-        {/* Body */}
         <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-          {/* Jenis Laporan */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Jenis Laporan <span className="text-red-500">*</span></label>
-            <select
-              value={reportType}
-              onChange={e => setReportType(e.target.value as ReportType)}
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              {(Object.keys(REPORT_TYPE_LABEL) as ReportType[]).map(key => (
-                <option key={key} value={key}>{REPORT_TYPE_LABEL[key]}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Deskripsi */}
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Deskripsi <span className="text-red-500">*</span></label>
             <textarea
@@ -133,14 +111,11 @@ function ReportModal({ booking, onClose, onSuccess }: ReportModalProps) {
             />
             <p className="text-xs text-muted-foreground text-right">{description.length} karakter</p>
           </div>
-
           {error && (
             <p className="text-sm text-red-500 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
               {error}
             </p>
           )}
-
-          {/* Actions */}
           <div className="flex gap-3 pt-1">
             <Button type="button" variant="outline" className="flex-1" onClick={onClose} disabled={submitting}>
               Batal
@@ -166,7 +141,6 @@ function SuccessToast({ message, onClose }: { message: string; onClose: () => vo
     const t = setTimeout(onClose, 4000)
     return () => clearTimeout(t)
   }, [onClose])
-
   return (
     <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-green-600 text-white text-sm px-4 py-3 rounded-xl shadow-lg">
       <span>{message}</span>
@@ -183,24 +157,33 @@ export default function GuideBookingsPage() {
   const [error,          setError]          = useState("")
   const [reportTarget,   setReportTarget]   = useState<Booking | null>(null)
   const [successMessage, setSuccessMessage] = useState("")
+  // Set berisi booking_id yang sudah pernah dilaporkan
+  const [reportedIds,    setReportedIds]    = useState<Set<string>>(new Set())
 
   const { query, setQuery, filtered } = useTableSearch(bookings)
 
   useEffect(() => {
-    bookingsService.list()
-      .then(setBookings)
-      .catch(() => setError("Gagal memuat bookings."))
+    Promise.all([
+      bookingsService.list(),
+      bookingReportsService.list(),
+    ])
+      .then(([bks, reports]) => {
+        setBookings(bks)
+        // Kumpulkan booking_id yang sudah pernah dilaporkan
+        setReportedIds(new Set((reports as BookingReport[]).map(r => r.booking_id)))
+      })
+      .catch(() => setError("Gagal memuat data."))
       .finally(() => setLoading(false))
   }, [])
 
-  function handleReportSuccess() {
+  function handleReportSuccess(bookingId: string) {
     setReportTarget(null)
+    setReportedIds(prev => new Set([...prev, bookingId]))
     setSuccessMessage("Laporan berhasil dikirim! Tim kami akan segera meninjau laporan Anda.")
   }
 
   return (
     <>
-      {/* Modal Laporan */}
       {reportTarget && (
         <ReportModal
           booking={reportTarget}
@@ -208,8 +191,6 @@ export default function GuideBookingsPage() {
           onSuccess={handleReportSuccess}
         />
       )}
-
-      {/* Toast Sukses */}
       {successMessage && (
         <SuccessToast message={successMessage} onClose={() => setSuccessMessage("")} />
       )}
@@ -278,10 +259,8 @@ export default function GuideBookingsPage() {
                         </Button>
                       )}
 
-                      {/* Laporkan:
-                          - completed   : dispute transaksi (selalu bisa)
-                          - rejected    : hanya jika habis 3x percobaan (tx_attempt >= max) */}
-                      {canReport(b) && (
+                      {/* Laporkan — hanya jika belum pernah dilaporkan & kondisi terpenuhi */}
+                      {canReport(b, reportedIds) && (
                         <Button
                           size="sm"
                           variant="outline"
@@ -290,6 +269,13 @@ export default function GuideBookingsPage() {
                         >
                           <Flag size={13} className="mr-1" /> Laporkan
                         </Button>
+                      )}
+
+                      {/* Sudah dilaporkan */}
+                      {reportedIds.has(b.id) && (b.status === "completed" || (b.status === "rejected" && b.tx_attempt >= b.tx_attempt_max)) && (
+                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground border rounded-md px-2 py-1">
+                          <Flag size={11} /> Sudah Dilaporkan
+                        </span>
                       )}
                     </div>
                   </td>
