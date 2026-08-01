@@ -39,13 +39,17 @@ function canCancel(b: Booking): boolean {
 }
 
 /**
- * Tombol "Laporkan" HANYA muncul jika:
- * - status === "rejected"  (booking final ditolak)
- * - tx_attempt sudah mencapai batas maksimal (tx_attempt >= tx_attempt_max)
- * Artinya: bukan reject biasa dari vendor, tapi karena habis 3x percobaan transaksi.
+ * Aturan tombol "Laporkan" — sinkron dengan ALLOWED_BOOKING_STATUSES di backend:
+ *
+ * - "completed"  → selalu bisa dilaporkan (transaction_dispute)
+ * - "rejected"   → hanya jika tx_attempt sudah habis (>= tx_attempt_max),
+ *                  artinya reject karena 3x percobaan transaksi, bukan reject
+ *                  biasa dari vendor.
  */
 function canReport(b: Booking): boolean {
-  return b.status === "rejected" && b.tx_attempt >= b.tx_attempt_max
+  if (b.status === "completed") return true
+  if (b.status === "rejected") return b.tx_attempt >= b.tx_attempt_max
+  return false
 }
 
 // ─── Modal Laporan ────────────────────────────────────────────────────────────
@@ -274,7 +278,9 @@ export default function GuideBookingsPage() {
                         </Button>
                       )}
 
-                      {/* Laporkan — hanya saat rejected DAN tx_attempt sudah habis */}
+                      {/* Laporkan:
+                          - completed   : dispute transaksi (selalu bisa)
+                          - rejected    : hanya jika habis 3x percobaan (tx_attempt >= max) */}
                       {canReport(b) && (
                         <Button
                           size="sm"
