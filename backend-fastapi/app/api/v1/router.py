@@ -21,6 +21,7 @@ from app.api.v1.endpoints import (
     booking_reports,
 )
 from app.api.v1.endpoints import webmail_configs, webmail_emails
+from app.api.v1.endpoints import admin_reports
 
 api_router = APIRouter()
 
@@ -44,10 +45,9 @@ api_router.include_router(payment_gateway_config.router,        prefix="/admin/p
 api_router.include_router(settlement_bank_account.router,       prefix="/settlement-bank-account",       tags=["Settlement Bank Account"])
 api_router.include_router(booking_reports.router,               prefix="/reports",                       tags=["Reports"])
 
-# ── Webmail ──────────────────────────────────────────────────────────────────
-# /webmail/configs  → CRUD konfigurasi SMTP
-# /webmail/emails   → inbox / kirim / detail (route /send ada di sini)
-# Tidak ada prefix /webmail/send terpisah — frontend harus POST ke
-# /api/v1/webmail/emails/send
+# ── Admin Reports (prefix terpisah agar tidak bentrok dengan /reports guide) ──
+api_router.include_router(admin_reports.router,                 prefix="/admin/reports",                 tags=["Admin"])
+
+# ── Webmail ──────────────────────────────────────────────────────────────────────────
 api_router.include_router(webmail_configs.router,               prefix="/webmail/configs",               tags=["Webmail"])
 api_router.include_router(webmail_emails.router,                prefix="/webmail/emails",                tags=["Webmail"])
