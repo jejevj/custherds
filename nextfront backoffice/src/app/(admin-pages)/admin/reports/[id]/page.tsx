@@ -32,7 +32,86 @@ import {
   Code, Quote, Minus, Undo2, Redo2, Link as LinkIcon, Heading2,
 } from "lucide-react"
 
-// ── Info Row ────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────────
+function buildEmailFooterHtml(r: BookingReport): string {
+  const createdAt = new Date(r.created_at).toLocaleDateString("id-ID", {
+    day: "numeric", month: "long", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  })
+  const bookingDate = r.booking?.booking_date
+    ? new Date(r.booking.booking_date).toLocaleDateString("id-ID", { dateStyle: "long" })
+    : "-"
+
+  const rows = [
+    ["Nomor Laporan",   `<strong style='font-family:monospace'>${r.report_code}</strong>`],
+    ["Jenis Laporan",   REPORT_TYPE_LABEL[r.report_type] ?? r.report_type],
+    ["Status Saat Ini", REPORT_STATUS_LABEL[r.status] ?? r.status],
+    ["Tanggal Laporan", createdAt],
+    ...(r.booking ? [
+      ["Kode Booking",   `<span style='font-family:monospace'>${r.booking.booking_code}</span>`],
+      ["Tanggal Booking", bookingDate],
+    ] : []),
+    ...(r.transaction ? [
+      ["Kode Transaksi",  `<span style='font-family:monospace'>${r.transaction.transaction_code}</span>`],
+      ["Total Transaksi", `Rp ${Number(r.transaction.gross_amount).toLocaleString("id-ID")}`],
+    ] : []),
+    ["Deskripsi Laporan", r.description],
+  ] as [string, string][]
+
+  const tableRows = rows.map(([label, val]) =>
+    `<tr>
+      <td style="padding:6px 12px 6px 0;color:#6b7280;font-size:13px;white-space:nowrap;vertical-align:top;">${label}</td>
+      <td style="padding:6px 0;font-size:13px;color:#111827;">${val}</td>
+    </tr>`
+  ).join("\n")
+
+  return `
+<div style="margin-top:32px;border-top:2px solid #e5e7eb;padding-top:20px;font-family:Arial,sans-serif;">
+  <p style="margin:0 0 12px;font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;font-weight:600;">Detail Laporan — CustHerds</p>
+  <table style="border-collapse:collapse;width:100%;">
+    ${tableRows}
+  </table>
+  <div style="margin-top:20px;background:#f3f4f6;border-left:4px solid #3b82f6;padding:12px 16px;border-radius:4px;">
+    <p style="margin:0;font-size:13px;color:#1d4ed8;font-weight:600;">&#9993; Cara Membalas</p>
+    <p style="margin:6px 0 0;font-size:13px;color:#374151;">
+      Untuk melanjutkan komunikasi terkait laporan ini, silakan gunakan fitur <strong>Reply</strong> pada email ini.
+      Pastikan nomor laporan <strong style='font-family:monospace;'>${r.report_code}</strong> tetap tercantum di subjek
+      agar tim kami dapat memproses laporan Anda dengan lebih cepat.
+    </p>
+  </div>
+  <p style="margin:20px 0 0;font-size:11px;color:#9ca3af;">
+    Email ini dikirim secara otomatis oleh sistem CustHerds. Jangan balas langsung ke alamat ini —
+    gunakan tombol <em>Reply</em> untuk memastikan pesan Anda tercatat dengan benar.
+  </p>
+</div>`
+}
+
+function buildEmailFooterText(r: BookingReport): string {
+  const createdAt = new Date(r.created_at).toLocaleDateString("id-ID", {
+    day: "numeric", month: "long", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  })
+  return [
+    "",
+    "---",
+    "DETAIL LAPORAN — CustHerds",
+    `Nomor Laporan  : ${r.report_code}`,
+    `Jenis Laporan  : ${REPORT_TYPE_LABEL[r.report_type] ?? r.report_type}`,
+    `Status         : ${REPORT_STATUS_LABEL[r.status] ?? r.status}`,
+    `Tanggal        : ${createdAt}`,
+    ...(r.booking  ? [`Kode Booking   : ${r.booking.booking_code}`]  : []),
+    ...(r.transaction ? [`Kode Transaksi : ${r.transaction.transaction_code}`] : []),
+    `Deskripsi      : ${r.description}`,
+    "",
+    "CARA MEMBALAS",
+    `Gunakan fitur Reply pada email ini dan sertakan nomor laporan ${r.report_code} di subjek`,
+    "agar tim kami dapat memproses laporan Anda.",
+    "",
+    "Email ini dikirim otomatis oleh sistem CustHerds.",
+  ].join("\n")
+}
+
+// ── Info Row ──────────────────────────────────────────────────────────────────────
 function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-6 py-3 border-b last:border-0">
@@ -117,6 +196,68 @@ function TagInput({ value, onChange, placeholder }: {
   )
 }
 
+// ── Email Footer Preview ─────────────────────────────────────────────────────────
+function EmailFooterPreview({ report }: { report: BookingReport }) {
+  const bookingDate = report.booking?.booking_date
+    ? new Date(report.booking.booking_date).toLocaleDateString("id-ID", { dateStyle: "long" })
+    : null
+  const createdAt = new Date(report.created_at).toLocaleDateString("id-ID", {
+    day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+  })
+
+  return (
+    <div className="rounded-lg border border-dashed bg-muted/30 p-4 space-y-3 text-xs text-muted-foreground">
+      <div className="flex items-center gap-1.5 font-semibold text-[11px] uppercase tracking-wide text-muted-foreground">
+        <span className="inline-block w-2 h-2 rounded-full bg-muted-foreground/40" />
+        Footer otomatis (tidak dapat diedit)
+      </div>
+
+      <div className="border-t pt-3 space-y-1">
+        <p className="font-semibold text-[11px] uppercase tracking-wide mb-2">Detail Laporan — CustHerds</p>
+        <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+          <span className="text-muted-foreground">Nomor Laporan</span>
+          <span className="font-mono font-medium text-foreground">{report.report_code}</span>
+          <span className="text-muted-foreground">Jenis Laporan</span>
+          <span>{REPORT_TYPE_LABEL[report.report_type] ?? report.report_type}</span>
+          <span className="text-muted-foreground">Status</span>
+          <span>{REPORT_STATUS_LABEL[report.status] ?? report.status}</span>
+          <span className="text-muted-foreground">Tanggal Laporan</span>
+          <span>{createdAt}</span>
+          {report.booking && (
+            <>
+              <span className="text-muted-foreground">Kode Booking</span>
+              <span className="font-mono">{report.booking.booking_code}</span>
+              <span className="text-muted-foreground">Tanggal Booking</span>
+              <span>{bookingDate}</span>
+            </>
+          )}
+          {report.transaction && (
+            <>
+              <span className="text-muted-foreground">Kode Transaksi</span>
+              <span className="font-mono">{report.transaction.transaction_code}</span>
+              <span className="text-muted-foreground">Total Transaksi</span>
+              <span>Rp {Number(report.transaction.gross_amount).toLocaleString("id-ID")}</span>
+            </>
+          )}
+        </div>
+
+        <div className="mt-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-md px-3 py-2">
+          <p className="text-blue-700 dark:text-blue-400 font-semibold mb-0.5">&#9993; Cara Membalas</p>
+          <p className="text-blue-600 dark:text-blue-300 leading-relaxed">
+            Gunakan fitur <strong>Reply</strong> pada email ini. Pastikan nomor laporan
+            <span className="font-mono font-bold mx-1">{report.report_code}</span>
+            tetap tercantum di subjek agar tim kami dapat memproses laporan Anda.
+          </p>
+        </div>
+
+        <p className="pt-2 text-[11px] text-muted-foreground/70 italic">
+          Email ini dikirim otomatis oleh sistem CustHerds.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Page ────────────────────────────────────────────────────────────────
 export default function AdminReportDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -147,12 +288,12 @@ export default function AdminReportDetailPage() {
       UnderlineExt,
       LinkExt.configure({ openOnClick: false }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
-      Placeholder.configure({ placeholder: "Tulis balasan / komunikasi terkait laporan ini..." }),
+      Placeholder.configure({ placeholder: "Tulis pesan balasan untuk guide di sini..." }),
     ],
     editorProps: {
       attributes: {
         class: [
-          "min-h-[220px] px-4 py-3 text-sm focus:outline-none",
+          "min-h-[180px] px-4 py-3 text-sm focus:outline-none",
           "[&_h2]:text-lg [&_h2]:font-bold [&_h2]:my-2",
           "[&_p]:my-1 [&_p]:leading-relaxed",
           "[&_strong]:font-bold [&_em]:italic [&_u]:underline",
@@ -210,15 +351,21 @@ export default function AdminReportDetailPage() {
     }
   }
 
-  // ── Send Email — To selalu dari guide_email (tidak bisa diedit)
+  // ── Send Email — body = konten editor + footer otomatis
   async function handleSendEmail(e: React.FormEvent) {
     e.preventDefault()
-    if (!configId)          { setEmailMsg("✗ Pilih konfigurasi email."); return }
+    if (!configId)            { setEmailMsg("✗ Pilih konfigurasi email."); return }
     if (!report?.guide_email) { setEmailMsg("✗ Email guide tidak tersedia."); return }
-    if (!subject.trim())    { setEmailMsg("✗ Subjek tidak boleh kosong."); return }
+    if (!subject.trim())      { setEmailMsg("✗ Subjek tidak boleh kosong."); return }
 
-    const bodyHtml = editor?.getHTML() ?? ""
-    const bodyText = editor?.getText() ?? ""
+    const editorHtml = editor?.getHTML() ?? ""
+    const editorText = editor?.getText() ?? ""
+    const footerHtml = buildEmailFooterHtml(report)
+    const footerText = buildEmailFooterText(report)
+
+    const finalHtml = `${editorHtml}${footerHtml}`
+    const finalText = `${editorText}${footerText}`
+
     setSending(true)
     setEmailMsg("")
     try {
@@ -228,8 +375,8 @@ export default function AdminReportDetailPage() {
         to:          [report.guide_email],
         cc:          emailCc.length ? emailCc : undefined,
         subject,
-        body_html:   bodyHtml,
-        body_text:   bodyText,
+        body_html:   finalHtml,
+        body_text:   finalText,
       })
       if (res.success) {
         setEmailMsg(`✓ Email berhasil dikirim ke ${report.guide_email}.`)
@@ -436,21 +583,17 @@ export default function AdminReportDetailPage() {
                 <Input value={report.report_code} readOnly className="font-mono bg-muted/40 cursor-default" />
               </div>
 
-              {/* To — auto-fill dari guide_email, readonly, tidak bisa diedit */}
+              {/* To — readonly badge */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs text-muted-foreground">
                     Kepada <span className="text-red-500">*</span>
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowCc(v => !v)}
-                    className="text-[11px] text-primary hover:underline"
-                  >
+                  <button type="button" onClick={() => setShowCc(v => !v)}
+                    className="text-[11px] text-primary hover:underline">
                     {showCc ? "Sembunyikan CC" : "Tambah CC"}
                   </button>
                 </div>
-                {/* Tampilkan sebagai badge readonly — tidak bisa dihapus/diedit */}
                 <div className="flex items-center gap-2 border rounded-lg px-3 py-2 bg-muted/40 cursor-not-allowed min-h-[2.25rem]">
                   <Mail size={13} className="text-muted-foreground shrink-0" />
                   <span className="text-sm text-foreground font-mono">
@@ -466,7 +609,7 @@ export default function AdminReportDetailPage() {
                 </p>
               </div>
 
-              {/* CC — boleh diedit admin */}
+              {/* CC */}
               {showCc && (
                 <div className="space-y-1.5">
                   <label className="text-xs text-muted-foreground">CC <span className="opacity-50">(opsional)</span></label>
@@ -477,27 +620,23 @@ export default function AdminReportDetailPage() {
               {/* Subjek */}
               <div className="space-y-1.5">
                 <label className="text-xs text-muted-foreground">Subjek</label>
-                <Input
-                  value={subject}
-                  onChange={e => setSubject(e.target.value)}
-                  placeholder="Subjek email..."
-                />
+                <Input value={subject} onChange={e => setSubject(e.target.value)} placeholder="Subjek email..." />
               </div>
 
-              {/* Body WYSIWYG */}
+              {/* Body WYSIWYG — area yang bisa diedit admin */}
               <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground">Isi Email</label>
+                <label className="text-xs text-muted-foreground">Pesan <span className="text-red-500">*</span></label>
                 <div className="rounded-lg border overflow-hidden">
                   <EditorToolbar editor={editor} />
                   <EditorContent
                     editor={editor}
-                    className="bg-background [&_.ProseMirror]:min-h-[220px] [&_.ProseMirror-placeholder]:text-muted-foreground [&_.ProseMirror-placeholder]:pointer-events-none"
+                    className="bg-background [&_.ProseMirror]:min-h-[180px] [&_.ProseMirror-placeholder]:text-muted-foreground [&_.ProseMirror-placeholder]:pointer-events-none"
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Pembicaraan selanjutnya terkait laporan ini dilanjutkan melalui email.
-                </p>
               </div>
+
+              {/* Footer preview — read-only, selalu terkirim di bawah pesan */}
+              <EmailFooterPreview report={report} />
 
               {emailMsg && (
                 <p className={cn(
@@ -508,11 +647,7 @@ export default function AdminReportDetailPage() {
                 )}>{emailMsg}</p>
               )}
 
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={sending || !report.guide_email}
-              >
+              <Button type="submit" className="w-full" disabled={sending || !report.guide_email}>
                 {sending
                   ? <Loader2 size={14} className="animate-spin mr-1" />
                   : <Send size={14} className="mr-1" />
