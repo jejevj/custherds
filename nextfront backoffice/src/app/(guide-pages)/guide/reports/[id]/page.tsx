@@ -10,21 +10,22 @@ import {
 } from "@/services/booking-reports.service"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, FileText, Calendar, Hash, AlignLeft, StickyNote, CheckCircle2, Clock } from "lucide-react"
+import { ArrowLeft, AlignLeft, CheckCircle2, Clock, Calendar } from "lucide-react"
 
+/** Satu baris label → nilai, full width */
 function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="text-sm font-medium">{children}</span>
+    <div className="flex items-start justify-between gap-6 py-3 border-b last:border-0">
+      <span className="text-sm text-muted-foreground shrink-0 w-48">{label}</span>
+      <span className="text-sm font-medium text-right flex-1">{children}</span>
     </div>
   )
 }
 
 export default function GuideReportDetailPage() {
-  const { id }   = useParams<{ id: string }>()
-  const router   = useRouter()
-  const [report, setReport] = useState<BookingReport | null>(null)
+  const { id }    = useParams<{ id: string }>()
+  const router    = useRouter()
+  const [report,  setReport]  = useState<BookingReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState("")
 
@@ -48,6 +49,10 @@ export default function GuideReportDetailPage() {
     day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
   })
 
+  const updatedAt = new Date(report.updated_at).toLocaleDateString("id-ID", {
+    day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+  })
+
   const reviewedAt = report.reviewed_at
     ? new Date(report.reviewed_at).toLocaleDateString("id-ID", {
         day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
@@ -55,7 +60,7 @@ export default function GuideReportDetailPage() {
     : null
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 w-full">
       {/* Back */}
       <Button variant="ghost" size="sm" className="-ml-2 text-muted-foreground" onClick={() => router.push("/guide/reports")}>
         <ArrowLeft size={15} className="mr-1" /> Kembali ke Laporan
@@ -73,67 +78,59 @@ export default function GuideReportDetailPage() {
       </div>
 
       {/* Info Laporan */}
-      <div className="rounded-xl border bg-card shadow-sm p-5 space-y-4">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Informasi Laporan</h2>
-        <div className="grid grid-cols-2 gap-4">
-          <InfoRow label="Kode Laporan">
-            <span className="font-mono">{report.report_code}</span>
-          </InfoRow>
-          <InfoRow label="Jenis Laporan">
-            {REPORT_TYPE_LABEL[report.report_type] ?? report.report_type}
-          </InfoRow>
-          <InfoRow label="Tanggal Dibuat">
-            <span className="flex items-center gap-1"><Clock size={13} />{createdAt}</span>
-          </InfoRow>
-          {report.transaction?.transaction_code && (
-            <InfoRow label="Kode Transaksi">
-              <span className="font-mono">{report.transaction.transaction_code}</span>
-            </InfoRow>
-          )}
-        </div>
+      <div className="rounded-xl border bg-card shadow-sm p-5">
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">Informasi Laporan</h2>
+        <InfoRow label="Kode Laporan">
+          <span className="font-mono">{report.report_code}</span>
+        </InfoRow>
+        <InfoRow label="Jenis Laporan">
+          {REPORT_TYPE_LABEL[report.report_type] ?? report.report_type}
+        </InfoRow>
+        <InfoRow label="Tanggal Dibuat">
+          <span className="flex items-center justify-end gap-1"><Clock size={13} />{createdAt}</span>
+        </InfoRow>
+        <InfoRow label="Terakhir Diperbarui">
+          <span className="flex items-center justify-end gap-1"><Clock size={13} />{updatedAt}</span>
+        </InfoRow>
       </div>
 
       {/* Info Booking */}
       {report.booking && (
-        <div className="rounded-xl border bg-card shadow-sm p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Booking Terkait</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <InfoRow label="Kode Booking">
-              <span className="font-mono">{report.booking.booking_code}</span>
+        <div className="rounded-xl border bg-card shadow-sm p-5">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">Booking Terkait</h2>
+          <InfoRow label="Kode Booking">
+            <span className="font-mono">{report.booking.booking_code}</span>
+          </InfoRow>
+          <InfoRow label="Tanggal Booking">
+            <span className="flex items-center justify-end gap-1"><Calendar size={13} />{bookingDate}</span>
+          </InfoRow>
+          <InfoRow label="Status Booking">
+            {report.booking.status}
+          </InfoRow>
+          {report.booking.vendor_rejection_reason && (
+            <InfoRow label="Alasan Penolakan Vendor">
+              {report.booking.vendor_rejection_reason}
             </InfoRow>
-            <InfoRow label="Tanggal Booking">
-              <span className="flex items-center gap-1"><Calendar size={13} />{bookingDate}</span>
-            </InfoRow>
-            <InfoRow label="Status Booking">
-              {report.booking.status}
-            </InfoRow>
-            {report.booking.vendor_rejection_reason && (
-              <InfoRow label="Alasan Penolakan Vendor">
-                {report.booking.vendor_rejection_reason}
-              </InfoRow>
-            )}
-          </div>
+          )}
         </div>
       )}
 
-      {/* Info Transaksi (jika ada) */}
+      {/* Info Transaksi */}
       {report.transaction && (
-        <div className="rounded-xl border bg-card shadow-sm p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Transaksi Terkait</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <InfoRow label="Kode Transaksi">
-              <span className="font-mono">{report.transaction.transaction_code}</span>
-            </InfoRow>
-            <InfoRow label="Total Transaksi">
-              Rp {Number(report.transaction.gross_amount).toLocaleString("id-ID")}
-            </InfoRow>
-            <InfoRow label="Komisi Guide">
-              Rp {Number(report.transaction.guide_commission).toLocaleString("id-ID")}
-            </InfoRow>
-            <InfoRow label="Status Transaksi">
-              {report.transaction.status}
-            </InfoRow>
-          </div>
+        <div className="rounded-xl border bg-card shadow-sm p-5">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">Transaksi Terkait</h2>
+          <InfoRow label="Kode Transaksi">
+            <span className="font-mono">{report.transaction.transaction_code}</span>
+          </InfoRow>
+          <InfoRow label="Total Transaksi">
+            Rp {Number(report.transaction.gross_amount).toLocaleString("id-ID")}
+          </InfoRow>
+          <InfoRow label="Komisi Guide">
+            Rp {Number(report.transaction.guide_commission).toLocaleString("id-ID")}
+          </InfoRow>
+          <InfoRow label="Status Transaksi">
+            {report.transaction.status}
+          </InfoRow>
         </div>
       )}
 
@@ -145,7 +142,7 @@ export default function GuideReportDetailPage() {
         <p className="text-sm leading-relaxed whitespace-pre-wrap">{report.description}</p>
       </div>
 
-      {/* Resolusi (jika sudah ditinjau) */}
+      {/* Resolusi */}
       {(report.status === "resolved" || report.status === "dismissed" || report.resolution_notes) && (
         <div className="rounded-xl border bg-card shadow-sm p-5 space-y-3">
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
