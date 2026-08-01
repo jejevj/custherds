@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.db.session import get_db
 from app.core.deps import require_user_type
 from app.models.user import User
+from app.models.guide import Guide
 from app.models.booking_report import BookingReport
 from app.schemas.booking_reports import (
     BookingReportAdminUpdate,
@@ -27,22 +28,28 @@ router = APIRouter()
 ALLOWED_ADMIN_STATUSES = {"in_review", "resolved", "dismissed"}
 
 
-def _load_report(db: Session, report_id: uuid.UUID) -> BookingReport:
+def _load_report(db: Session, report_id: uuid.UUID) -> BookingReportResponse:
+    """Load report + semua relasi termasuk guide.user untuk email & nama."""
     report = (
         db.query(BookingReport)
         .options(
             joinedload(BookingReport.booking),
             joinedload(BookingReport.transaction),
+            joinedload(BookingReport.guide).joinedload(Guide.user),
         )
         .filter(BookingReport.id == report_id)
         .first()
     )
     if not report:
         raise HTTPException(404, "Laporan tidak ditemukan")
-    return report
+
+    data = BookingReportResponse.model_validate(report)
+    if report.guide and report.guide.user:
+        data.guide_email = report.guide.user.email
+        data.guide_name  = report.guide.user.full_name or report.guide.user.email
+    return data
 
 
-# ────────────────────────────────────────────────────────────────────────────────
 class AdminReportFilter:
     def __init__(
         self,
@@ -69,11 +76,21 @@ def admin_list_reports(
         .options(
             joinedload(BookingReport.booking),
             joinedload(BookingReport.transaction),
+            joinedload(BookingReport.guide).joinedload(Guide.user),
         )
     )
     if f.status:
         q = q.filter(BookingReport.status == f.status)
-    return q.order_by(BookingReport.created_at.desc()).all()
+
+    reports = q.order_by(BookingReport.created_at.desc()).all()
+    result = []
+    for r in reports:
+        item = BookingReportResponse.model_validate(r)
+        if r.guide and r.guide.user:
+            item.guide_email = r.guide.user.email
+            item.guide_name  = r.guide.user.full_name or r.guide.user.email
+        result.append(item)
+    return result
 
 
 @router.get(

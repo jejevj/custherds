@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
   ArrowLeft, AlignLeft, CheckCircle2, Clock, Calendar,
-  Mail, Send, ChevronDown, Loader2, X, RefreshCw,
+  Mail, Send, ChevronDown, Loader2, X, RefreshCw, User,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useEditor, EditorContent } from "@tiptap/react"
@@ -32,7 +32,7 @@ import {
   Code, Quote, Minus, Undo2, Redo2, Link as LinkIcon, Heading2,
 } from "lucide-react"
 
-// ─── Info Row ────────────────────────────────────────────────────────────────
+// ── Info Row ────────────────────────────────────────────────────────────────
 function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-6 py-3 border-b last:border-0">
@@ -42,7 +42,7 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
   )
 }
 
-// ─── WYSIWYG Toolbar ─────────────────────────────────────────────────────────
+// ── WYSIWYG Toolbar ─────────────────────────────────────────────────────────
 function ToolbarBtn({ active, onClick, title, children }: {
   active?: boolean; onClick: () => void; title: string; children: React.ReactNode
 }) {
@@ -88,7 +88,7 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
   )
 }
 
-// ─── Tag Input ────────────────────────────────────────────────────────────────
+// ── CC Tag Input ────────────────────────────────────────────────────────────
 function TagInput({ value, onChange, placeholder }: {
   value: string[]; onChange: (v: string[]) => void; placeholder?: string
 }) {
@@ -117,7 +117,7 @@ function TagInput({ value, onChange, placeholder }: {
   )
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ── Main Page ────────────────────────────────────────────────────────────────
 export default function AdminReportDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
@@ -126,21 +126,20 @@ export default function AdminReportDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState("")
 
-  // ── Status form ──────────────────────────────────────────────────────────
-  const [newStatus,  setNewStatus]  = useState<AdminReportUpdate["status"] | "">("") 
-  const [notes,      setNotes]      = useState("")
+  // ── Status form
+  const [newStatus,    setNewStatus]    = useState<AdminReportUpdate["status"] | "">("")
+  const [notes,        setNotes]        = useState("")
   const [savingStatus, setSavingStatus] = useState(false)
-  const [statusMsg,  setStatusMsg]  = useState("")
+  const [statusMsg,    setStatusMsg]    = useState("")
 
-  // ── Email form ───────────────────────────────────────────────────────────
-  const [configs,    setConfigs]    = useState<EmailConfig[]>([])
-  const [configId,   setConfigId]   = useState<number | "">("") 
-  const [emailTo,    setEmailTo]    = useState<string[]>([])
-  const [emailCc,    setEmailCc]    = useState<string[]>([])
-  const [subject,    setSubject]    = useState("")
-  const [sending,    setSending]    = useState(false)
-  const [emailMsg,   setEmailMsg]   = useState("")
-  const [showCc,     setShowCc]     = useState(false)
+  // ── Email form
+  const [configs,  setConfigs]  = useState<EmailConfig[]>([])
+  const [configId, setConfigId] = useState<number | "">("")
+  const [emailCc,  setEmailCc]  = useState<string[]>([])
+  const [subject,  setSubject]  = useState("")
+  const [sending,  setSending]  = useState(false)
+  const [emailMsg, setEmailMsg] = useState("")
+  const [showCc,   setShowCc]   = useState(false)
 
   const editor = useEditor({
     extensions: [
@@ -168,7 +167,6 @@ export default function AdminReportDetailPage() {
     },
   })
 
-  // Pre-fill subject & to saat report dimuat
   const prefillEmail = useCallback((r: BookingReport) => {
     setSubject(`[${r.report_code}] Tindak Lanjut Laporan Booking`)
   }, [])
@@ -184,7 +182,6 @@ export default function AdminReportDetailPage() {
         setNewStatus(r.status as AdminReportUpdate["status"])
         setNotes(r.resolution_notes ?? "")
         prefillEmail(r)
-
         setConfigs(cfgs)
         const def = cfgs.find(c => c.is_default && c.is_active) ?? cfgs.find(c => c.is_active)
         if (def) setConfigId(def.id)
@@ -193,7 +190,7 @@ export default function AdminReportDetailPage() {
       .finally(() => setLoading(false))
   }, [id, prefillEmail])
 
-  // ── Update Status ────────────────────────────────────────────────────────
+  // ── Update Status
   async function handleSaveStatus(e: React.FormEvent) {
     e.preventDefault()
     if (!newStatus || !report) return
@@ -213,12 +210,12 @@ export default function AdminReportDetailPage() {
     }
   }
 
-  // ── Send Email ───────────────────────────────────────────────────────────
+  // ── Send Email — To selalu dari guide_email (tidak bisa diedit)
   async function handleSendEmail(e: React.FormEvent) {
     e.preventDefault()
-    if (!configId)            { setEmailMsg("✗ Pilih konfigurasi email."); return }
-    if (emailTo.length === 0) { setEmailMsg("✗ Penerima tidak boleh kosong."); return }
-    if (!subject.trim())      { setEmailMsg("✗ Subjek tidak boleh kosong."); return }
+    if (!configId)          { setEmailMsg("✗ Pilih konfigurasi email."); return }
+    if (!report?.guide_email) { setEmailMsg("✗ Email guide tidak tersedia."); return }
+    if (!subject.trim())    { setEmailMsg("✗ Subjek tidak boleh kosong."); return }
 
     const bodyHtml = editor?.getHTML() ?? ""
     const bodyText = editor?.getText() ?? ""
@@ -226,19 +223,19 @@ export default function AdminReportDetailPage() {
     setEmailMsg("")
     try {
       const res = await adminReportsService.sendEmail({
-        config_id: configId as number,
-        report_code: report?.report_code ?? "",
-        to: emailTo,
-        cc: emailCc.length ? emailCc : undefined,
+        config_id:   configId as number,
+        report_code: report.report_code,
+        to:          [report.guide_email],
+        cc:          emailCc.length ? emailCc : undefined,
         subject,
-        body_html: bodyHtml,
-        body_text: bodyText,
+        body_html:   bodyHtml,
+        body_text:   bodyText,
       })
       if (res.success) {
-        setEmailMsg(`✓ Email berhasil dikirim ke ${emailTo.length} penerima.`)
+        setEmailMsg(`✓ Email berhasil dikirim ke ${report.guide_email}.`)
         editor?.commands.clearContent()
       } else {
-        setEmailMsg(`✗ ${res.detail ?? "Gagal mengirim email."}`) 
+        setEmailMsg(`✗ ${res.detail ?? "Gagal mengirim email."}`)
       }
     } catch {
       setEmailMsg("✗ Terjadi kesalahan saat mengirim email.")
@@ -271,7 +268,8 @@ export default function AdminReportDetailPage() {
   return (
     <div className="space-y-6 w-full">
       {/* Back */}
-      <Button variant="ghost" size="sm" className="-ml-2 text-muted-foreground" onClick={() => router.push("/admin/reports")}>
+      <Button variant="ghost" size="sm" className="-ml-2 text-muted-foreground"
+        onClick={() => router.push("/admin/reports")}>
         <ArrowLeft size={15} className="mr-1" /> Kembali ke Laporan
       </Button>
 
@@ -286,7 +284,6 @@ export default function AdminReportDetailPage() {
         </Badge>
       </div>
 
-      {/* Grid 2 kolom: kiri=info, kanan=aksi admin */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
 
         {/* ── Kolom Kiri: Info Laporan ── */}
@@ -297,7 +294,18 @@ export default function AdminReportDetailPage() {
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">Informasi Laporan</h2>
             <InfoRow label="Kode Laporan"><span className="font-mono">{report.report_code}</span></InfoRow>
             <InfoRow label="Jenis Laporan">{REPORT_TYPE_LABEL[report.report_type] ?? report.report_type}</InfoRow>
-            <InfoRow label="Guide ID"><span className="font-mono text-xs">{report.guide_id}</span></InfoRow>
+            <InfoRow label="Guide Pelapor">
+              <span className="flex items-center justify-end gap-1.5">
+                <User size={13} className="text-muted-foreground" />
+                <span>{report.guide_name ?? "-"}</span>
+              </span>
+            </InfoRow>
+            <InfoRow label="Email Guide">
+              <span className="flex items-center justify-end gap-1.5">
+                <Mail size={13} className="text-muted-foreground" />
+                <span className="font-mono text-xs">{report.guide_email ?? "-"}</span>
+              </span>
+            </InfoRow>
             <InfoRow label="Tanggal Dibuat">
               <span className="flex items-center justify-end gap-1"><Clock size={13} />{createdAt}</span>
             </InfoRow>
@@ -372,8 +380,7 @@ export default function AdminReportDetailPage() {
               <div className="space-y-1.5">
                 <label className="text-xs text-muted-foreground">Catatan Resolusi <span className="opacity-50">(opsional)</span></label>
                 <textarea
-                  rows={4}
-                  value={notes}
+                  rows={4} value={notes}
                   onChange={e => setNotes(e.target.value)}
                   placeholder="Jelaskan hasil tinjauan atau tindakan yang telah diambil..."
                   className="w-full border rounded-lg px-3 py-2 text-sm bg-background resize-none focus:outline-none focus:ring-2 focus:ring-primary"
@@ -429,21 +436,40 @@ export default function AdminReportDetailPage() {
                 <Input value={report.report_code} readOnly className="font-mono bg-muted/40 cursor-default" />
               </div>
 
-              {/* To */}
+              {/* To — auto-fill dari guide_email, readonly, tidak bisa diedit */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs text-muted-foreground">Kepada <span className="text-red-500">*</span></label>
-                  <button type="button" onClick={() => setShowCc(v => !v)} className="text-[11px] text-primary hover:underline">
+                  <label className="text-xs text-muted-foreground">
+                    Kepada <span className="text-red-500">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowCc(v => !v)}
+                    className="text-[11px] text-primary hover:underline"
+                  >
                     {showCc ? "Sembunyikan CC" : "Tambah CC"}
                   </button>
                 </div>
-                <TagInput value={emailTo} onChange={setEmailTo} placeholder="email@contoh.com — Enter untuk tambah" />
+                {/* Tampilkan sebagai badge readonly — tidak bisa dihapus/diedit */}
+                <div className="flex items-center gap-2 border rounded-lg px-3 py-2 bg-muted/40 cursor-not-allowed min-h-[2.25rem]">
+                  <Mail size={13} className="text-muted-foreground shrink-0" />
+                  <span className="text-sm text-foreground font-mono">
+                    {report.guide_email ?? <span className="text-muted-foreground italic">Email guide tidak tersedia</span>}
+                  </span>
+                  {report.guide_name && (
+                    <span className="text-xs text-muted-foreground ml-1">({report.guide_name})</span>
+                  )}
+                  <span className="ml-auto text-[10px] bg-muted text-muted-foreground rounded px-1.5 py-0.5">Otomatis</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Email penerima otomatis terisi dari akun guide yang mengajukan laporan dan tidak dapat diubah.
+                </p>
               </div>
 
-              {/* CC */}
+              {/* CC — boleh diedit admin */}
               {showCc && (
                 <div className="space-y-1.5">
-                  <label className="text-xs text-muted-foreground">CC</label>
+                  <label className="text-xs text-muted-foreground">CC <span className="opacity-50">(opsional)</span></label>
                   <TagInput value={emailCc} onChange={setEmailCc} placeholder="cc@contoh.com" />
                 </div>
               )}
@@ -468,7 +494,9 @@ export default function AdminReportDetailPage() {
                     className="bg-background [&_.ProseMirror]:min-h-[220px] [&_.ProseMirror-placeholder]:text-muted-foreground [&_.ProseMirror-placeholder]:pointer-events-none"
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">Pembicaraan selanjutnya dilanjutkan melalui email ini.</p>
+                <p className="text-xs text-muted-foreground">
+                  Pembicaraan selanjutnya terkait laporan ini dilanjutkan melalui email.
+                </p>
               </div>
 
               {emailMsg && (
@@ -480,9 +508,16 @@ export default function AdminReportDetailPage() {
                 )}>{emailMsg}</p>
               )}
 
-              <Button type="submit" className="w-full" disabled={sending || emailTo.length === 0}>
-                {sending ? <Loader2 size={14} className="animate-spin mr-1" /> : <Send size={14} className="mr-1" />}
-                {sending ? "Mengirim..." : `Kirim Email${emailTo.length > 0 ? ` ke ${emailTo.length} Penerima` : ""}`}
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={sending || !report.guide_email}
+              >
+                {sending
+                  ? <Loader2 size={14} className="animate-spin mr-1" />
+                  : <Send size={14} className="mr-1" />
+                }
+                {sending ? "Mengirim..." : `Kirim Email ke ${report.guide_email ?? "Guide"}`}
               </Button>
             </form>
           </div>

@@ -4,8 +4,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
-# ── Nested schemas (dipakai di response untuk embed relasi) ─────────────────────
-
+# ── Nested schemas ───────────────────────────────────────────────────────────────────────
 class BookingBrief(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
@@ -27,8 +26,7 @@ class TransactionBrief(BaseModel):
     submitted_at: Optional[datetime] = None
 
 
-# ── Request schemas ─────────────────────────────────────────────────────────────
-
+# ── Request schemas ────────────────────────────────────────────────────────────────────
 class BookingReportCreate(BaseModel):
     """Payload yang dikirim Guide saat membuat laporan."""
     booking_id: uuid.UUID
@@ -46,7 +44,7 @@ class BookingReportCreate(BaseModel):
 
 class BookingReportAdminUpdate(BaseModel):
     """Payload superadmin untuk update status laporan."""
-    status: str                           # 'in_review' | 'resolved' | 'dismissed'
+    status: str                            # 'in_review' | 'resolved' | 'dismissed'
     resolution_notes: Optional[str] = None
 
     model_config = ConfigDict(
@@ -59,8 +57,7 @@ class BookingReportAdminUpdate(BaseModel):
     )
 
 
-# ── Response schema ─────────────────────────────────────────────────────────────
-
+# ── Response schema ────────────────────────────────────────────────────────────────────
 class BookingReportResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -81,3 +78,7 @@ class BookingReportResponse(BaseModel):
     # Embedded detail (bisa None jika relasi belum di-load)
     booking: Optional[BookingBrief] = None
     transaction: Optional[TransactionBrief] = None
+
+    # Info guide pelapor — di-populate dari guide.user
+    guide_email: Optional[str] = None
+    guide_name: Optional[str] = None
