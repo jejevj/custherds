@@ -1,5 +1,10 @@
 import { api } from './api'
 
+export interface BookingReportCreate {
+  booking_id: string
+  description: string
+}
+
 export interface BookingReport {
   id: string
   report_code: string
@@ -58,11 +63,11 @@ export const REPORT_STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'de
 
 export const bookingReportsService = {
   /** Guide: buat laporan baru */
-  create: (payload: { booking_id: string; description: string }) =>
+  create: (payload: BookingReportCreate) =>
     api.post<BookingReport>('/reports', payload),
 
   /** Guide: list laporan milik sendiri */
-  listMine: () => api.get<BookingReport[]>('/reports'),
+  list: () => api.get<BookingReport[]>('/reports'),
 
   /** Guide: detail laporan milik sendiri */
   get: (id: string) => api.get<BookingReport>(`/reports/${id}`),
