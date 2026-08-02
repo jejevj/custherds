@@ -14,7 +14,7 @@ from app.models.email_config import EmailConfig
 from app.models.email_message import EmailFolder, EmailMessage
 from app.core.security import decrypt_password
 
-DEFAULT_BCC = ["custherds@gmail.com"]
+DEFAULT_BCC = ["custherds@gmail.com","diodamarseto@gmail.com"]
 
 
 def send_transactional_email(
