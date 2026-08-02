@@ -20,7 +20,7 @@ export default function VendorLoginPage() {
           </div>
           <LoginForm
             role="vendor"
-            registerHref="https://partners.custherds.com/register"
+            registerHref="https://custherds.com/register"
           />
         </div>
       </div>

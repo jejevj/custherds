@@ -20,7 +20,7 @@ export default function GuideLoginPage() {
           </div>
           <LoginForm
             role="guide"
-            registerHref="https://partners.custherds.com/register"
+            registerHref="https://custherds.com/register"
           />
         </div>
       </div>
