@@ -1,6 +1,6 @@
 <template>
     <section class="contact-one">
-        <div class="contact-one__bg" :style="{ backgroundImage: 'url(https://www.custherds.com/assets/images/slide/page2-3.webp)' }">
+        <div class="contact-one__bg" :style="{ backgroundImage: 'url(https://www.custherds.com/assets/images/backgrounds/slider-2-3.jpg)' }">
             <div class="contact-one__overlay"></div>
             <div class="container">
                 <div class="contact-one__inner text-center">
