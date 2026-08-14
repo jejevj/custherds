@@ -38,7 +38,7 @@
                 <div class="col-xl-6 wow fadeInRight" data-wow-delay="300ms">
                     <div class="about-two__right">
                         <div class="about-two__img">
-                            <img src="https://www.custherds.com/assets/images/slide/page1-2.webp?v=44806c3050915c018d83a707fe577223" alt="Affiliate Partners">
+                            <img src="https://www.custherds.com/assets/images/backgrounds/slider-1-1.jpg" alt="Affiliate Partners">
                         </div>
                     </div>
                 </div>
