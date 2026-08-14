@@ -56,14 +56,14 @@ export default {
                     title: "Turn Your Network <br> into Net Worth",
                     text: "Connect Affiliate Partners & Businesses Vendors. Earn unlimited potential income, <br> be part of custherds community",
                     ctaLabel: "Affiliate Partner",
-                    ctaLink: "/contact"
+                    ctaLink: "https://partners.custherds.com/guide/login"
                 },
                 {
                     bg: 'https://www.custherds.com/assets/images/backgrounds/slider-1-3.jpg',
                     title: "Grow Your Business <br> Beyond Boundaries",
                     text: "List your products & services, reach thousands of active affiliates. <br> Scale faster with the custherds vendor ecosystem",
                     ctaLabel: "Business Vendor",
-                    ctaLink: "/contact"
+                    ctaLink: "https://partners.custherds.com/vendor/login"
                 }
             ]
         };
