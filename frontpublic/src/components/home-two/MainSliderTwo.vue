@@ -52,14 +52,14 @@ export default {
             autoplayTimer: null,
             slides: [
                 {
-                    bg: 'https://www.custherds.com/assets/images/slide/page1.webp?v=44806c3050915c018d83a707fe577223',
+                    bg: 'https://www.custherds.com/assets/images/backgrounds/slider-1-2.jpg',
                     title: "Turn Your Network <br> into Net Worth",
                     text: "Connect Affiliate Partners & Businesses Vendors. Earn unlimited potential income, <br> be part of custherds community",
                     ctaLabel: "Affiliate Partner",
                     ctaLink: "/contact"
                 },
                 {
-                    bg: 'https://www.custherds.com/assets/images/slide/page1-3.webp?v=44806c3050915c018d83a707fe577223',
+                    bg: 'https://www.custherds.com/assets/images/backgrounds/slider-1-3.jpg',
                     title: "Grow Your Business <br> Beyond Boundaries",
                     text: "List your products & services, reach thousands of active affiliates. <br> Scale faster with the custherds vendor ecosystem",
                     ctaLabel: "Business Vendor",
