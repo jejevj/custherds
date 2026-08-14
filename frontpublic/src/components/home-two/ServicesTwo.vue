@@ -7,7 +7,7 @@
                     <h2 class="section-title__title title-animation">Business Vendor</h2>
                 </div>
                 <div class="services-two__btn-box wow fadeInRight" data-wow-delay="100ms">
-                    <router-link to="/contact" class="thm-btn services-two__btn">Best Business Traffic Platform <span class="icon-up-right-arrow"></span></router-link>
+                    <a to="https://www.custherds.com/register" class="thm-btn services-two__btn">Best Business Traffic Platform <span class="icon-up-right-arrow"></span></a>
                 </div>
             </div>
             <div class="services-two__bottom">

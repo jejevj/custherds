@@ -30,8 +30,8 @@
                             </li>
                         </ul>
                         <div class="about-two__btn-box">
-                            <router-link to="/contact" class="thm-btn about-two__btn">Start Earning Today! <span
-                                    class="icon-up-right-arrow"></span></router-link>
+                            <a to="https://www.custherds.com/register" class="thm-btn about-two__btn">Start Earning Today! <span
+                                    class="icon-up-right-arrow"></span></a>
                         </div>
                     </div>
                 </div>
