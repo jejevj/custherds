@@ -3,19 +3,17 @@
         <div class="section-shape-1" style="background-image: url(@/assets/images/shapes/section-shape-1.png);"></div>
         <div class="main-slider__carousel">
 
-            <div
-                v-for="(slide, index) in slides"
-                :key="index"
-                class="item"
-                :class="{ active: currentIndex === index }"
-            >
+            <div v-for="(slide, index) in slides" :key="index" class="item" :class="{ active: currentIndex === index }">
                 <div class="main-slider-two__bg" :style="{ backgroundImage: 'url(' + slide.bg + ')' }"></div>
                 <div class="container">
                     <div class="main-slider-two__content">
                         <h2 class="main-slider-two__title" v-html="slide.title"></h2>
                         <p class="main-slider-two__text" v-html="slide.text"></p>
                         <div class="main-slider-two__btn-box">
-                            <router-link :to="slide.ctaLink" class="thm-btn main-slider-two__btn">{{ slide.ctaLabel }} <span class="icon-up-right-arrow"></span></router-link>
+                            <a :href="slide.ctaLink" class="thm-btn main-slider-two__btn">
+                                {{ slide.ctaLabel }}
+                                <span class="icon-up-right-arrow"></span>
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -23,20 +21,16 @@
 
             <!-- Navigation -->
             <div class="main-slider-two__nav">
-                <button class="main-slider-two__prev" @click="prev" aria-label="Previous"><span class="icon-left-arrow"></span></button>
-                <button class="main-slider-two__next" @click="next" aria-label="Next"><span class="icon-right-arrow"></span></button>
+                <button class="main-slider-two__prev" @click="prev" aria-label="Previous"><span
+                        class="icon-left-arrow"></span></button>
+                <button class="main-slider-two__next" @click="next" aria-label="Next"><span
+                        class="icon-right-arrow"></span></button>
             </div>
 
             <!-- Pagination -->
             <div class="main-slider-two__dots">
-                <button
-                    v-for="(slide, index) in slides"
-                    :key="'dot-' + index"
-                    class="main-slider-two__dot"
-                    :class="{ active: currentIndex === index }"
-                    @click="goTo(index)"
-                    aria-label="Go to slide"
-                ></button>
+                <button v-for="(slide, index) in slides" :key="'dot-' + index" class="main-slider-two__dot"
+                    :class="{ active: currentIndex === index }" @click="goTo(index)" aria-label="Go to slide"></button>
             </div>
 
         </div>
