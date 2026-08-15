@@ -1,7 +1,9 @@
-import { api, API_BASE_URL } from './api'
+import { api } from './api'
 
 const LEGACY_API_URL = (
-  process.env.NEXT_PUBLIC_LEGACY_API_URL ?? API_BASE_URL
+  process.env.NEXT_PUBLIC_LEGACY_API_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  ''
 ).replace(/\/$/, '')
 
 const R2_PUBLIC_URL = (
