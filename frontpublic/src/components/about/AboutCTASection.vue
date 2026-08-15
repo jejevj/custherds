@@ -1,6 +1,7 @@
 <template>
     <section class="contact-one">
-        <div class="contact-one__bg" :style="{ backgroundImage: 'url(https://www.custherds.com/assets/images/backgrounds/slider-2-3.jpg)' }">
+        <div class="contact-one__bg"
+            :style="{ backgroundImage: 'url(https://www.custherds.com/assets/images/backgrounds/slider-2-3.jpg)' }">
             <div class="contact-one__overlay"></div>
             <div class="container">
                 <div class="contact-one__inner text-center">
@@ -9,12 +10,14 @@
                         Step into a professional partnership where we grow, win, and succeed as one.
                     </p>
                     <div class="contact-one__btn-box">
-                        <router-link to="/contact" class="thm-btn contact-one__btn">
+                        <a href="https://www.custherds.com/register" class="thm-btn contact-one__btn">
                             Affiliate Partner <span class="icon-up-right-arrow"></span>
-                        </router-link>
-                        <router-link to="/contact" class="thm-btn contact-one__btn contact-one__btn--alt">
+                        </a>
+                        <a href="https://www.custherds.com/register"
+                            class="thm-btn contact-one__btn contact-one__btn--alt">
                             Business Vendor <span class="icon-up-right-arrow"></span>
-                        </router-link>
+                        </a>
+
                     </div>
                 </div>
             </div>
@@ -35,21 +38,25 @@ export default {
     background-position: center;
     padding: 120px 0;
 }
+
 .contact-one__overlay {
     position: absolute;
     inset: 0;
     background: rgba(0, 0, 0, 0.55);
 }
+
 .contact-one__inner {
     position: relative;
     z-index: 2;
 }
+
 .contact-one__title {
     color: #fff;
     font-size: 48px;
     font-weight: 700;
     margin-bottom: 20px;
 }
+
 .contact-one__text {
     color: #fff;
     font-size: 18px;
@@ -58,6 +65,7 @@ export default {
     margin-left: auto;
     margin-right: auto;
 }
+
 .contact-one__btn-box {
     display: flex;
     gap: 16px;
