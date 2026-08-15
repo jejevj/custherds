@@ -24,18 +24,6 @@ class Settings(BaseSettings):
     XENDIT_SECRET_KEY: str = "xnd_development_xxxxxxxxxxxxxxxxxxxxxxxx"
     XENDIT_WEBHOOK_TOKEN: str = ""
 
-    # ── Cloudflare R2 Storage ────────────────────────────────────────────────────
-    # Dapatkan dari: https://dash.cloudflare.com/ → kanan bawah (Account ID)
-    R2_ACCOUNT_ID: str = ""
-    # Buat di: R2 → Manage R2 API Tokens → Create API Token (Object Read & Write)
-    R2_ACCESS_KEY_ID: str = ""
-    R2_SECRET_ACCESS_KEY: str = ""
-    # Nama bucket R2 yang sudah dibuat di Cloudflare dashboard
-    R2_BUCKET_NAME: str = "custherds-uploads"
-    # Public URL bucket: aktifkan Public Access di R2 dashboard, atau pakai custom domain
-    # Contoh: https://uploads.custherds.com  atau  https://pub-xxxx.r2.dev
-    R2_PUBLIC_URL: str = ""
-
     # ── CORS ─────────────────────────────────────────────────────────────────────
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:3000",
