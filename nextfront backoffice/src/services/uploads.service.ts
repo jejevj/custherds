@@ -51,7 +51,7 @@ export async function uploadFile(file: File): Promise<string> {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 
-  return res.data.url
+  return res.url
 }
 
 export async function uploadFiles(files: File[]): Promise<string[]> {
@@ -62,7 +62,7 @@ export async function uploadFiles(files: File[]): Promise<string[]> {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 
-  return res.data.urls
+  return res.urls
 }
 
 export const uploadsService = {
