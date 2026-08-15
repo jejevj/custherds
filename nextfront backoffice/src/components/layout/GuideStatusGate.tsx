@@ -5,86 +5,27 @@ import { uploadsService } from "@/services/uploads.service"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
+import { Badge } from "@/components/ui/badge"
+import { CheckCircle2, Clock, FileText, Loader2, Upload, XCircle } from "lucide-react"
 
-interface Props { children: React.ReactNode }
-
-// Daftar bank diambil dari konfigurasi admin settlement-bank-account
-const BANK_CODES = [
-  { code: '002', name: 'Bank BRI' },
-  { code: '008', name: 'Bank Mandiri' },
-  { code: '009', name: 'Bank BNI' },
-  { code: '011', name: 'Bank Danamon' },
-  { code: '013', name: 'Bank Permata' },
-  { code: '014', name: 'Bank BCA' },
-  { code: '016', name: 'Bank Maybank' },
-  { code: '019', name: 'Bank Panin' },
-  { code: '022', name: 'Bank CIMB Niaga' },
-  { code: '023', name: 'Bank UOB Indonesia' },
-  { code: '028', name: 'Bank OCBC NISP' },
-  { code: '031', name: 'Citibank' },
-  { code: '036', name: 'Bank Multicor / Windu' },
-  { code: '046', name: 'Bank DKI' },
-  { code: '054', name: 'Bank Capital Indonesia' },
-  { code: '055', name: 'Bank BTPN' },
-  { code: '061', name: 'Bank Bukopin' },
-  { code: '069', name: 'Bank BRI Syariah' },
-  { code: '076', name: 'Bank Bumi Arta' },
-  { code: '110', name: 'Bank BJB' },
-  { code: '111', name: 'Bank DKI Syariah' },
-  { code: '200', name: 'Bank BTN' },
-  { code: '212', name: 'Bank Woori Saudara' },
-  { code: '422', name: 'Bank Syariah Indonesia (BSI)' },
-  { code: '451', name: 'Bank Syariah Bukopin' },
-  { code: '484', name: 'Bank KEB Hana Indonesia' },
-  { code: '503', name: 'Bank Nobu' },
-  { code: '513', name: 'Bank Ina Perdana' },
-  { code: '517', name: 'Bank Panin Dubai Syariah' },
-  { code: '520', name: 'Bank Prima Master' },
-  { code: '521', name: 'Bank Jasa Jakarta' },
-  { code: '523', name: 'Bank Harda Internasional' },
-  { code: '526', name: 'Bank Bisnis Internasional' },
-  { code: '531', name: 'Bank Sinarmas' },
-  { code: '536', name: 'Bank OKE Indonesia' },
-  { code: '542', name: 'Bank Artha Graha' },
-  { code: '553', name: 'Bank Mayora' },
-  { code: '555', name: 'Bank Index Selindo' },
-  { code: '558', name: 'Bank Ganesha' },
-  { code: '564', name: 'Bank Royal Indonesia' },
-  { code: '566', name: 'Bank BNP Paribas Indonesia' },
-  { code: '567', name: 'Bank SBI Indonesia' },
-  { code: '668', name: 'Bank Mega' },
-  { code: '688', name: 'Bank Bumiputera' },
-  { code: '702', name: 'Bank BTPN Syariah' },
-  { code: '706', name: 'Bank Syariah Mandiri' },
-  { code: '777', name: 'Bank Sahabat Sampoerna' },
-  { code: '787', name: 'Bank JAGO' },
-  { code: '788', name: 'Bank Allo' },
-  { code: '812', name: 'Bank Seabank Indonesia' },
-  { code: '818', name: 'Bank Superbank' },
-  { code: '868', name: 'Bank Neo Commerce (BNC)' },
-]
-
-function FileUploadField({
-  label, required, currentUrl, fieldKey, onUploaded,
-}: {
+type UploadFieldProps = {
   label: string
-  required?: boolean
-  currentUrl: string
-  fieldKey: string
+  value?: string | null
+  accept?: string
   onUploaded: (url: string) => void
-}) {
-  const ref = useRef<HTMLInputElement>(null)
+}
+
+function UploadField({ label, value, accept = "image/*,.pdf", onUploaded }: UploadFieldProps) {
+  const inputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [err, setErr] = useState("")
 
-  const handleChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
+  const handleFile = async (file?: File) => {
     if (!file) return
     setErr("")
     setUploading(true)
     try {
-      const { url } = await uploadsService.upload(file)
+      const url = await uploadsService.upload(file)
       onUploaded(url)
     } catch (ex: unknown) {
       setErr(ex instanceof Error ? ex.message : "Upload gagal")
@@ -93,308 +34,136 @@ function FileUploadField({
     }
   }
 
+  const currentUrl = value ? uploadsService.getUrl(value) : ""
+
   return (
-    <div className="grid gap-1.5">
-      <Label className="text-sm">{label}{required && <span className="text-destructive"> *</span>}</Label>
+    <div className="space-y-2">
+      <Label>{label}</Label>
       <div className="flex items-center gap-2">
-        <button
+        <Input
+          ref={inputRef}
+          type="file"
+          accept={accept}
+          className="hidden"
+          onChange={(event) => handleFile(event.target.files?.[0])}
+        />
+        <Button
           type="button"
-          onClick={() => ref.current?.click()}
+          variant="outline"
+          onClick={() => inputRef.current?.click()}
           disabled={uploading}
-          className="flex-1 h-9 rounded-lg px-3 text-sm text-left truncate transition-colors"
-          style={{
-            background: "oklch(1 0 0 / 0.06)",
-            border: "1px solid oklch(1 0 0 / 0.15)",
-            color: currentUrl ? "inherit" : "oklch(0.556 0 0)",
-          }}
         >
-          {uploading ? "Mengupload…" : currentUrl ? `✓ ${currentUrl.split("/").pop()}` : "Pilih file (JPG/PNG/PDF, maks 5MB)"}
-        </button>
+          {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+          {value ? "Ganti file" : "Upload file"}
+        </Button>
         {currentUrl && (
           <a
-            href={uploadsService.getUrl(currentUrl)}
+            href={currentUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs underline text-muted-foreground whitespace-nowrap"
           >
-            Lihat
+            Lihat file
           </a>
         )}
       </div>
-      {err && <p className="text-xs text-destructive">{err}</p>}
-      <input ref={ref} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="hidden" onChange={handleChange} />
+      {err && <p className="text-sm text-destructive">{err}</p>}
     </div>
   )
 }
 
-export default function GuideStatusGate({ children }: Props) {
+export function GuideStatusGate({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<GuideProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState("")
-  const [form, setForm] = useState<Partial<GuideProfile>>({})
-
-  const set = (k: keyof GuideProfile, v: string) =>
-    setForm(f => ({ ...f, [k]: v }))
-
-  // guide_certificate tidak lagi required — opsional
-  const isComplete =
-    !!form.bio &&
-    !!form.guide_phone &&
-    !!form.guide_nationality &&
-    !!form.guide_id_card_url
+  const [message, setMessage] = useState("")
 
   useEffect(() => {
-    guidesService.getProfile()
-      .then(p => {
-        setProfile(p)
-        setForm({
-          bio: p.bio ?? "",
-          guide_phone: p.guide_phone ?? "",
-          guide_nationality: p.guide_nationality ?? "",
-          languages: p.languages ?? "",
-          guide_id_card_url: p.guide_id_card_url ?? "",
-          guide_certificate: p.guide_certificate ?? "",
-          bank_code: p.bank_code ?? "",
-          bank_name: p.bank_name ?? "",
-          bank_account_number: p.bank_account_number ?? "",
-          bank_account_name: p.bank_account_name ?? "",
-          bank_branch: p.bank_branch ?? "",
-        })
-      })
-      .catch(() => {})
+    guidesService
+      .getMyProfile()
+      .then(setProfile)
+      .catch(() => setProfile(null))
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <>{children}</>
-  if (!profile || profile.guide_status === "approved") return <>{children}</>
+  if (loading) {
+    return <div className="flex min-h-[240px] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>
+  }
 
-  const status = profile.guide_status
+  if (!profile) return <>{children}</>
 
-  const handleSaveAndSubmit = async () => {
-    setError("")
-    setSaving(true)
-    try {
-      await guidesService.updateProfile(form)
-    } catch {
-      setError("Gagal menyimpan data. Coba lagi.")
-      setSaving(false)
-      return
-    }
-    setSaving(false)
+  if (profile.status === "approved") return <>{children}</>
+
+  const isPending = profile.status === "pending"
+  const isRejected = profile.status === "rejected"
+
+  const submit = async () => {
     setSubmitting(true)
+    setMessage("")
     try {
-      const updated = await guidesService.submitReview(form)
+      const updated = await guidesService.submit({
+        ktp_file: profile.ktp_file || undefined,
+        certificate_file: profile.certificate_file || undefined,
+      })
       setProfile(updated)
-    } catch {
-      setError("Gagal mengirim pengajuan. Coba lagi.")
+      setMessage("Dokumen berhasil dikirim untuk ditinjau.")
+    } catch (ex: unknown) {
+      setMessage(ex instanceof Error ? ex.message : "Gagal mengirim dokumen")
     } finally {
       setSubmitting(false)
     }
   }
 
+  const updateFile = (field: "ktp_file" | "certificate_file", url: string) => {
+    setProfile((current) => current ? { ...current, [field]: url } : current)
+  }
+
   return (
-    <>
-      {children}
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
-        style={{
-          background: "oklch(0 0 0 / 0.75)",
-          backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
-        }}
-      >
-        <div
-          className="relative w-full max-w-2xl my-auto rounded-2xl border shadow-2xl"
-          style={{
-            background: "linear-gradient(160deg, oklch(1 0 0 / 0.07), oklch(1 0 0 / 0.03))",
-            backdropFilter: "blur(32px)",
-            WebkitBackdropFilter: "blur(32px)",
-            borderColor: "oklch(1 0 0 / 0.15)",
-          }}
-        >
-          {/* Header */}
-          <div className="px-8 pt-8 pb-0">
-            <div className="flex items-center gap-3 mb-1">
-              <div
-                className="w-9 h-9 rounded-xl flex items-center justify-center text-lg"
-                style={{ background: "oklch(1 0 0 / 0.08)", border: "1px solid oklch(1 0 0 / 0.15)" }}
-              >
-                {status === "pending" ? "⏳" : status === "rejected" ? "⚠️" : "📋"}
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-foreground leading-tight">
-                  {status === "pending" && "Profil Sedang Diverifikasi"}
-                  {status === "rejected" && "Pengajuan Ditolak — Perbarui Data"}
-                  {status === "incomplete" && "Lengkapi Profil Guide"}
-                </h2>
-                <p className="text-xs text-muted-foreground">
-                  {status === "pending" && "Tim kami sedang mereview dokumen kamu."}
-                  {status === "rejected" && "Perbaiki data berdasarkan catatan admin, lalu kirim ulang."}
-                  {status === "incomplete" && "Isi semua data di bawah sebelum mengajukan verifikasi."}
-                </p>
-              </div>
-            </div>
-            {status === "rejected" && profile.rejection_notes && (
-              <div
-                className="mt-4 rounded-xl px-4 py-3 text-sm"
-                style={{ background: "oklch(0.577 0.245 27 / 0.15)", border: "1px solid oklch(0.577 0.245 27 / 0.35)" }}
-              >
-                <p className="font-semibold text-destructive mb-0.5">Catatan dari Admin</p>
-                <p className="text-foreground/80">{profile.rejection_notes}</p>
-              </div>
-            )}
+    <main className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-2xl items-center px-4 py-10">
+      <section className="w-full rounded-xl border bg-card p-6 shadow-sm">
+        <div className="mb-6 flex items-start gap-3">
+          {isPending ? <Clock className="mt-0.5 h-6 w-6 text-amber-500" /> : isRejected ? <XCircle className="mt-0.5 h-6 w-6 text-destructive" /> : <FileText className="mt-0.5 h-6 w-6 text-primary" />}
+          <div>
+            <h1 className="text-xl font-semibold">Verifikasi pemandu</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Upload KTP dan, bila ada, sertifikat pemandu sebelum menerima pesanan.
+            </p>
           </div>
-
-          {status === "pending" ? (
-            <div className="px-8 py-8">
-              <div className="space-y-2">
-                {["Bio / Deskripsi Diri", "Nomor HP", "Kewarganegaraan", "KTP / Paspor", "Sertifikat Guide (opsional)", "Bahasa", "Rekening Bank"].map(item => (
-                  <div key={item} className="flex items-center gap-3 text-sm">
-                    <div className="w-4 h-4 rounded-full flex items-center justify-center text-xs" style={{ background: "oklch(1 0 0 / 0.15)" }}>✓</div>
-                    <span className="text-muted-foreground">{item}</span>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-6 text-xs text-muted-foreground">Kamu akan mendapat notifikasi saat verifikasi selesai.</p>
-            </div>
-          ) : (
-            <div className="px-8 py-6 space-y-5">
-              {error && <p className="text-sm text-destructive">{error}</p>}
-
-              {/* Profil */}
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Profil</p>
-                <div className="space-y-3">
-                  <div className="grid gap-1.5">
-                    <Label className="text-sm">Bio / Deskripsi Diri <span className="text-destructive">*</span></Label>
-                    <textarea
-                      rows={3}
-                      value={form.bio ?? ""}
-                      onChange={e => set("bio", e.target.value)}
-                      placeholder="Ceritakan pengalaman & keahlian kamu sebagai guide"
-                      className="w-full rounded-lg px-3 py-2 text-sm resize-none"
-                      style={{ background: "oklch(1 0 0 / 0.06)", border: "1px solid oklch(1 0 0 / 0.15)", outline: "none" }}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="grid gap-1.5">
-                      <Label className="text-sm">Nomor HP <span className="text-destructive">*</span></Label>
-                      <Input value={form.guide_phone ?? ""} onChange={e => set("guide_phone", e.target.value)} placeholder="+62..." className="bg-white/[0.06] border-white/[0.15]" />
-                    </div>
-                    <div className="grid gap-1.5">
-                      <Label className="text-sm">Kewarganegaraan <span className="text-destructive">*</span></Label>
-                      <Input value={form.guide_nationality ?? ""} onChange={e => set("guide_nationality", e.target.value)} placeholder="WNI / WNA" className="bg-white/[0.06] border-white/[0.15]" />
-                    </div>
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label className="text-sm">Bahasa yang Dikuasai</Label>
-                    <Input value={form.languages ?? ""} onChange={e => set("languages", e.target.value)} placeholder="Indonesia, English, dll." className="bg-white/[0.06] border-white/[0.15]" />
-                  </div>
-                </div>
-              </div>
-
-              <Separator style={{ background: "oklch(1 0 0 / 0.10)" }} />
-
-              {/* Dokumen */}
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Dokumen Identitas</p>
-                <div className="space-y-3">
-                  <FileUploadField
-                    label="KTP / Paspor"
-                    required
-                    currentUrl={form.guide_id_card_url ?? ""}
-                    fieldKey="guide_id_card_url"
-                    onUploaded={url => set("guide_id_card_url", url)}
-                  />
-                  {/* Sertifikat Guide — opsional, tidak perlu required */}
-                  <FileUploadField
-                    label="Sertifikat Guide (opsional)"
-                    currentUrl={form.guide_certificate ?? ""}
-                    fieldKey="guide_certificate"
-                    onUploaded={url => set("guide_certificate", url)}
-                  />
-                </div>
-              </div>
-
-              <Separator style={{ background: "oklch(1 0 0 / 0.10)" }} />
-
-              {/* Bank */}
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Informasi Rekening Bank</p>
-                <div className="space-y-3">
-                  {/* Nama Bank — dropdown dari konfigurasi BANK_CODES admin */}
-                  <div className="grid gap-1.5">
-                    <Label className="text-sm">Nama Bank</Label>
-                    <select
-                      value={form.bank_code ?? ""}
-                      onChange={e => {
-                        const selected = BANK_CODES.find(b => b.code === e.target.value)
-                        setForm(f => ({
-                          ...f,
-                          bank_code: e.target.value,
-                          bank_name: selected ? selected.name : "",
-                        }))
-                      }}
-                      className="w-full h-9 rounded-lg px-3 text-sm"
-                      style={{
-                        background: "oklch(1 0 0 / 0.06)",
-                        border: "1px solid oklch(1 0 0 / 0.15)",
-                        color: form.bank_code ? "inherit" : "oklch(0.556 0 0)",
-                        outline: "none",
-                      }}
-                    >
-                      <option value="">-- Pilih Bank --</option>
-                      {BANK_CODES.map(b => (
-                        <option key={b.code} value={b.code}>
-                          {b.name} ({b.code})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Kantor Cabang Pembuatan Bank */}
-                  <div className="grid gap-1.5">
-                    <Label className="text-sm">Kantor Cabang Pembuatan Bank</Label>
-                    <Input
-                      value={form.bank_branch ?? ""}
-                      onChange={e => set("bank_branch", e.target.value)}
-                      placeholder="Contoh: KCP Palembang Ilir Barat"
-                      className="bg-white/[0.06] border-white/[0.15]"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="grid gap-1.5">
-                      <Label className="text-sm">Nomor Rekening</Label>
-                      <Input value={form.bank_account_number ?? ""} onChange={e => set("bank_account_number", e.target.value)} placeholder="Nomor rekening aktif" className="bg-white/[0.06] border-white/[0.15]" />
-                    </div>
-                    <div className="grid gap-1.5">
-                      <Label className="text-sm">Atas Nama</Label>
-                      <Input value={form.bank_account_name ?? ""} onChange={e => set("bank_account_name", e.target.value)} placeholder="Nama di buku tabungan" className="bg-white/[0.06] border-white/[0.15]" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Submit */}
-              <div className="pt-2">
-                <Button
-                  onClick={handleSaveAndSubmit}
-                  disabled={!isComplete || submitting || saving}
-                  className="w-full h-11 font-semibold"
-                >
-                  {saving ? "Menyimpan data…" : submitting ? "Mengirim pengajuan…" : "Simpan & Kirim untuk Direview"}
-                </Button>
-                {!isComplete && (
-                  <p className="text-center text-xs text-muted-foreground mt-2">Lengkapi semua field bertanda * untuk melanjutkan</p>
-                )}
-              </div>
-            </div>
-          )}
         </div>
-      </div>
-    </>
+
+        <div className="mb-6">
+          <Badge variant={isPending ? "secondary" : isRejected ? "destructive" : "outline"}>
+            {isPending ? "Menunggu verifikasi" : isRejected ? "Perlu perbaikan" : "Belum diajukan"}
+          </Badge>
+          {profile.admin_notes && <p className="mt-2 text-sm text-muted-foreground">Catatan admin: {profile.admin_notes}</p>}
+        </div>
+
+        {!isPending && (
+          <div className="space-y-5">
+            <UploadField
+              label="KTP"
+              value={profile.ktp_file}
+              onUploaded={(url) => updateFile("ktp_file", url)}
+            />
+            <UploadField
+              label="Sertifikat pemandu (opsional)"
+              value={profile.certificate_file}
+              onUploaded={(url) => updateFile("certificate_file", url)}
+            />
+            <Button
+              type="button"
+              className="w-full"
+              disabled={submitting || !profile.ktp_file}
+              onClick={submit}
+            >
+              {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+              Kirim untuk verifikasi
+            </Button>
+          </div>
+        )}
+
+        {message && <p className="mt-4 text-sm text-muted-foreground">{message}</p>}
+      </section>
+    </main>
   )
 }
