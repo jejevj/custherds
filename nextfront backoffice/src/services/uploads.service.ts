@@ -10,6 +10,14 @@ const R2_PUBLIC_URL = (
   process.env.NEXT_PUBLIC_R2_UPLOAD_URL ?? ''
 ).replace(/\/$/, '')
 
+type UploadResponse = {
+  url: string
+}
+
+type BatchUploadResponse = {
+  urls: string[]
+}
+
 /**
  * Resolve upload value to a displayable URL.
  * Absolute URLs (including Cloudflare R2) are used directly.
@@ -39,7 +47,7 @@ export async function uploadFile(file: File): Promise<string> {
   const formData = new FormData()
   formData.append('file', file)
 
-  const res = await api.post('/uploads', formData, {
+  const res = await api.post<UploadResponse>('/uploads', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 
@@ -50,7 +58,7 @@ export async function uploadFiles(files: File[]): Promise<string[]> {
   const formData = new FormData()
   files.forEach((file) => formData.append('files', file))
 
-  const res = await api.post('/uploads/batch', formData, {
+  const res = await api.post<BatchUploadResponse>('/uploads/batch', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 
