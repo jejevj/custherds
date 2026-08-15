@@ -5,7 +5,7 @@
             <div class="row justify-content-center mb-5 wow fadeInUp" data-wow-delay="100ms">
                 <div class="col-12">
                     <div class="about-custherds__img mb-4">
-                        <img src="https://www.custherds.com/assets/images/slide/page2.webp" alt="About Custherds" class="img-fluid rounded">
+                        <img src="https://www.custherds.com/assets/images/backgrounds/slider-2-1.jpg" alt="About Custherds" class="img-fluid rounded">
                     </div>
                     <div class="section-title text-left sec-title-animation animation-style2">
                         <h2 class="section-title__title title-animation">About Custherds</h2>
@@ -24,7 +24,7 @@
             <div class="row justify-content-center mb-5 wow fadeInUp" data-wow-delay="200ms">
                 <div class="col-12">
                     <div class="about-custherds__img mb-4">
-                        <img src="https://www.custherds.com/assets/images/slide/page2-2.webp" alt="Why Bali" class="img-fluid rounded">
+                        <img src="https://www.custherds.com/assets/images/backgrounds/slider-2-2.jpg" alt="Why Bali" class="img-fluid rounded">
                     </div>
                     <div class="section-title text-left sec-title-animation animation-style2">
                         <h2 class="section-title__title title-animation">Why Bali</h2>
