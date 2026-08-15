@@ -58,6 +58,7 @@ export async function uploadFiles(files: File[]): Promise<string[]> {
 }
 
 export const uploadsService = {
+  getUrl: resolveUploadUrl,
   upload: uploadFile,
   uploadBatch: uploadFiles,
 }
