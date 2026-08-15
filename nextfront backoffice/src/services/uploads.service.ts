@@ -1,71 +1,66 @@
-import { API_BASE_URL } from '@/lib/constants'
-import { getTokens } from './api'
+import { api } from './api'
 
-export interface UploadResult {
-  url: string
-  filename: string
-}
+const LEGACY_API_URL = (
+  process.env.NEXT_PUBLIC_LEGACY_API_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  ''
+).replace(/\/$/, '')
 
-/**
- * Resolve path relatif (/api/v1/uploads/xxx) ke full backend URL.
- * Jika sudah http(s) dikembalikan as-is.
- */
-export function resolveUploadUrl(url: string): string {
-  if (!url) return ''
-  if (url.startsWith('http')) return url
-  // API_BASE_URL = https://api-custherds.ourtestcloud.my.id/api/v1
-  // strip /api/v1 lalu sambung path relatif
-  return `${API_BASE_URL.replace(/\/api\/v1\/?$/, '')}${url}`
-}
-
-/** Upload single file → return { url (full), filename } */
-async function upload(file: File): Promise<UploadResult> {
-  const { access } = getTokens()
-  const form = new FormData()
-  form.append('file', file)
-
-  const res = await fetch(`${API_BASE_URL}/uploads`, {
-    method: 'POST',
-    headers: access ? { Authorization: `Bearer ${access}` } : {},
-    body: form,
-  })
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Upload gagal' }))
-    throw new Error(err.detail ?? 'Upload gagal')
-  }
-
-  const data = await res.json() as UploadResult
-  return { ...data, url: resolveUploadUrl(data.url) }
-}
-
-/** Resolve relative URL — alias untuk backward compat */
-const getUrl = resolveUploadUrl
-
-/** Backward-compat object — dipakai GuideStatusGate, AdminGuides, AdminVendors */
-export const uploadsService = { upload, getUrl }
+const R2_PUBLIC_URL = (
+  process.env.NEXT_PUBLIC_R2_UPLOAD_URL ?? ''
+).replace(/\/$/, '')
 
 /**
- * Upload multiple foto sekaligus ke POST /api/v1/uploads/batch.
- * Return array full URL langsung siap dipakai sebagai <Image src>.
+ * Resolve upload value to a displayable URL.
+ * Absolute URLs (including Cloudflare R2) are used directly.
+ * Legacy /api/v1/uploads paths are served by the legacy API host.
  */
-export async function uploadPhotos(files: File[]): Promise<string[]> {
-  const { access } = getTokens()
-  const form = new FormData()
-  files.forEach(f => form.append('files', f))
+export function resolveUploadUrl(value?: string | null): string {
+  if (!value) return ''
 
-  const res = await fetch(`${API_BASE_URL}/uploads/batch`, {
-    method: 'POST',
-    headers: access ? { Authorization: `Bearer ${access}` } : {},
-    body: form,
-  })
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Upload gagal' }))
-    throw new Error(err.detail ?? 'Upload gagal')
+  if (/^https?:\/\//i.test(value)) {
+    return value
   }
 
-  const data = await res.json() as { uploaded: UploadResult[]; count: number }
-  // convert semua URL relatif ke full backend URL
-  return data.uploaded.map(u => resolveUploadUrl(u.url))
+  const path = value.replace(/^\/+/, '')
+
+  if (value.startsWith('/api/v1/uploads/')) {
+    return `${LEGACY_API_URL}${value}`
+  }
+
+  if (R2_PUBLIC_URL && (path.startsWith('uploads/') || path.startsWith('r2/'))) {
+    return `${R2_PUBLIC_URL}/${path}`
+  }
+
+  return `${LEGACY_API_URL}/api/v1/uploads/${path}`
 }
+
+export async function uploadFile(file: File): Promise<string> {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const res = await api.post('/uploads', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+
+  return res.data.url
+}
+
+export async function uploadFiles(files: File[]): Promise<string[]> {
+  const formData = new FormData()
+  files.forEach((file) => formData.append('files', file))
+
+  const res = await api.post('/uploads/batch', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+
+  return res.data.urls
+}
+
+export const uploadsService = {
+  getUrl: resolveUploadUrl,
+  upload: uploadFile,
+  uploadBatch: uploadFiles,
+}
+
+export const uploadPhotos = uploadFiles
