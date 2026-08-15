@@ -167,3 +167,5 @@ export function GuideStatusGate({ children }: { children: React.ReactNode }) {
     </main>
   )
 }
+
+export default GuideStatusGate
