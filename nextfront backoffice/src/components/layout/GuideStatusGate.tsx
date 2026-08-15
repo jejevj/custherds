@@ -80,7 +80,7 @@ export function GuideStatusGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     guidesService
-      .getMyProfile()
+      .getProfile()
       .then(setProfile)
       .catch(() => setProfile(null))
       .finally(() => setLoading(false))
@@ -101,7 +101,7 @@ export function GuideStatusGate({ children }: { children: React.ReactNode }) {
     setSubmitting(true)
     setMessage("")
     try {
-      const updated = await guidesService.submit({
+      const updated = await guidesService.submitReview({
         ktp_file: profile.ktp_file || undefined,
         certificate_file: profile.certificate_file || undefined,
       })
