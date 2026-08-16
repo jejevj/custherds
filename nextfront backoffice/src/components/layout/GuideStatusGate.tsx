@@ -84,7 +84,8 @@ function FileUploadField({
     setErr("")
     setUploading(true)
     try {
-      const { url } = await uploadsService.upload(file)
+      const url = await uploadsService.upload(file)
+      onUploaded(url)
       onUploaded(url)
     } catch (ex: unknown) {
       setErr(ex instanceof Error ? ex.message : "Upload gagal")
@@ -163,7 +164,7 @@ export default function GuideStatusGate({ children }: Props) {
           bank_branch: p.bank_branch ?? "",
         })
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false))
   }, [])
 
