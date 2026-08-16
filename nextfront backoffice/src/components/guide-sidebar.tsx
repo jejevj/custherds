@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/sidebar"
 import {
   House, ClipboardList, WalletCards,
-  CircleUserRound, LifeBuoyIcon, SendIcon, Store, Package, Flag,
+  CircleUserRound, LifeBuoyIcon, SendIcon, Store, Package,
 } from "lucide-react"
 import { ScrollArea } from "./ui/scroll-area"
 import Image from "next/image"
@@ -20,7 +20,7 @@ const navMain = [
   {
     title: "Bookings", url: "#", icon: <ClipboardList />,
     items: [
-      { title: "All Bookings", url: "/guide/bookings" },
+      { title: "All Bookings",   url: "/guide/bookings" },
     ],
   },
   {
@@ -36,9 +36,6 @@ const navMain = [
   },
   {
     title: "Browse Packages", url: "/guide/packages", icon: <Package />,
-  },
-  {
-    title: "Laporan Saya", url: "/guide/reports", icon: <Flag />,
   },
   { title: "Profile", url: "/guide/profile", icon: <CircleUserRound /> },
 ]
@@ -64,6 +61,9 @@ export function GuideSidebar({ onHoverChange, ...props }: GuideSidebarProps) {
             <SidebarMenuItem>
               <SidebarMenuButton size="lg" asChild className="p-2">
                 <a href="/guide/dashboard">
+                  <div className="flex aspect-square size-8 items-center justify-center mx-auto rounded-lg overflow-hidden bg-sidebar-primary">
+                    <Image src="/logo-4.png" alt="Custherds" width={32} height={32} className="object-contain" />
+                  </div>
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <Image src="/logo-1.png" alt="Custherds" width={110} height={28} className="object-contain" />
                     <span className="truncate text-xs text-muted-foreground">Guide Portal</span>
