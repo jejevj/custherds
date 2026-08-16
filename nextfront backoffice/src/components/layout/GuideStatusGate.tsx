@@ -86,7 +86,6 @@ function FileUploadField({
     try {
       const url = await uploadsService.upload(file)
       onUploaded(url)
-      onUploaded(url)
     } catch (ex: unknown) {
       setErr(ex instanceof Error ? ex.message : "Upload gagal")
     } finally {
