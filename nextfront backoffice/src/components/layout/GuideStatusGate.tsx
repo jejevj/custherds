@@ -1,7 +1,400 @@
 "use client"
+import { useEffect, useRef, useState } from "react"
+import { guidesService, GuideProfile } from "@/services/guides.service"
+import { uploadsService } from "@/services/uploads.service"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Separator } from "@/components/ui/separator"
 
-export function GuideStatusGate({ children }: { children: React.ReactNode }) {
-  return <>{children}</>
+interface Props { children: React.ReactNode }
+
+// Daftar bank diambil dari konfigurasi admin settlement-bank-account
+const BANK_CODES = [
+  { code: '002', name: 'Bank BRI' },
+  { code: '008', name: 'Bank Mandiri' },
+  { code: '009', name: 'Bank BNI' },
+  { code: '011', name: 'Bank Danamon' },
+  { code: '013', name: 'Bank Permata' },
+  { code: '014', name: 'Bank BCA' },
+  { code: '016', name: 'Bank Maybank' },
+  { code: '019', name: 'Bank Panin' },
+  { code: '022', name: 'Bank CIMB Niaga' },
+  { code: '023', name: 'Bank UOB Indonesia' },
+  { code: '028', name: 'Bank OCBC NISP' },
+  { code: '031', name: 'Citibank' },
+  { code: '036', name: 'Bank Multicor / Windu' },
+  { code: '046', name: 'Bank DKI' },
+  { code: '054', name: 'Bank Capital Indonesia' },
+  { code: '055', name: 'Bank BTPN' },
+  { code: '061', name: 'Bank Bukopin' },
+  { code: '069', name: 'Bank BRI Syariah' },
+  { code: '076', name: 'Bank Bumi Arta' },
+  { code: '110', name: 'Bank BJB' },
+  { code: '111', name: 'Bank DKI Syariah' },
+  { code: '200', name: 'Bank BTN' },
+  { code: '212', name: 'Bank Woori Saudara' },
+  { code: '422', name: 'Bank Syariah Indonesia (BSI)' },
+  { code: '451', name: 'Bank Syariah Bukopin' },
+  { code: '484', name: 'Bank KEB Hana Indonesia' },
+  { code: '503', name: 'Bank Nobu' },
+  { code: '513', name: 'Bank Ina Perdana' },
+  { code: '517', name: 'Bank Panin Dubai Syariah' },
+  { code: '520', name: 'Bank Prima Master' },
+  { code: '521', name: 'Bank Jasa Jakarta' },
+  { code: '523', name: 'Bank Harda Internasional' },
+  { code: '526', name: 'Bank Bisnis Internasional' },
+  { code: '531', name: 'Bank Sinarmas' },
+  { code: '536', name: 'Bank OKE Indonesia' },
+  { code: '542', name: 'Bank Artha Graha' },
+  { code: '553', name: 'Bank Mayora' },
+  { code: '555', name: 'Bank Index Selindo' },
+  { code: '558', name: 'Bank Ganesha' },
+  { code: '564', name: 'Bank Royal Indonesia' },
+  { code: '566', name: 'Bank BNP Paribas Indonesia' },
+  { code: '567', name: 'Bank SBI Indonesia' },
+  { code: '668', name: 'Bank Mega' },
+  { code: '688', name: 'Bank Bumiputera' },
+  { code: '702', name: 'Bank BTPN Syariah' },
+  { code: '706', name: 'Bank Syariah Mandiri' },
+  { code: '777', name: 'Bank Sahabat Sampoerna' },
+  { code: '787', name: 'Bank JAGO' },
+  { code: '788', name: 'Bank Allo' },
+  { code: '812', name: 'Bank Seabank Indonesia' },
+  { code: '818', name: 'Bank Superbank' },
+  { code: '868', name: 'Bank Neo Commerce (BNC)' },
+]
+
+function FileUploadField({
+  label, required, currentUrl, fieldKey, onUploaded,
+}: {
+  label: string
+  required?: boolean
+  currentUrl: string
+  fieldKey: string
+  onUploaded: (url: string) => void
+}) {
+  const ref = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [err, setErr] = useState("")
+
+  const handleChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setErr("")
+    setUploading(true)
+    try {
+      const { url } = await uploadsService.upload(file)
+      onUploaded(url)
+    } catch (ex: unknown) {
+      setErr(ex instanceof Error ? ex.message : "Upload gagal")
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="grid gap-1.5">
+      <Label className="text-sm">{label}{required && <span className="text-destructive"> *</span>}</Label>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => ref.current?.click()}
+          disabled={uploading}
+          className="flex-1 h-9 rounded-lg px-3 text-sm text-left truncate transition-colors"
+          style={{
+            background: "oklch(1 0 0 / 0.06)",
+            border: "1px solid oklch(1 0 0 / 0.15)",
+            color: currentUrl ? "inherit" : "oklch(0.556 0 0)",
+          }}
+        >
+          {uploading ? "Mengupload…" : currentUrl ? `✓ ${currentUrl.split("/").pop()}` : "Pilih file (JPG/PNG/PDF, maks 5MB)"}
+        </button>
+        {currentUrl && (
+          <a
+            href={uploadsService.getUrl(currentUrl)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs underline text-muted-foreground whitespace-nowrap"
+          >
+            Lihat
+          </a>
+        )}
+      </div>
+      {err && <p className="text-xs text-destructive">{err}</p>}
+      <input ref={ref} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="hidden" onChange={handleChange} />
+    </div>
+  )
 }
 
-export default GuideStatusGate
+export default function GuideStatusGate({ children }: Props) {
+  const [profile, setProfile] = useState<GuideProfile | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState("")
+  const [form, setForm] = useState<Partial<GuideProfile>>({})
+
+  const set = (k: keyof GuideProfile, v: string) =>
+    setForm(f => ({ ...f, [k]: v }))
+
+  // guide_certificate tidak lagi required — opsional
+  const isComplete =
+    !!form.bio &&
+    !!form.guide_phone &&
+    !!form.guide_nationality &&
+    !!form.guide_id_card_url
+
+  useEffect(() => {
+    guidesService.getProfile()
+      .then(p => {
+        setProfile(p)
+        setForm({
+          bio: p.bio ?? "",
+          guide_phone: p.guide_phone ?? "",
+          guide_nationality: p.guide_nationality ?? "",
+          languages: p.languages ?? "",
+          guide_id_card_url: p.guide_id_card_url ?? "",
+          guide_certificate: p.guide_certificate ?? "",
+          bank_code: p.bank_code ?? "",
+          bank_name: p.bank_name ?? "",
+          bank_account_number: p.bank_account_number ?? "",
+          bank_account_name: p.bank_account_name ?? "",
+          bank_branch: p.bank_branch ?? "",
+        })
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <>{children}</>
+  if (!profile || profile.guide_status === "approved") return <>{children}</>
+
+  const status = profile.guide_status
+
+  const handleSaveAndSubmit = async () => {
+    setError("")
+    setSaving(true)
+    try {
+      await guidesService.updateProfile(form)
+    } catch {
+      setError("Gagal menyimpan data. Coba lagi.")
+      setSaving(false)
+      return
+    }
+    setSaving(false)
+    setSubmitting(true)
+    try {
+      const updated = await guidesService.submitReview(form)
+      setProfile(updated)
+    } catch {
+      setError("Gagal mengirim pengajuan. Coba lagi.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <>
+      {children}
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
+        style={{
+          background: "oklch(0 0 0 / 0.75)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+        }}
+      >
+        <div
+          className="relative w-full max-w-2xl my-auto rounded-2xl border shadow-2xl"
+          style={{
+            background: "linear-gradient(160deg, oklch(1 0 0 / 0.07), oklch(1 0 0 / 0.03))",
+            backdropFilter: "blur(32px)",
+            WebkitBackdropFilter: "blur(32px)",
+            borderColor: "oklch(1 0 0 / 0.15)",
+          }}
+        >
+          {/* Header */}
+          <div className="px-8 pt-8 pb-0">
+            <div className="flex items-center gap-3 mb-1">
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center text-lg"
+                style={{ background: "oklch(1 0 0 / 0.08)", border: "1px solid oklch(1 0 0 / 0.15)" }}
+              >
+                {status === "pending" ? "⏳" : status === "rejected" ? "⚠️" : "📋"}
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground leading-tight">
+                  {status === "pending" && "Profil Sedang Diverifikasi"}
+                  {status === "rejected" && "Pengajuan Ditolak — Perbarui Data"}
+                  {status === "incomplete" && "Lengkapi Profil Guide"}
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  {status === "pending" && "Tim kami sedang mereview dokumen kamu."}
+                  {status === "rejected" && "Perbaiki data berdasarkan catatan admin, lalu kirim ulang."}
+                  {status === "incomplete" && "Isi semua data di bawah sebelum mengajukan verifikasi."}
+                </p>
+              </div>
+            </div>
+            {status === "rejected" && profile.rejection_notes && (
+              <div
+                className="mt-4 rounded-xl px-4 py-3 text-sm"
+                style={{ background: "oklch(0.577 0.245 27 / 0.15)", border: "1px solid oklch(0.577 0.245 27 / 0.35)" }}
+              >
+                <p className="font-semibold text-destructive mb-0.5">Catatan dari Admin</p>
+                <p className="text-foreground/80">{profile.rejection_notes}</p>
+              </div>
+            )}
+          </div>
+
+          {status === "pending" ? (
+            <div className="px-8 py-8">
+              <div className="space-y-2">
+                {["Bio / Deskripsi Diri", "Nomor HP", "Kewarganegaraan", "KTP / Paspor", "Sertifikat Guide (opsional)", "Bahasa", "Rekening Bank"].map(item => (
+                  <div key={item} className="flex items-center gap-3 text-sm">
+                    <div className="w-4 h-4 rounded-full flex items-center justify-center text-xs" style={{ background: "oklch(1 0 0 / 0.15)" }}>✓</div>
+                    <span className="text-muted-foreground">{item}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-6 text-xs text-muted-foreground">Kamu akan mendapat notifikasi saat verifikasi selesai.</p>
+            </div>
+          ) : (
+            <div className="px-8 py-6 space-y-5">
+              {error && <p className="text-sm text-destructive">{error}</p>}
+
+              {/* Profil */}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Profil</p>
+                <div className="space-y-3">
+                  <div className="grid gap-1.5">
+                    <Label className="text-sm">Bio / Deskripsi Diri <span className="text-destructive">*</span></Label>
+                    <textarea
+                      rows={3}
+                      value={form.bio ?? ""}
+                      onChange={e => set("bio", e.target.value)}
+                      placeholder="Ceritakan pengalaman & keahlian kamu sebagai guide"
+                      className="w-full rounded-lg px-3 py-2 text-sm resize-none"
+                      style={{ background: "oklch(1 0 0 / 0.06)", border: "1px solid oklch(1 0 0 / 0.15)", outline: "none" }}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-1.5">
+                      <Label className="text-sm">Nomor HP <span className="text-destructive">*</span></Label>
+                      <Input value={form.guide_phone ?? ""} onChange={e => set("guide_phone", e.target.value)} placeholder="+62..." className="bg-white/[0.06] border-white/[0.15]" />
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label className="text-sm">Kewarganegaraan <span className="text-destructive">*</span></Label>
+                      <Input value={form.guide_nationality ?? ""} onChange={e => set("guide_nationality", e.target.value)} placeholder="WNI / WNA" className="bg-white/[0.06] border-white/[0.15]" />
+                    </div>
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-sm">Bahasa yang Dikuasai</Label>
+                    <Input value={form.languages ?? ""} onChange={e => set("languages", e.target.value)} placeholder="Indonesia, English, dll." className="bg-white/[0.06] border-white/[0.15]" />
+                  </div>
+                </div>
+              </div>
+
+              <Separator style={{ background: "oklch(1 0 0 / 0.10)" }} />
+
+              {/* Dokumen */}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Dokumen Identitas</p>
+                <div className="space-y-3">
+                  <FileUploadField
+                    label="KTP / Paspor"
+                    required
+                    currentUrl={form.guide_id_card_url ?? ""}
+                    fieldKey="guide_id_card_url"
+                    onUploaded={url => set("guide_id_card_url", url)}
+                  />
+                  {/* Sertifikat Guide — opsional, tidak perlu required */}
+                  <FileUploadField
+                    label="Sertifikat Guide (opsional)"
+                    currentUrl={form.guide_certificate ?? ""}
+                    fieldKey="guide_certificate"
+                    onUploaded={url => set("guide_certificate", url)}
+                  />
+                </div>
+              </div>
+
+              <Separator style={{ background: "oklch(1 0 0 / 0.10)" }} />
+
+              {/* Bank */}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Informasi Rekening Bank</p>
+                <div className="space-y-3">
+                  {/* Nama Bank — dropdown dari konfigurasi BANK_CODES admin */}
+                  <div className="grid gap-1.5">
+                    <Label className="text-sm">Nama Bank</Label>
+                    <select
+                      value={form.bank_code ?? ""}
+                      onChange={e => {
+                        const selected = BANK_CODES.find(b => b.code === e.target.value)
+                        setForm(f => ({
+                          ...f,
+                          bank_code: e.target.value,
+                          bank_name: selected ? selected.name : "",
+                        }))
+                      }}
+                      className="w-full h-9 rounded-lg px-3 text-sm"
+                      style={{
+                        background: "oklch(1 0 0 / 0.06)",
+                        border: "1px solid oklch(1 0 0 / 0.15)",
+                        color: form.bank_code ? "inherit" : "oklch(0.556 0 0)",
+                        outline: "none",
+                      }}
+                    >
+                      <option value="">-- Pilih Bank --</option>
+                      {BANK_CODES.map(b => (
+                        <option key={b.code} value={b.code}>
+                          {b.name} ({b.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Kantor Cabang Pembuatan Bank */}
+                  <div className="grid gap-1.5">
+                    <Label className="text-sm">Kantor Cabang Pembuatan Bank</Label>
+                    <Input
+                      value={form.bank_branch ?? ""}
+                      onChange={e => set("bank_branch", e.target.value)}
+                      placeholder="Contoh: KCP Palembang Ilir Barat"
+                      className="bg-white/[0.06] border-white/[0.15]"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-1.5">
+                      <Label className="text-sm">Nomor Rekening</Label>
+                      <Input value={form.bank_account_number ?? ""} onChange={e => set("bank_account_number", e.target.value)} placeholder="Nomor rekening aktif" className="bg-white/[0.06] border-white/[0.15]" />
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label className="text-sm">Atas Nama</Label>
+                      <Input value={form.bank_account_name ?? ""} onChange={e => set("bank_account_name", e.target.value)} placeholder="Nama di buku tabungan" className="bg-white/[0.06] border-white/[0.15]" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Submit */}
+              <div className="pt-2">
+                <Button
+                  onClick={handleSaveAndSubmit}
+                  disabled={!isComplete || submitting || saving}
+                  className="w-full h-11 font-semibold"
+                >
+                  {saving ? "Menyimpan data…" : submitting ? "Mengirim pengajuan…" : "Simpan & Kirim untuk Direview"}
+                </Button>
+                {!isComplete && (
+                  <p className="text-center text-xs text-muted-foreground mt-2">Lengkapi semua field bertanda * untuk melanjutkan</p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
