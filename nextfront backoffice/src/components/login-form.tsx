@@ -22,23 +22,23 @@ interface LoginFormProps extends React.ComponentPropsWithoutRef<"div"> {
 }
 
 const roleLabels: Record<string, string> = {
-  vendor:  "Business Vendor",
-  guide:   "Herd Guide",
-  admin:   "Administrator",
+  vendor: "Business Vendor",
+  guide: "Herd Guide",
+  admin: "Administrator",
   default: "Partner",
 }
 
 const roleUserType: Record<string, number> = {
-  vendor:  2,
-  guide:   1,
-  admin:   99,
+  vendor: 2,
+  guide: 1,
+  admin: 99,
   default: 0,
 }
 
 const roleRedirects: Record<string, string> = {
-  vendor:  "/vendor/dashboard",
-  guide:   "/guide/dashboard",
-  admin:   "/admin/dashboard",
+  vendor: "/vendor/dashboard",
+  guide: "/guide/dashboard",
+  admin: "/admin/dashboard",
   default: "/admin/dashboard",
 }
 
@@ -49,10 +49,10 @@ export function LoginForm({
   ...props
 }: LoginFormProps) {
   const [showPassword, setShowPassword] = useState(false)
-  const [email, setEmail]               = useState("")
-  const [password, setPassword]         = useState("")
-  const [loading, setLoading]           = useState(false)
-  const [error, setError]               = useState("")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -142,10 +142,11 @@ export function LoginForm({
               </div>
               <div className="text-center text-sm">
                 Don&apos;t have an account?{" "}
-                <a href={registerHref} className="underline underline-offset-4">
+                <a href="https://www.custherds.com/register" className="underline underline-offset-4">
                   Sign up
                 </a>
               </div>
+
             </div>
           </form>
         </CardContent>
