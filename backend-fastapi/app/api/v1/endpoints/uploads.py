@@ -40,21 +40,7 @@ def _save_upload(content: bytes, original_filename: str) -> str:
     return filename
 
 
-def _save_upload(content: bytes, original_filename: str) -> str:
-    """
-    Upload raw bytes ke Cloudflare R2 dan kembalikan filename (bukan full URL).
 
-    Helper ini dipakai oleh endpoint lain (misal bookings.py) yang sudah
-    membaca & memvalidasi file sebelum memanggil fungsi ini.
-
-    Returns:
-        filename (str): nama file UUID yang tersimpan di R2, misal '3f2a...webp'.
-    """
-    filename = _make_filename(original_filename)
-    content_type, _ = mimetypes.guess_type(original_filename)
-    content_type = content_type or "application/octet-stream"
-    upload_to_r2(content, filename, content_type)
-    return filename
 
 
 @router.post("", summary="Upload single file (auth required)")

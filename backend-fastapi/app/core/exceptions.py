@@ -31,7 +31,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={
                 "success": False,
                 "status_code": 422,
-                "message": "Validation error",
+                "message": "Validation error, please check the form",
                 "data": None,
                 "errors": errors,
                 "meta": None,
@@ -48,7 +48,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={
                 "success": False,
                 "status_code": 401,
-                "message": "Invalid or expired token",
+                "message": "Invalid or expired token, Access Invalid.",
                 "data": None,
                 "errors": str(exc),
                 "meta": None,
@@ -72,7 +72,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={
                 "success": False,
                 "status_code": 500,
-                "message": "Database error",
+                "message": "Database error, check your connection",
                 "data": None,
                 "errors": str(exc),
                 "meta": None,
