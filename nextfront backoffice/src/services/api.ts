@@ -10,14 +10,54 @@ type RequestOptions = RequestInit & {
 }
 
 function buildUrl(path: string, params?: Record<string, string | number | boolean | undefined>): string {
-  const base = path.startsWith('http') ? path : `${API_BASE_URL}${path}`
-  const url = new URL(base)
-  if (params) {
-    Object.entries(params).forEach(([k, v]) => {
-      if (v !== undefined && v !== null) url.searchParams.set(k, String(v))
-    })
+  let base: string
+  if (path.startsWith('http')) {
+    base = path
+  } else {
+    base = `${API_BASE_URL}${path}`
   }
-  return url.toString()
+
+  // If base is an absolute URL, use URL constructor
+  if (base.startsWith('http://') || base.startsWith('https://')) {
+    try {
+      const url = new URL(base)
+      if (params) {
+        Object.entries(params).forEach(([k, v]) => {
+          if (v !== undefined && v !== null) url.searchParams.set(k, String(v))
+        })
+      }
+      return url.toString()
+    } catch (err) {
+      // Fallback to manual building if URL constructor fails for some reason
+      // (shouldn't happen for valid http/https URLs)
+      let url = base
+      if (params) {
+        const searchParams = new URLSearchParams()
+        Object.entries(params).forEach(([k, v]) => {
+          if (v !== undefined && v !== null) searchParams.append(k, String(v))
+        })
+        const queryString = searchParams.toString()
+        if (queryString) {
+          url += `?${queryString}`
+        }
+      }
+      return url
+    }
+  } else {
+    // base is relative (to current origin)
+    let url = base
+    if (params) {
+      const searchParams = new URLSearchParams()
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null) searchParams.append(k, String(v))
+      })
+      const queryString = searchParams.toString()
+      if (queryString) {
+        url += `?${queryString}`
+      }
+    }
+    return url
+  }
 }
 
 function getTokens() {
