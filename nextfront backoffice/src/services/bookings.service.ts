@@ -62,8 +62,8 @@ export const bookingsService = {
   cancel: (id: string, reason: string) =>
     api.post<Booking>(`/bookings/${id}/cancel`, { reason }),
 
-  checkin: (id: string, notes?: string) =>
-    api.post<Booking>(`/bookings/${id}/checkin`, { notes }),
+  checkin: (id: string, bookingCode: string) =>
+    api.post<Booking>(`/bookings/${id}/checkin`, { booking_code: bookingCode }),
 
   complete: (id: string) =>
     api.post<Booking>(`/bookings/${id}/complete`, {}),

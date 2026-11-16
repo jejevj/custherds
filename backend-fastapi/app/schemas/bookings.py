@@ -38,7 +38,7 @@ class BookingCancelRequest(BaseModel):
 
 class BookingCheckinRequest(BaseModel):
     """Vendor checkin guide yang datang. confirmed -> pending_receipt."""
-    notes: Optional[str] = None
+    booking_code: str
 
 
 class BookingResponse(BaseModel):

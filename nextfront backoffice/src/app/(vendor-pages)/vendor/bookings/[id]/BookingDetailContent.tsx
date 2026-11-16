@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
+import { CheckinQRScanner } from "@/components/checkin-qr-scanner"
 import QRCode from "qrcode.react"
 import {
   ArrowLeft, FileText, CalendarDays, Users, Package, MapPin,
@@ -253,6 +254,7 @@ export default function BookingDetailContent() {
   const [error, setError]             = useState("")
   const [submitting, setSubmitting]   = useState(false)
   const [retrying, setRetrying]       = useState(false)
+  const [scanningCheckin, setScanningCheckin] = useState(false)
   const [actionError, setActionError] = useState("")
   const [polling, setPolling]         = useState(false)
 
@@ -439,13 +441,17 @@ export default function BookingDetailContent() {
     finally { setSubmitting(false) }
   }
 
-  const handleCheckin = async () => {
+  const handleCheckin = async (bookingCode: string) => {
     if (!booking) return
+    setScanningCheckin(false)
+    setActionError("")
     setSubmitting(true)
     try {
-      const updated = await bookingsService.checkin(booking.id)
+      const updated = await bookingsService.checkin(booking.id, bookingCode)
       setBooking(updated)
-    } catch { setActionError("Gagal checkin.") }
+    } catch (error) {
+      setActionError((error as { detail?: string })?.detail ?? "Gagal check-in.")
+    }
     finally { setSubmitting(false) }
   }
 
@@ -644,9 +650,13 @@ export default function BookingDetailContent() {
             )}
 
             {isConfirmed && (
-              <Button onClick={handleCheckin} disabled={submitting} className="bg-blue-600 hover:bg-blue-700 text-white">
-                <MapPin size={14} className="mr-1" />{submitting ? "Memproses..." : "Checkin Guide"}
-              </Button>
+              <div className="w-full space-y-3">
+                <Button onClick={() => { setActionError(""); setScanningCheckin(!scanningCheckin) }} disabled={submitting}>
+                  <QrCode size={14} className="mr-1" />
+                  {submitting ? "Memproses…" : scanningCheckin ? "Tutup kamera" : "Scan QR check-in"}
+                </Button>
+                {scanningCheckin && <CheckinQRScanner onScan={handleCheckin} />}
+              </div>
             )}
 
             {isNeedTxReview && txPendingApproval && !showPayConfirm && !showTxReject && (

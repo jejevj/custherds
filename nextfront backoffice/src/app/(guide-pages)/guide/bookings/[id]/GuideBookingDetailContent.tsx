@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useState, useRef, useCallback } from "react"
+import QRCode from "qrcode.react"
 import { useParams, useRouter } from "next/navigation"
 import { bookingsService, Booking } from "@/services/bookings.service"
 import { transactionsService, Transaction, resolveReceiptUrl } from "@/services/transactions.service"
@@ -420,13 +421,11 @@ export default function GuideBookingDetailContent() {
           )}
 
           {booking.status === "confirmed" && (
-            <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 px-4 py-3 text-sm">
-              <p className="font-medium text-blue-400 mb-1">📋 Instruksi Checkin</p>
-              <p className="text-muted-foreground text-xs">
-                Tunjukkan kode booking
-                <span className="font-mono font-bold text-foreground mx-1">{booking.booking_code}</span>
-                ke petugas vendor saat tiba.
-              </p>
+            <div className="space-y-3 rounded-xl border p-4 text-sm">
+              <h3 className="font-medium">QR check-in</h3>
+              <p className="text-muted-foreground">Tunjukkan QR ini ke vendor saat tiba.</p>
+              <QRCode value={booking.booking_code} size={240} includeMargin aria-label="QR check-in booking" />
+              <p className="font-mono">{booking.booking_code}</p>
             </div>
           )}
 

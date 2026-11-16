@@ -270,11 +270,14 @@ def vendor_checkin(
     booking = db.query(Booking).filter(
         Booking.id == booking_id,
         Booking.vendor_id == vendor.id,
-    ).first()
+    ).with_for_update().first()
     if not booking:
         raise HTTPException(404, "Booking tidak ditemukan")
     if booking.status != "confirmed":
         raise HTTPException(400, f"Checkin hanya bisa dilakukan saat status 'confirmed'. Status saat ini: {booking.status}")
+
+    if payload.booking_code != booking.booking_code:
+        raise HTTPException(400, "Kode QR bukan untuk booking ini")
 
     booking.status = "pending_receipt"
     booking.checkin_at = datetime.now(timezone.utc)
