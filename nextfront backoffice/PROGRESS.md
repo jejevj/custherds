@@ -131,3 +131,10 @@ nextfront backoffice/src/
     ├── guide-sidebar.tsx         # Sidebar guide
     └── login-form.tsx
 ```
+
+## 2026-11-02 — Vendor verification submission
+- Required owner identity upload through the existing authenticated uploads API (JPG/PNG/WEBP/PDF, max 5 MB).
+- All seven VendorSubmitRequest fields validated and trimmed before submission; optional website/opening hours saved separately.
+- Existing identity retained on reload/rejected application; failed uploads keep the previous identity.
+- API validation errors shown with field labels; submission blocked during upload.
+- Legacy VendorStatusGate import delegates to the layout component. Backend/database unchanged.

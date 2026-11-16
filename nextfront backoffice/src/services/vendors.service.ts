@@ -50,15 +50,13 @@ export interface VendorUpdatePayload {
 }
 
 export interface VendorSubmitPayload {
-  vendor_business_name?: string | null
-  vendor_location?: string | null
-  vendor_contact_person?: string | null
-  vendor_npwp?: string | null
-  vendor_nib?: string | null
-  vendor_owner_id_card_url?: string | null
-  vendor_short_description?: string | null
-  vendor_opening_hours?: string | null
-  vendor_website?: string | null
+  vendor_business_name: string
+  vendor_location: string
+  vendor_contact_person: string
+  vendor_npwp: string
+  vendor_nib: string
+  vendor_owner_id_card_url: string
+  vendor_short_description: string
 }
 
 export interface VendorDepositInfo {

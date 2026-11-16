@@ -57,7 +57,7 @@ from sqlalchemy.orm import sessionmaker
 # Bisa juga load dari .env:
 #   from dotenv import load_dotenv; import os; load_dotenv()
 #   NEW_DB_URL = os.getenv("DATABASE_URL")
-NEW_DB_URL = "postgresql://USER:PASSWORD@HOST:5432/custherds_new"
+NEW_DB_URL = "postgresql://cs:passwodkamu@127.0.0.1:5433/cs"
 
 # Path file JSON (relative ke direktori script ini)
 BASE_DIR     = Path(__file__).parent
