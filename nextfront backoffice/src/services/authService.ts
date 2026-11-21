@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '@/lib/constants'
-import { saveTokens } from './api'
+import { saveTokens } from '@/lib/auth-tokens'
 import { useAuthStore } from '@/store/auth.store'
 
 export interface LoginRequest {

@@ -4,6 +4,9 @@
  */
 
 import { API_BASE_URL } from '@/lib/constants'
+import { getLoginPath } from '@/lib/auth-routes'
+import { getTokens } from '@/lib/auth-tokens'
+import { useAuthStore } from '@/store/auth.store'
 
 type RequestOptions = RequestInit & {
   params?: Record<string, string | number | boolean | undefined>
@@ -60,38 +63,9 @@ function buildUrl(path: string, params?: Record<string, string | number | boolea
   }
 }
 
-function getTokens() {
-  if (typeof window === 'undefined') return { access: null, refresh: null }
-  return {
-    access:  localStorage.getItem('access_token'),
-    refresh: localStorage.getItem('refresh_token'),
-  }
-}
+let pendingRefresh: { token: string; promise: Promise<string | null> } | undefined
 
-/**
- * Simpan token + user_type ke cookie agar middleware (edge runtime)
- * bisa membaca role tanpa decode JWT.
- */
-function saveTokens(access: string, refresh?: string, userType?: number) {
-  localStorage.setItem('access_token', access)
-  if (refresh) localStorage.setItem('refresh_token', refresh)
-  // Cookie dibaca oleh middleware di server-side
-  document.cookie = `access_token=${access}; path=/; SameSite=Lax`
-  if (userType !== undefined) {
-    document.cookie = `user_type=${userType}; path=/; SameSite=Lax`
-  }
-}
-
-function clearTokens() {
-  localStorage.removeItem('access_token')
-  localStorage.removeItem('refresh_token')
-  document.cookie = 'access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
-  document.cookie = 'user_type=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
-}
-
-async function refreshAccessToken(): Promise<string | null> {
-  const { refresh } = getTokens()
-  if (!refresh) return null
+async function refreshAccessToken(refresh: string): Promise<string | null> {
   try {
     const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
       method: 'POST',
@@ -99,13 +73,48 @@ async function refreshAccessToken(): Promise<string | null> {
       body: JSON.stringify({ refresh_token: refresh }),
     })
     if (!res.ok) return null
-    const data = await res.json()
-    const newAccess: string = data.access_token
-    saveTokens(newAccess)  // refresh tidak ubah user_type
-    return newAccess
+    const { access_token: access } = await res.json()
+    return typeof access === 'string' && access ? access : null
   } catch {
     return null
   }
+}
+
+function endSession() {
+  const loginPath = getLoginPath(window.location.pathname) ?? '/'
+  useAuthStore.getState().logout()
+  window.location.replace(loginPath)
+}
+
+export async function recoverSession(rejectedAccess: string | null): Promise<string | null> {
+  if (typeof window === 'undefined') return null
+
+  const { access, refresh } = getTokens()
+  if (access !== rejectedAccess) return access
+  if (!refresh) {
+    endSession()
+    return null
+  }
+
+  if (pendingRefresh?.token !== refresh) {
+    const promise = refreshAccessToken(refresh).finally(() => {
+      if (pendingRefresh?.promise === promise) pendingRefresh = undefined
+    })
+    pendingRefresh = { token: refresh, promise }
+  }
+  const newAccess = await pendingRefresh.promise
+
+  const current = getTokens()
+  if (current.refresh !== refresh || current.access !== rejectedAccess) {
+    return current.access
+  }
+  if (!newAccess) {
+    endSession()
+    return null
+  }
+
+  useAuthStore.getState().setTokens(newAccess, refresh)
+  return newAccess
 }
 
 async function request<T>(path: string, options: RequestOptions = {}, retry = true): Promise<T> {
@@ -122,15 +131,12 @@ async function request<T>(path: string, options: RequestOptions = {}, retry = tr
     },
   })
 
-  if (res.status === 401 && retry) {
-    const newAccess = await refreshAccessToken()
-    if (newAccess) {
+  if (res.status === 401 && typeof window !== 'undefined') {
+    if (retry && await recoverSession(access)) {
       return request<T>(path, options, false)
-    } else {
-      clearTokens()
-      if (typeof window !== 'undefined') window.location.href = '/login'
-      throw new Error('Session expired')
     }
+    if (!retry && getTokens().access === access) endSession()
+    throw new Error('Session expired')
   }
 
   if (!res.ok) {
@@ -156,4 +162,4 @@ export const api = {
     request<T>(path, { method: 'DELETE', ...options }),
 }
 
-export { saveTokens, clearTokens, getTokens }
+export { clearTokens, getTokens, saveTokens } from '@/lib/auth-tokens'

@@ -40,7 +40,7 @@ export default function Sidebar() {
 
   const handleLogout = () => {
     logout()
-    router.replace('/login')
+    router.replace('/admin/login')
   }
 
   const isActive = (href: string) =>

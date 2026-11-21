@@ -1,31 +1,12 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { getLoginPath, getPortalRole } from '@/lib/auth-routes'
 
 // ─── constants ──────────────────────────────────────────────────────────────
-const LOGIN_PATHS: Record<string, string> = {
-  admin:  '/admin/login',
-  guide:  '/guide/login',
-  vendor: '/vendor/login',
-}
-
 const DASHBOARD_PATHS: Record<number, string> = {
   99: '/admin/dashboard',
   1:  '/guide/dashboard',
   2:  '/vendor/dashboard',
-}
-
-const PUBLIC_PATHS = [
-  '/admin/login',
-  '/guide/login',
-  '/vendor/login',
-]
-
-// ─── helpers ────────────────────────────────────────────────────────────────
-function getRole(pathname: string): string | null {
-  if (pathname.startsWith('/admin'))  return 'admin'
-  if (pathname.startsWith('/guide'))  return 'guide'
-  if (pathname.startsWith('/vendor')) return 'vendor'
-  return null
 }
 
 /**
@@ -56,21 +37,15 @@ export function middleware(request: NextRequest) {
   }
 
   // 2. Role root: /admin  /guide  /vendor  (tanpa sub-path)
-  const roleRootMatch = pathname.match(/^\/([a-z]+)\/?$/)
-  if (roleRootMatch) {
-    const role = roleRootMatch[1]
-    if (role in LOGIN_PATHS) {
-      if (token && userType !== null) {
-        return NextResponse.redirect(
-          new URL(DASHBOARD_PATHS[userType] ?? `/${role}/login`, request.url)
-        )
-      }
-      return NextResponse.redirect(new URL(`/${role}/login`, request.url))
-    }
+  const role = getPortalRole(pathname)
+  const loginPath = getLoginPath(pathname)
+  if (role && loginPath && (pathname === `/${role}` || pathname === `/${role}/`)) {
+    const dest = userType !== null ? DASHBOARD_PATHS[userType] ?? loginPath : loginPath
+    return NextResponse.redirect(new URL(dest, request.url))
   }
 
   // 3. Login pages — jika sudah login redirect ke dashboard
-  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+  if (loginPath && (pathname === loginPath || pathname === `${loginPath}/`)) {
     if (token && userType !== null) {
       const dest = DASHBOARD_PATHS[userType]
       if (dest) return NextResponse.redirect(new URL(dest, request.url))
@@ -79,9 +54,8 @@ export function middleware(request: NextRequest) {
   }
 
   // 4. Protected routes — harus ada token
-  const role = getRole(pathname)
-  if (role && !token) {
-    return NextResponse.redirect(new URL(LOGIN_PATHS[role]!, request.url))
+  if (loginPath && !token) {
+    return NextResponse.redirect(new URL(loginPath, request.url))
   }
 
   // 5. Role mismatch guard

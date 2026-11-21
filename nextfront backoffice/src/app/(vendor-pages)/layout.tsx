@@ -1,6 +1,7 @@
 import { TooltipProvider } from "@/components/ui/tooltip"
 import VendorLayout from "@/components/layout/vendor-layout"
 import { Toaster } from "sonner"
+import SessionCheck from "@/components/layout/SessionCheck"
 
 export default function VendorPages({
   children,
@@ -9,6 +10,7 @@ export default function VendorPages({
 }) {
   return (
     <TooltipProvider delayDuration={0}>
+      <SessionCheck />
       <VendorLayout>
         {children}
         <Toaster

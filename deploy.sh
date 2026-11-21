@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-BASE="/var/up/custherds/custherds"
+BASE="/home/aiuser/test/repo/custherds"
 
 echo "==============================="
 echo " CUSTHERDS DEPLOY"
@@ -62,7 +62,7 @@ server {
     listen 80;
     server_name custherds.ourtestcloud.my.id;
 
-    root /var/up/custherds/custherds/frontpublic/dist;
+    root /home/aiuser/test/repo/custherds/frontpublic/dist;
     index index.html;
 
     location / {

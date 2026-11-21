@@ -1,7 +1,7 @@
 'use client'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { saveTokens, clearTokens } from '@/services/api'
+import { saveTokens, clearTokens } from '@/lib/auth-tokens'
 
 export interface AuthUser {
   id: string

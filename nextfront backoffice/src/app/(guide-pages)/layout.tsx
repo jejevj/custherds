@@ -1,6 +1,7 @@
 import { TooltipProvider } from "@/components/ui/tooltip"
 import GuideLayout from "@/components/layout/guide-layout"
 import { Toaster } from "sonner"
+import SessionCheck from "@/components/layout/SessionCheck"
 
 export default function GuidePages({
   children,
@@ -9,6 +10,7 @@ export default function GuidePages({
 }) {
   return (
     <TooltipProvider delayDuration={0}>
+      <SessionCheck />
       <GuideLayout>
         {children}
         <Toaster

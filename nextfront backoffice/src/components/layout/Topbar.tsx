@@ -10,7 +10,7 @@ export default function Topbar({ title }: { title?: string }) {
 
   const handleLogout = () => {
     logout()
-    window.location.href = '/login'
+    window.location.href = '/admin/login'
   }
 
   return (
